@@ -1,69 +1,52 @@
 #!/bin/sh
-# install.sh — install the local visual-plan skill into your agent skill dirs.
+# install.sh — install the local visual-plan + visual-recap skills into your
+# agent skill dirs.
 #
-# Recursively copies skills/visual-plan/ (renderer + references + SKILL.md, all
-# of it) into BOTH ~/.claude/skills/visual-plan/ and ~/.agents/skills/visual-plan/
-# so the installed skill is fully self-sufficient — it carries its own vendored
-# renderer and never depends on this repo's location.
+# Both skills share ONE renderer (skills/visual-plan/renderer, which holds
+# render.mjs AND recap.mjs). Each installed skill gets its own self-sufficient
+# copy of that renderer + references, so it never depends on this repo's path.
 #
-# POSIX sh, idempotent: re-run any time to update; it overwrites the installed
-# copies from this repo. No npm install, no network.
+# Targets: ~/.claude/skills (Claude Code) and ~/.agents/skills (the shared path
+# for Codex, Gemini CLI, Cursor, OpenCode, Copilot).
 #
-# If this file ever loses its executable bit, run:  chmod +x install.sh
-# (or invoke it as:  sh install.sh)
+# POSIX sh, idempotent: re-run any time to update. No npm install, no network.
+# If this file loses its executable bit:  chmod +x install.sh  (or:  sh install.sh)
 
 set -eu
 
-# --- Resolve this script's own directory so it runs from anywhere ----------
-# Follow a single symlink level if needed, then cd to the containing dir.
 SCRIPT_PATH="$0"
-if [ -L "$SCRIPT_PATH" ]; then
-	SCRIPT_PATH=$(readlink "$SCRIPT_PATH")
-fi
+if [ -L "$SCRIPT_PATH" ]; then SCRIPT_PATH=$(readlink "$SCRIPT_PATH"); fi
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
 
-SRC="$SCRIPT_DIR/skills/visual-plan"
+PLAN="$SCRIPT_DIR/skills/visual-plan"
+RECAP="$SCRIPT_DIR/skills/visual-recap"
 
-if [ ! -d "$SRC" ]; then
-	echo "error: source skill not found at: $SRC" >&2
-	echo "       run install.sh from inside the local-visual-plan repo." >&2
-	exit 1
-fi
+[ -d "$PLAN" ] || { echo "error: source skill not found at: $PLAN" >&2; exit 1; }
+[ -f "$RECAP/SKILL.md" ] || { echo "error: recap skill not found at: $RECAP/SKILL.md" >&2; exit 1; }
 
-# --- Targets ----------------------------------------------------------------
-# ~/.claude  -> Claude Code
-# ~/.agents  -> shared path used by Codex, Gemini CLI, Cursor, OpenCode, Copilot
-TARGETS="$HOME/.claude/skills/visual-plan $HOME/.agents/skills/visual-plan"
+BASES="$HOME/.claude/skills $HOME/.agents/skills"
 
-# --- Recursive copy helper (no external deps beyond cp/mkdir/rm) ------------
-# Overwrites any prior copy: remove the destination skill dir first so stale
-# files (e.g. a renamed reference) don't linger, then copy the whole tree.
-install_to() {
-	dest="$1"
-	parent=$(dirname -- "$dest")
-	mkdir -p "$parent"
-	rm -rf "$dest"
-	mkdir -p "$dest"
-	# Copy contents of $SRC into $dest (the trailing /. copies the directory's
-	# contents, including dotfiles, preserving the renderer/ subtree).
-	cp -R "$SRC/." "$dest/"
-}
-
-echo "Installing visual-plan skill"
-echo "  from: $SRC"
+echo "Installing visual-plan + visual-recap"
+echo "  from: $SCRIPT_DIR/skills"
 echo
 
-for dest in $TARGETS; do
-	install_to "$dest"
-	echo "  installed -> $dest"
-	# Show what landed: list the top-level entries and confirm the bundled
-	# renderer survived the copy so the installed skill is self-sufficient.
-	for entry in SKILL.md references renderer renderer/render.mjs renderer/vendor; do
-		if [ -e "$dest/$entry" ]; then
-			echo "      + $entry"
-		fi
-	done
-	echo
+for base in $BASES; do
+  # --- visual-plan: the whole skill (its renderer travels inside it) ---------
+  dest="$base/visual-plan"
+  mkdir -p "$base"
+  rm -rf "$dest"; mkdir -p "$dest"
+  cp -R "$PLAN/." "$dest/"
+  echo "  installed -> $dest"
+
+  # --- visual-recap: its SKILL.md + a copy of the shared renderer & refs ------
+  dest="$base/visual-recap"
+  rm -rf "$dest"; mkdir -p "$dest"
+  cp "$RECAP/SKILL.md" "$dest/SKILL.md"
+  cp -R "$PLAN/renderer" "$dest/renderer"
+  cp -R "$PLAN/references" "$dest/references"
+  echo "  installed -> $dest  (shares the visual-plan renderer)"
+  echo
 done
 
-echo "Done. Re-run ./install.sh any time to update both copies."
+echo "Done. Both skills installed to ~/.claude/skills and ~/.agents/skills."
+echo "Re-run ./install.sh any time to update."
