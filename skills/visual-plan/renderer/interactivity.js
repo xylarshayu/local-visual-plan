@@ -93,7 +93,7 @@
       window.mermaid.initialize({
         startOnLoad: false,
         securityLevel: "strict",
-        theme: theme === "dark" ? "dark" : "default",
+        theme: theme === "dark" ? "dark" : "neutral",
         themeVariables: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }
       });
       window.mermaid.run({ querySelector: "pre.mermaid" });

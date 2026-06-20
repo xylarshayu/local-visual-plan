@@ -597,6 +597,11 @@ ol.code-lines > li[data-hl="1"]::before {
   border-left: 2px solid var(--accent);
   margin: 1px 0;
 }
+/* built-in syntax highlighter tokens — restrained, theme-aware */
+.code-text .tok-comment { color: var(--fg-faint); font-style: italic; }
+.code-text .tok-keyword { color: var(--accent); }
+.code-text .tok-string  { color: var(--add-fg); }
+.code-text .tok-number  { color: var(--tag-edit); }
 
 /* ----- diagram ---------------------------------------------------------- */
 figure[data-block=diagram] {

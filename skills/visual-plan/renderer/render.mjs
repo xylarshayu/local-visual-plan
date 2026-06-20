@@ -338,6 +338,47 @@ function parseHlRanges(spec) {
   return set;
 }
 
+// Tiny, dependency-free, per-line syntax highlighter for `code` blocks. Not a
+// full tokenizer — it tags comments, strings, numbers, and a broad union of
+// keywords with regex, escaping everything. Multi-line constructs (block
+// comments / template literals spanning lines) are not tracked across lines,
+// which is fine for the short snippets a plan/recap shows.
+const HASH_LANGS = new Set([
+  "py", "python", "sh", "bash", "zsh", "shell", "yaml", "yml", "ruby", "rb",
+  "toml", "ini", "nginx", "dockerfile", "makefile", "hcl", "r", "perl", "pl", "conf",
+]);
+const KEYWORDS = new Set(
+  ("const let var function return if else for while do switch case break continue " +
+   "import export from as default class extends implements interface type enum new " +
+   "this super async await yield throw try catch finally typeof instanceof in of void " +
+   "delete public private protected readonly static abstract def lambda pass elif None " +
+   "True False nil null true false undefined fn impl use pub mut match mod struct trait " +
+   "where package func defer select chan map range end then local require module namespace " +
+   "and or not is").split(" "));
+
+function highlightLine(line, lang) {
+  const hash = HASH_LANGS.has((lang || "").toLowerCase());
+  let out = "", i = 0;
+  while (i < line.length) {
+    const rest = line.slice(i);
+    let m =
+      /^\/\/.*/.exec(rest) ||
+      (hash ? /^#.*/.exec(rest) : null) ||
+      /^\/\*[\s\S]*?\*\//.exec(rest) ||
+      /^<!--[\s\S]*?-->/.exec(rest);
+    if (m) { out += `<span class="tok-comment">${esc(m[0])}</span>`; i += m[0].length; continue; }
+    m = /^"(?:[^"\\]|\\.)*"|^'(?:[^'\\]|\\.)*'|^`(?:[^`\\]|\\.)*`/.exec(rest);
+    if (m) { out += `<span class="tok-string">${esc(m[0])}</span>`; i += m[0].length; continue; }
+    m = /^(?:0[xX][\da-fA-F]+|\d+\.?\d*(?:[eE][+-]?\d+)?)\b/.exec(rest);
+    if (m) { out += `<span class="tok-number">${esc(m[0])}</span>`; i += m[0].length; continue; }
+    m = /^[A-Za-z_$][\w$]*/.exec(rest);
+    if (m) { out += KEYWORDS.has(m[0]) ? `<span class="tok-keyword">${esc(m[0])}</span>` : esc(m[0]); i += m[0].length; continue; }
+    m = /^\s+|^[\s\S]/.exec(rest);
+    out += esc(m[0]); i += m[0].length;
+  }
+  return out;
+}
+
 function renderCode(body, attrs) {
   const lang = attrs.lang || "";
   const hl = parseHlRanges(attrs.hl);
@@ -368,7 +409,7 @@ function renderCode(body, attrs) {
   codeLines.forEach((ln, i) => {
     const num = i + 1;
     const hlAttr = hl.has(num) ? ' data-hl="1"' : "";
-    out += `<li${hlAttr}><span class="code-text">${esc(ln) || "&#8203;"}</span></li>`;
+    out += `<li${hlAttr}><span class="code-text">${highlightLine(ln, lang) || "&#8203;"}</span></li>`;
     if (notes.has(num)) {
       for (const t of notes.get(num)) {
         out += `<li class="code-note"><span class="code-note-body">${esc(t)}</span></li>`;
