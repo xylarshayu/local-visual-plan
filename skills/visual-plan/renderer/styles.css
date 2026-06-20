@@ -642,18 +642,38 @@ figure[data-block=wireframe] {
 .wf-sheet   { max-width: 560px; border-bottom: 0; }
 .wf-toolbar-surface { display: inline-block; min-width: 280px; }
 
-/* sketchy variant */
+/* sketchy variant — a real hand-drawn / napkin-sketch look. The SVG turbulence
+   filters wobble every straight edge; a marker font + slightly heavier ink sell
+   it. Opt in with `style=sketchy`. */
 .wf-screen.is-sketchy {
-  --wf-line: var(--fg-muted);
-  border-style: solid;
-  border-width: 2px;
-  border-color: var(--wf-line);
+  --wf-line: var(--fg);
+  border: 2px solid var(--wf-line);
   filter: url(#wf-rough);
-  font-family: "Comic Sans MS", "Segoe Print", var(--sans);
+  font-family: "Comic Sans MS", "Comic Neue", "Segoe Print", "Bradley Hand", "Chalkboard SE", "Marker Felt", cursive;
+  background: var(--wf-fill);
 }
+/* every box edge gets the wobble; small controls use the finer filter so their
+   short edges look sketched, not melted. */
+.wf-screen.is-sketchy .wf-toolbar,
+.wf-screen.is-sketchy .wf-listitem,
+.wf-screen.is-sketchy .wf-divider { filter: url(#wf-rough); }
 .wf-screen.is-sketchy .wf-btn,
 .wf-screen.is-sketchy .wf-input,
-.wf-screen.is-sketchy .wf-card { border-style: dashed; }
+.wf-screen.is-sketchy .wf-card,
+.wf-screen.is-sketchy .wf-badge,
+.wf-screen.is-sketchy .wf-avatar,
+.wf-screen.is-sketchy .wf-img {
+  border-style: solid;
+  border-width: 1.5px;
+  filter: url(#wf-rough-fine);
+}
+.wf-screen.is-sketchy .wf-btn.wf-primary {
+  background: transparent;
+  color: var(--wf-ink);
+  border-color: var(--wf-ink);
+  box-shadow: 2px 2px 0 var(--wf-line);
+}
+.wf-screen.is-sketchy .wf-text-line { background: var(--wf-line); filter: url(#wf-rough-fine); }
 
 /* wireframe primitives — all flat / hard-cornered */
 .wf-toolbar {

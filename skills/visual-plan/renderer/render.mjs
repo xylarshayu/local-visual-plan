@@ -723,7 +723,10 @@ function loadMermaid() {
   return readFileSync(join(HERE, "vendor", "mermaid.min.js"), "utf8");
 }
 
-const SKETCHY_FILTER = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="wf-rough"><feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="2.2"/></filter></defs></svg>`;
+// Two displacement filters at different frequencies give a hand-drawn wobble:
+// `wf-rough` for the screen frame / large elements, `wf-rough-fine` for small
+// controls so their short edges still look sketched rather than melted.
+const SKETCHY_FILTER = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="wf-rough" x="-6%" y="-6%" width="112%" height="112%"><feTurbulence type="fractalNoise" baseFrequency="0.016 0.014" numOctaves="3" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="wf-rough-fine" x="-8%" y="-8%" width="116%" height="116%"><feTurbulence type="fractalNoise" baseFrequency="0.032 0.028" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.7" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>`;
 
 export function renderPlan(markdownSource, { lean = false } = {}) {
   configureMarked();
