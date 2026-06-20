@@ -767,7 +767,7 @@ export function renderPlan(markdownSource, { lean = false } = {}) {
   let html = template
     .replace("<!-- TITLE -->", () => escapeHtml(title))
     .replace("<!-- STATUS -->", () => statusHtml)
-    .replace("<!-- HEADING -->", () => escapeHtml(title))
+    .replaceAll("<!-- HEADING -->", () => escapeHtml(title))
     .replace("<!-- OBJECTIVE -->", () => objectiveHtml)
     .replace("<!-- BODY -->", () => bodyValue)
     .replace("<!-- MERMAID -->", () => mermaidScript)
