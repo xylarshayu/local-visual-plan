@@ -35,7 +35,8 @@ recognized types below, optionally followed by `key=value` attributes:
 ```
 ````
 
-Attribute values may be quoted (`title="Upload flow"`) for values with spaces.
+Attribute values containing spaces **must** be quoted (`title="Upload flow"`);
+an unquoted value runs to the next space. Quotes are optional otherwise.
 **Unknown block types** must render as a labeled `<pre data-block="unknown"
 data-type="...">` showing the raw body — never dropped, never executed.
 
@@ -112,7 +113,7 @@ carry `data-hl="1"`, and `.code-note` callouts.
 ### `diagram` — Mermaid
 Info attr: `title=<text>` (optional). Body is raw Mermaid source.
 
-```diagram title=Upload flow
+```diagram title="Upload flow"
 flowchart LR
   U[User] --> A[upload action] --> S[(storage)]
 ```
