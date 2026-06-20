@@ -1,3 +1,5 @@
 .visual-plans/
 node_modules/
 *.log
+docs/how-it-works/index.html
+*.url
