@@ -501,8 +501,8 @@ figure[data-block=diff] figcaption { border-left-width: 3px; }
 }
 .diff-sign { display: inline-block; width: 1ch; user-select: none; opacity: 0.7; }
 .diff-note {
-  display: flex;
-  gap: 8px;
+  /* Must stay a table-cell so the note <td>'s colspan spans the full diff width.
+     A flex or grid display voids colspan and collapses it to the gutter column. */
   padding: 7px 14px;
   font-family: var(--sans);
   font-size: 0.85rem;
@@ -512,7 +512,17 @@ figure[data-block=diff] figcaption { border-left-width: 3px; }
   border-bottom: 1px solid var(--border);
   border-left: 3px solid var(--accent);
 }
-.diff-note::before { content: "NOTE"; font-family: var(--mono); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); flex-shrink: 0; padding-top: 0.15em; }
+.diff-note::before {
+  content: "NOTE";
+  display: inline-block;
+  margin-right: 8px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  vertical-align: 1px;
+}
 
 /* split mode */
 figure[data-block=diff][data-mode="split"] .diff-split {
