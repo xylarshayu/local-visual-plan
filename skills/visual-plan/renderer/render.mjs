@@ -420,20 +420,20 @@ function renderCode(body, attrs) {
   return out;
 }
 
-// Diagrams default to Mermaid's hand-drawn look (sketchy shapes via rough.js +
-// the vendored Virgil hand-drawn font). The hand-drawn defaults are set globally
-// in interactivity.js, so a default diagram's source is left verbatim. Only the
-// `look=clean` escape hatch needs a per-diagram override, which we express as
-// Mermaid YAML frontmatter prepended to the source — UNLESS the author wrote
-// their own frontmatter / init directive, which we then leave untouched.
-function withCleanConfig(src) {
+// Each diagram declares its OWN look via Mermaid YAML frontmatter prepended to
+// the source. This is reliable and deterministic: relying on a single global
+// mermaid.initialize({look}) proved flaky — with two render passes at startup, a
+// diagram would sometimes come out classic instead of hand-drawn. We do NOT set
+// a per-diagram fontFamily: Mermaid measures node width with the GLOBAL font
+// (Virgil) and must also render with it, or labels clip. So both looks keep the
+// global Virgil font; only the SHAPE differs (handDrawn = sketchy via rough.js,
+// classic = crisp). If the author wrote their own frontmatter / `%%{init}%%`,
+// leave it untouched — they own the config.
+function withDiagramFrontmatter(src, look) {
   const trimmed = src.replace(/\s+$/, "");
   if (/^﻿?\s*(?:---|%%\{)/.test(trimmed)) return trimmed; // author owns config
-  // Only flip the LOOK to classic. We deliberately do NOT override fontFamily:
-  // Mermaid measures node width with the global font (Virgil) but would then
-  // render with the per-diagram font, and any width difference clips the labels.
-  // Keeping the global font for measurement AND render guarantees they match.
-  return "---\nconfig:\n  look: classic\n---\n" + trimmed;
+  const value = look === "clean" ? "classic" : "handDrawn";
+  return `---\nconfig:\n  look: ${value}\n---\n` + trimmed;
 }
 
 function renderDiagram(body, attrs, lean) {
@@ -443,11 +443,10 @@ function renderDiagram(body, attrs, lean) {
   if (lean) {
     out += `<pre class="diagram-lean"><code>${esc(body.replace(/\s+$/, ""))}</code></pre>`;
   } else {
-    // Raw mermaid source; escaped so the browser-side mermaid receives text,
-    // not parsed HTML. Mermaid reads textContent, so entities are decoded.
-    // `data-look` lets renderPlan know whether a hand-drawn font is needed and
-    // (belt-and-suspenders) lets interactivity.js tell the two apart.
-    const source = look === "clean" ? withCleanConfig(body) : body.replace(/\s+$/, "");
+    // Raw mermaid source (with the look frontmatter); escaped so browser-side
+    // mermaid receives text, not parsed HTML. Mermaid reads textContent, so the
+    // entities decode back. `data-look` lets renderPlan know a font is needed.
+    const source = withDiagramFrontmatter(body, look);
     out += `<pre class="mermaid" data-look="${look}">${esc(source)}</pre>`;
   }
   out += "</figure>";

@@ -71,36 +71,42 @@
 
   /* ----- Mermaid -------------------------------------------------------- */
   var mermaidReady = false;
-  var mermaidRendered = false;
+  var mermaidBusy = false;
 
   async function renderMermaid(theme) {
     if (typeof window.mermaid === "undefined") return; // --lean output
     var nodes = document.querySelectorAll("pre.mermaid");
     if (!nodes.length) return;
-
-    // On a theme change after the first render, mermaid has already replaced
-    // the <pre> source with an <svg>; restore source so it can re-render.
-    nodes.forEach(function (node) {
-      if (node.getAttribute("data-processed") === "true" && node.dataset.src) {
-        node.innerHTML = node.dataset.src;
-        node.removeAttribute("data-processed");
-      } else if (!node.dataset.src) {
-        node.dataset.src = node.textContent;
-      }
-    });
-
-    // Load the hand-drawn font BEFORE mermaid measures text. If the font is not
-    // ready at measure time, node boxes are sized for the fallback metrics and
-    // the wider Virgil glyphs overflow/clip. A per-diagram `look=clean` override
-    // (Mermaid frontmatter in the source) opts back out to classic + sans.
-    if (document.fonts && document.fonts.load) {
-      try {
-        await document.fonts.load('16px "Virgil"');
-        await document.fonts.ready;
-      } catch (e) { /* fall back to default metrics */ }
-    }
+    // SERIALIZE: the page calls this both on initial theme apply AND on boot, so
+    // two passes can otherwise run concurrently — re-initializing mermaid mid-run
+    // and non-deterministically dropping the per-run config (diagrams came out
+    // classic instead of hand-drawn). One render at a time; skip overlaps.
+    if (mermaidBusy) return;
+    mermaidBusy = true;
 
     try {
+      // On a theme change after the first render, mermaid has already replaced
+      // the <pre> source with an <svg>; restore source so it can re-render.
+      nodes.forEach(function (node) {
+        if (node.getAttribute("data-processed") === "true" && node.dataset.src) {
+          node.innerHTML = node.dataset.src;
+          node.removeAttribute("data-processed");
+        } else if (!node.dataset.src) {
+          node.dataset.src = node.textContent;
+        }
+      });
+
+      // Load the hand-drawn font BEFORE mermaid measures text. If the font is not
+      // ready at measure time, node boxes are sized for the fallback metrics and
+      // the wider Virgil glyphs overflow/clip. Each diagram's look (handDrawn or
+      // clean) is declared in its own source frontmatter, so it is deterministic.
+      if (document.fonts && document.fonts.load) {
+        try {
+          await document.fonts.load('16px "Virgil"');
+          await document.fonts.ready;
+        } catch (e) { /* fall back to default metrics */ }
+      }
+
       window.mermaid.initialize({
         startOnLoad: false,
         securityLevel: "strict",
@@ -108,13 +114,14 @@
         theme: theme === "dark" ? "dark" : "neutral",
         themeVariables: { fontFamily: '"Virgil", "Segoe Print", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }
       });
-      window.mermaid.run({ querySelector: "pre.mermaid" });
-      mermaidRendered = true;
+      await window.mermaid.run({ querySelector: "pre.mermaid" });
     } catch (e) {
       // Leave the raw source visible rather than blanking the diagram.
       if (window.console && console.warn) console.warn("mermaid render failed:", e);
+    } finally {
+      mermaidReady = true;
+      mermaidBusy = false;
     }
-    mermaidReady = true;
   }
 
   /* ----- Boot ----------------------------------------------------------- */
