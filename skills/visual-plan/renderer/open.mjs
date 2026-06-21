@@ -5,7 +5,7 @@
 // Usage (programmatic):  import { openFile } from './open.mjs'; await openFile(path)
 // Usage (CLI):           node open.mjs <file>
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
 function hasCommand(cmd) {
@@ -14,50 +14,86 @@ function hasCommand(cmd) {
   return r.status === 0;
 }
 
+// Whether launching a Windows GUI app from WSL will actually work. The
+// binfmt_misc entry can read "enabled" while the Windows-side bridge is still
+// unreachable, so the only reliable test is to RUN a trivial Windows no-op and
+// see if it returns promptly. Cached: probed at most once per process.
+let _interop = null;
+function wslInteropWorks() {
+  if (_interop !== null) return _interop;
+  const r = spawnSync("cmd.exe", ["/c", "ver"], { stdio: "ignore", timeout: 1500 });
+  _interop = !r.error && !r.signal && r.status === 0;
+  return _interop;
+}
+
+// Openers that need WSL interop to do anything.
+const WIN_OPENERS = new Set(["wslview", "explorer.exe", "cmd.exe", "powershell.exe"]);
+
 function toWindowsPath(p) {
+  // `wslpath` is a native WSL utility (NOT a Windows interop binary), so it works
+  // even when WSL interop is disabled — which is exactly when we most need a
+  // clickable Windows/UNC path to hand the user.
   const r = spawnSync("wslpath", ["-w", p], { encoding: "utf8" });
   if (r.status === 0 && r.stdout) return r.stdout.trim();
   return null;
 }
 
+// A `file://` URL the user (or a harness) can click. We don't percent-encode —
+// plan slugs are kebab-case and our default out paths have no spaces.
+function toFileUrl(absPath) {
+  return "file://" + absPath;
+}
+
+// Launch an opener and REPORT TRUTHFULLY whether it worked. These launchers
+// (wslview / xdg-open / explorer.exe) return promptly after handing off to the
+// browser — they don't block until it closes — so a bounded spawnSync is safe
+// and lets us detect the failure modes the old detached-spawn could not:
+//   - spawn error (binary missing)            -> r.error
+//   - hung then killed by timeout             -> r.signal
+//   - ran but failed (e.g. interop disabled)  -> non-zero r.status
 function launch(cmd, args) {
-  const child = spawn(cmd, args, { stdio: "ignore", detached: true });
-  child.unref();
-  return new Promise((res, rej) => {
-    let settled = false;
-    child.on("error", (err) => { if (!settled) { settled = true; rej(err); } });
-    // If it didn't error synchronously, treat the spawn as a success.
-    setTimeout(() => { if (!settled) { settled = true; res(true); } }, 120);
-  });
+  const r = spawnSync(cmd, args, { stdio: "ignore", timeout: 4000 });
+  if (r.error) throw r.error;
+  if (r.signal) throw new Error(`${cmd} timed out (${r.signal})`);
+  if (typeof r.status === "number" && r.status !== 0) throw new Error(`${cmd} exited ${r.status}`);
+  return true;
 }
 
 /**
- * Open `filePath` using the first opener that works.
- * @returns {Promise<{ ok: boolean, via: string|null }>}
+ * Open `filePath` using the first opener that works. The returned `targets` are
+ * ALWAYS populated (even when no opener succeeds) so the caller can hand the user
+ * a clickable path — important on WSL with interop disabled, where no opener can
+ * launch a browser but the `\\wsl.localhost\…` UNC path still opens from Windows.
+ * @returns {Promise<{ ok: boolean, via: string|null, targets: { path: string, fileUrl: string, winPath: string|null } }>}
  */
 export async function openFile(filePath) {
   const abs = resolve(filePath);
+  const targets = { path: abs, fileUrl: toFileUrl(abs), winPath: toWindowsPath(abs) };
+  const interop = wslInteropWorks();
   const attempts = [];
 
-  // 1) $BROWSER (on this WSL2 box it is typically `wslview`).
+  // 1) $BROWSER (on this WSL2 box it is typically `wslview`). Skip it when it is
+  //    a Windows opener and interop is disabled (it would hang then fail).
   if (process.env.BROWSER) {
     // $BROWSER may contain arguments; split on whitespace.
     const parts = process.env.BROWSER.trim().split(/\s+/);
-    attempts.push({ via: `$BROWSER (${parts[0]})`, cmd: parts[0], args: [...parts.slice(1), abs] });
+    if (interop || !WIN_OPENERS.has(parts[0])) {
+      attempts.push({ via: `$BROWSER (${parts[0]})`, cmd: parts[0], args: [...parts.slice(1), abs] });
+    }
   }
 
-  // 2) wslview
-  if (hasCommand("wslview")) {
+  // 2) wslview — only if interop is actually available.
+  if (interop && hasCommand("wslview")) {
     attempts.push({ via: "wslview", cmd: "wslview", args: [abs] });
   }
 
-  // 3) explorer.exe via Windows path
-  if (hasCommand("explorer.exe")) {
+  // 3) explorer.exe via Windows path — only if interop is available.
+  if (interop && hasCommand("explorer.exe")) {
     const win = toWindowsPath(abs);
     if (win) attempts.push({ via: "explorer.exe", cmd: "explorer.exe", args: [win] });
   }
 
-  // 4) xdg-open
+  // 4) xdg-open (native Linux; no interop needed).
   if (hasCommand("xdg-open")) {
     attempts.push({ via: "xdg-open", cmd: "xdg-open", args: [abs] });
   }
@@ -65,12 +101,12 @@ export async function openFile(filePath) {
   for (const a of attempts) {
     try {
       await launch(a.cmd, a.args);
-      return { ok: true, via: a.via };
+      return { ok: true, via: a.via, targets };
     } catch {
       // try next opener
     }
   }
-  return { ok: false, via: null };
+  return { ok: false, via: null, targets };
 }
 
 // CLI entry
@@ -81,10 +117,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(2);
   }
   const res = await openFile(target);
+  if (res.targets.winPath) console.log(`windows: ${res.targets.winPath}`);
+  console.log(`url:     ${res.targets.fileUrl}`);
   if (res.ok) {
     console.log(`opened via ${res.via}`);
   } else {
-    console.error("could not open: no working opener found ($BROWSER, wslview, explorer.exe, xdg-open)");
+    console.error("could not auto-open: no working opener (tried $BROWSER, wslview, explorer.exe, xdg-open) — click the path above");
     process.exit(1);
   }
 }

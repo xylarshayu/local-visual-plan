@@ -111,7 +111,11 @@ export function isTooLarge(n: number) { return n > MAX_BYTES }
 carry `data-hl="1"`, and `.code-note` callouts.
 
 ### `diagram` — Mermaid
-Info attr: `title=<text>` (optional). Body is raw Mermaid source.
+Info attrs: `title=<text>` (optional), `look=handDrawn|clean` (default
+`handDrawn`). Body is raw Mermaid source. **Diagrams render hand-drawn by default**
+(sketchy shapes + the vendored Virgil font); set `look=clean` for a crisp/classic
+diagram where the sketch look hurts readability. For *which diagram type to use*
+and per-type syntax, see **`references/diagrams.md`** (loaded on demand).
 
 ```diagram title="Upload flow"
 flowchart LR
@@ -119,8 +123,12 @@ flowchart LR
 ```
 
 **Output:** a `<figure data-block="diagram">` with optional `<figcaption>` and a
-`<pre class="mermaid">` holding the raw source (rendered client-side by the
-inlined mermaid bundle; under `--lean`, shown as a labeled code block instead).
+`<pre class="mermaid" data-look="handDrawn|clean">` holding the raw source
+(rendered client-side by the inlined mermaid bundle; under `--lean`, shown as a
+labeled code block instead). The hand-drawn defaults (`look:handDrawn` + Virgil
+font) are applied globally by `interactivity.js`; a `look=clean` diagram carries a
+small Mermaid frontmatter override prepended to its source. An author's own
+frontmatter / `%%{init}%%` is left untouched.
 
 ### `wireframe` — UI mockup
 Info attrs: `surface=page|panel|popover|sheet|toolbar` (default `page`),

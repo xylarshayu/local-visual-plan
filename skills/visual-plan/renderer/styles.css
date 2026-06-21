@@ -11,37 +11,37 @@
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #e9ebee;            /* engineering-paper gray */
-  --bg-elev: #ffffff;       /* white panels sit ON the gray */
-  --bg-sunken: #dfe2e6;     /* label bars / gutters */
-  --bg-code: #f6f7f9;
-  --fg: #14171c;            /* near-black ink */
-  --fg-muted: #4b525b;
-  --fg-faint: #79808a;
-  --border: #c2c7ce;        /* hairline rule */
-  --border-strong: #8b929c; /* heavy rule (section/masthead) */
-  --accent: #1f4fc9;        /* drafting blue, used only as markers/rules */
+  --bg: #f4f3ee;            /* warm cream paper */
+  --bg-elev: #fffdf8;       /* warm white panels sit ON the cream */
+  --bg-sunken: #ece7db;     /* label bars / gutters */
+  --bg-code: #f6f1e6;
+  --fg: #1b1a17;            /* warm near-black ink */
+  --fg-muted: #6b6760;
+  --fg-faint: #9a9384;
+  --border: #d8d4ca;        /* hairline rule */
+  --border-strong: #8c8474; /* heavy rule (section/masthead) */
+  --accent: #9b2d2d;        /* oxblood, used as markers/rules */
   --accent-fg: #ffffff;
-  --accent-soft: #e6ecf9;
-  --ring: rgba(31, 79, 201, 0.45);
+  --accent-soft: #f1dad7;
+  --ring: rgba(155, 45, 45, 0.4);
 
-  --add-fg: #1a7f37;
-  --add-bg: #e6f4ea;
-  --add-gutter: #c0e6cd;
-  --del-fg: #b3261e;
-  --del-bg: #fbe9e8;
-  --del-gutter: #f0bdb9;
-  --hunk-fg: #5a4bb0;
-  --hunk-bg: #ebe8f6;
+  --add-fg: #3f7a33;
+  --add-bg: #e8efd9;
+  --add-gutter: #cfe0bb;
+  --del-fg: #bb5130;
+  --del-bg: #f6e3da;
+  --del-gutter: #ecc8b9;
+  --hunk-fg: #6f5a86;
+  --hunk-bg: #ece6ef;
 
-  --tag-reuse: #0d6f66;  --tag-reuse-bg: #dcefed;
+  --tag-reuse: #4a6b62;  --tag-reuse-bg: #dfe9e4;
   --tag-edit: #8a5d00;   --tag-edit-bg: #f4ead0;
-  --tag-new: #1a7f37;    --tag-new-bg: #ddefe3;
-  --tag-delete: #b3261e; --tag-delete-bg: #f6dedc;
+  --tag-new: #3f7a33;    --tag-new-bg: #e3efda;
+  --tag-delete: #9b2d2d; --tag-delete-bg: #f1dad7;
 
-  --status-draft: #4b525b;    --status-draft-bg: #dfe2e6;
+  --status-draft: #6b6760;    --status-draft-bg: #ece7db;
   --status-proposed: #8a5d00; --status-proposed-bg: #f4ead0;
-  --status-approved: #1a7f37; --status-approved-bg: #ddefe3;
+  --status-approved: #3f7a33; --status-approved-bg: #e3efda;
 
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -49,32 +49,32 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0c0e11;
-  --bg-elev: #15181d;
-  --bg-sunken: #0a0c0f;
-  --bg-code: #121519;
-  --fg: #e7e9ec;
-  --fg-muted: #99a0aa;
-  --fg-faint: #666c75;
-  --border: #2a2e36;
-  --border-strong: #454b55;
-  --accent: #6f93ff;
-  --accent-fg: #0a0d16;
-  --accent-soft: #161d31;
-  --ring: rgba(111, 147, 255, 0.5);
+  --bg: #1c1a16;            /* warm near-black (aged paper at night) */
+  --bg-elev: #24211b;
+  --bg-sunken: #16140f;
+  --bg-code: #211d17;
+  --fg: #ece5d6;            /* warm off-white ink */
+  --fg-muted: #b1a994;
+  --fg-faint: #7e7768;
+  --border: #36322a;
+  --border-strong: #524b3e;
+  --accent: #d4685a;        /* oxblood lightened for dark legibility */
+  --accent-fg: #1c1a16;
+  --accent-soft: #36211c;
+  --ring: rgba(212, 104, 90, 0.5);
 
-  --add-fg: #57d27e;  --add-bg: #0f2417;  --add-gutter: #1d5733;
-  --del-fg: #ff7b72;  --del-bg: #2c1416;  --del-gutter: #6f2a2a;
-  --hunk-fg: #b3a4ff; --hunk-bg: #181530;
+  --add-fg: #7bbf67;  --add-bg: #1c2916;  --add-gutter: #2e4421;
+  --del-fg: #df7d5e;  --del-bg: #2c1a14;  --del-gutter: #422318;
+  --hunk-fg: #b6a3cf; --hunk-bg: #221c2b;
 
-  --tag-reuse: #4fd6c6;  --tag-reuse-bg: #0b2624;
-  --tag-edit: #e3b341;   --tag-edit-bg: #2a210e;
-  --tag-new: #57d27e;    --tag-new-bg: #0f2417;
-  --tag-delete: #ff7b72; --tag-delete-bg: #2c1416;
+  --tag-reuse: #5fb3a6;  --tag-reuse-bg: #0f2723;
+  --tag-edit: #d8a544;   --tag-edit-bg: #2a2110;
+  --tag-new: #7bbf67;    --tag-new-bg: #1c2916;
+  --tag-delete: #df7d5e; --tag-delete-bg: #2c1a14;
 
-  --status-draft: #9aa1ab;    --status-draft-bg: #1a1e24;
-  --status-proposed: #e3b341; --status-proposed-bg: #2a210e;
-  --status-approved: #57d27e; --status-approved-bg: #0f2417;
+  --status-draft: #b1a994;    --status-draft-bg: #211d17;
+  --status-proposed: #d8a544; --status-proposed-bg: #2a2110;
+  --status-approved: #7bbf67; --status-approved-bg: #1c2916;
 }
 
 * { box-sizing: border-box; }
@@ -931,7 +931,7 @@ pre[data-block=unknown]::before {
 
 /* ----- print ------------------------------------------------------------ */
 @media print {
-  :root { --bg: #fff; --bg-elev: #fff; --bg-sunken: #f2f2f2; }
+  :root { --bg: #fff; --bg-elev: #fff; --bg-sunken: #f1ede3; }
   body { background: #fff; font-size: 10.5pt; }
   .plan-topbar { position: static; }
   .theme-toggle, .skip-link, .plan-footer { display: none; }

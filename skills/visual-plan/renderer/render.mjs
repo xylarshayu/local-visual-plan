@@ -420,7 +420,24 @@ function renderCode(body, attrs) {
   return out;
 }
 
+// Diagrams default to Mermaid's hand-drawn look (sketchy shapes via rough.js +
+// the vendored Virgil hand-drawn font). The hand-drawn defaults are set globally
+// in interactivity.js, so a default diagram's source is left verbatim. Only the
+// `look=clean` escape hatch needs a per-diagram override, which we express as
+// Mermaid YAML frontmatter prepended to the source — UNLESS the author wrote
+// their own frontmatter / init directive, which we then leave untouched.
+function withCleanConfig(src) {
+  const trimmed = src.replace(/\s+$/, "");
+  if (/^﻿?\s*(?:---|%%\{)/.test(trimmed)) return trimmed; // author owns config
+  // Only flip the LOOK to classic. We deliberately do NOT override fontFamily:
+  // Mermaid measures node width with the global font (Virgil) but would then
+  // render with the per-diagram font, and any width difference clips the labels.
+  // Keeping the global font for measurement AND render guarantees they match.
+  return "---\nconfig:\n  look: classic\n---\n" + trimmed;
+}
+
 function renderDiagram(body, attrs, lean) {
+  const look = attrs.look === "clean" ? "clean" : "handDrawn";
   let out = '<figure data-block="diagram">';
   if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
   if (lean) {
@@ -428,7 +445,10 @@ function renderDiagram(body, attrs, lean) {
   } else {
     // Raw mermaid source; escaped so the browser-side mermaid receives text,
     // not parsed HTML. Mermaid reads textContent, so entities are decoded.
-    out += `<pre class="mermaid">${esc(body.replace(/\s+$/, ""))}</pre>`;
+    // `data-look` lets renderPlan know whether a hand-drawn font is needed and
+    // (belt-and-suspenders) lets interactivity.js tell the two apart.
+    const source = look === "clean" ? withCleanConfig(body) : body.replace(/\s+$/, "");
+    out += `<pre class="mermaid" data-look="${look}">${esc(source)}</pre>`;
   }
   out += "</figure>";
   return out;
@@ -764,6 +784,20 @@ function loadMermaid() {
   return readFileSync(join(HERE, "vendor", "mermaid.min.js"), "utf8");
 }
 
+// The hand-drawn diagram font (Virgil, OFL-1.1) embedded as a base64 data URI so
+// the output stays a single self-contained, offline file — no web-font fetch.
+// Injected only when a hand-drawn diagram is present (and never in --lean output).
+let _virgilCache = null;
+function loadVirgilFontFace() {
+  if (_virgilCache === null) {
+    const b64 = readFileSync(join(HERE, "vendor", "virgil.woff2")).toString("base64");
+    _virgilCache =
+      `<style>@font-face{font-family:"Virgil";font-style:normal;font-weight:400;` +
+      `font-display:swap;src:url(data:font/woff2;base64,${b64}) format("woff2");}</style>`;
+  }
+  return _virgilCache;
+}
+
 // Two displacement filters at different frequencies give a hand-drawn wobble:
 // `wf-rough` for the screen frame / large elements, `wf-rough-fine` for small
 // controls so their short edges still look sketched rather than melted.
@@ -780,7 +814,11 @@ export function renderPlan(markdownSource, { lean = false } = {}) {
   const bodyHtml = renderMarkdownSegment(body, lean, warnings, rendered);
 
   const usesSketchy = /class="wf-screen[^"]*\bis-sketchy/.test(bodyHtml);
-  const usesMermaid = !lean && /<pre class="mermaid">/.test(bodyHtml);
+  // NOTE: the `<pre class="mermaid">` now carries a `data-look="…"` attribute, so
+  // match the opening tag WITHOUT requiring the immediate `>` (a `/…">/` regex
+  // here would silently stop inlining the bundle).
+  const usesMermaid = !lean && /<pre class="mermaid"[\s>]/.test(bodyHtml);
+  const usesHandDrawn = usesMermaid && /<pre class="mermaid" data-look="handDrawn"/.test(bodyHtml);
 
   const { template, styles, interactivity } = loadTemplate();
 
@@ -799,6 +837,9 @@ export function renderPlan(markdownSource, { lean = false } = {}) {
     mermaidScript = `<script>\n${loadMermaid()}\n</script>`;
   }
 
+  // Embed the hand-drawn font only when a hand-drawn diagram actually needs it.
+  const fontFace = usesHandDrawn ? loadVirgilFontFace() : "";
+
   const sketchyDefs = usesSketchy ? SKETCHY_FILTER : "";
 
   // IMPORTANT: every replacement value is passed as a *function* returning the
@@ -814,6 +855,7 @@ export function renderPlan(markdownSource, { lean = false } = {}) {
     .replaceAll("<!-- HEADING -->", () => escapeHtml(title))
     .replace("<!-- OBJECTIVE -->", () => objectiveHtml)
     .replace("<!-- BODY -->", () => bodyValue)
+    .replace("<!-- FONT -->", () => fontFace)
     .replace("<!-- MERMAID -->", () => mermaidScript)
     .replace("/* INLINE:styles.css */", () => styles)
     .replace("/* INLINE:interactivity.js */", () => interactivity);
@@ -907,8 +949,15 @@ async function main() {
     try {
       const { openFile } = await import("./open.mjs");
       const res = await openFile(outPath);
+      // Always surface a clickable path — even when auto-open works, and
+      // especially when it doesn't (e.g. WSL interop disabled). The Windows/UNC
+      // path opens straight from the Windows side; hand it to the user.
+      if (res.targets) {
+        if (res.targets.winPath) console.log(`windows: ${res.targets.winPath}`);
+        console.log(`url:     ${res.targets.fileUrl}`);
+      }
       if (res.ok) console.log(`opened via ${res.via}`);
-      else console.error("warning: could not open the file (no working opener)");
+      else console.error("note: could not auto-open a browser — click the path above");
     } catch (e) {
       console.error(`warning: open failed: ${e.message}`);
     }

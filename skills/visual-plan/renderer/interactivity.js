@@ -73,7 +73,7 @@
   var mermaidReady = false;
   var mermaidRendered = false;
 
-  function renderMermaid(theme) {
+  async function renderMermaid(theme) {
     if (typeof window.mermaid === "undefined") return; // --lean output
     var nodes = document.querySelectorAll("pre.mermaid");
     if (!nodes.length) return;
@@ -89,12 +89,24 @@
       }
     });
 
+    // Load the hand-drawn font BEFORE mermaid measures text. If the font is not
+    // ready at measure time, node boxes are sized for the fallback metrics and
+    // the wider Virgil glyphs overflow/clip. A per-diagram `look=clean` override
+    // (Mermaid frontmatter in the source) opts back out to classic + sans.
+    if (document.fonts && document.fonts.load) {
+      try {
+        await document.fonts.load('16px "Virgil"');
+        await document.fonts.ready;
+      } catch (e) { /* fall back to default metrics */ }
+    }
+
     try {
       window.mermaid.initialize({
         startOnLoad: false,
         securityLevel: "strict",
+        look: "handDrawn",
         theme: theme === "dark" ? "dark" : "neutral",
-        themeVariables: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }
+        themeVariables: { fontFamily: '"Virgil", "Segoe Print", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }
       });
       window.mermaid.run({ querySelector: "pre.mermaid" });
       mermaidRendered = true;

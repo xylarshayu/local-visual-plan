@@ -57,8 +57,12 @@ ours and 100% local.
    `tabs` / `collapsible` grouping. **`references/format.md` is the authoritative
    block catalog** — its authoring syntax is the contract with the renderer; do
    not invent block types or attributes. For wireframes, the `.wf-*` class
-   catalog and quality bar live in **`references/wireframe.md`**. Unknown blocks
-   degrade to a labeled `<pre>`, so the `.md` is still readable anywhere.
+   catalog and quality bar live in **`references/wireframe.md`**; for diagrams,
+   **`references/diagrams.md`** lists which Mermaid type to use and per-type
+   syntax. Both are loaded on demand, so they don't cost always-on context.
+   Diagrams render **hand-drawn by default** (sketchy + a hand-written font); add
+   `look=clean` on a `diagram` for a crisp/technical one. Unknown blocks degrade
+   to a labeled `<pre>`, so the `.md` is still readable anywhere.
 3. **Render and open:** the renderer lives next to **this `SKILL.md`** at
    `<skill-dir>/renderer/render.mjs`, where `<skill-dir>` is the directory
    containing this file (e.g. `~/.claude/skills/visual-plan` or
@@ -79,18 +83,36 @@ ours and 100% local.
    diagrams show as code). Use `--out <path>` to choose the location; default is
    `./.visual-plans/<slug>/index.html`. Omit `--open` to render without
    launching a browser.
-4. **Report and request approval.** Give the user the output **path** and a 2–3
-   line summary of the approach, and ask them to review the page and sign off.
-   That review is the gate — proceed to implementation only after approval.
+
+   **How `--open` works (and why it always gives you something clickable).** It
+   tries the platform's openers (`$BROWSER` → `wslview` → `explorer.exe` →
+   `xdg-open`) and — regardless of whether any fired — **always prints two
+   targets**:
+   ```
+   windows: \\wsl.localhost\<distro>\…\index.html   (WSL only)
+   url:     file:///…/index.html
+   ```
+   **Surface that `url:` line (and on WSL the `windows:` path) to the user.** Many
+   harnesses/IDEs (Claude Code included) auto-open a surfaced `file://` link; where
+   they don't, it's a one-click path. This is why opening still works when the
+   native openers can't — e.g. WSL with interop disabled, where `wslview` /
+   `explorer.exe` fail but the printed `\\wsl.localhost\…` UNC path opens straight
+   from Windows.
+4. **Report and request approval.** Give the user the printed **`url:` / Windows
+   path** (so they can open it) and a 2–3 line summary of the approach, and ask
+   them to review the page and sign off. That review is the gate — proceed to
+   implementation only after approval.
 
 ## Local & private
 
 The output is a **single self-contained HTML file** — inlined CSS, inlined
-vanilla JS for tabs / collapse / theme, and (unless `--lean`) an inlined Mermaid
-bundle that renders diagrams in the browser. No CDN, no web fonts, no external
-URLs: it opens straight from `file://` and works with the network off. Nothing
-about your plan or your code ever leaves the machine. The renderer needs **no
-`npm install`** — `marked` and `mermaid` are vendored.
+vanilla JS for tabs / collapse / theme, (unless `--lean`) an inlined Mermaid
+bundle that renders diagrams in the browser, and — when a hand-drawn diagram is
+present — the Virgil font **embedded as a base64 data URI**. No CDN, no web-font
+fetch, no external URLs: it opens straight from `file://` and works with the
+network off. Nothing about your plan or your code ever leaves the machine. The
+renderer needs **no `npm install`** — `marked`, `mermaid`, and the font are
+vendored.
 
 Note: `wireframe` block bodies are passed through as HTML by design (you author
 them, you view them locally) — only render plan files you trust.

@@ -34,8 +34,10 @@ node <skill-dir>/renderer/recap.mjs [<range>] [--open] [--lean] [--max-files N]
 - **`--staged`** → only staged changes.
 
 It writes `index.html` (and the generated `recap.md` beside it) and, with
-`--open`, opens it. The recap carries a `file-tree` of every changed file and a
-`## Key changes` tab strip with the highest-churn files' split diffs.
+`--open`, opens it — and **always prints a clickable `url:` / Windows path** even
+when no native opener fires (e.g. WSL interop off); surface that to the user. The
+recap carries a `file-tree` of every changed file and a `## Key changes` tab strip
+with the highest-churn files' split diffs.
 
 ## Richer recaps — enrich before rendering
 
@@ -56,8 +58,10 @@ story. Read the generated `recap.md`, then enrich it before the final render:
 - **Architecture / schema / API changes** deserve a `diagram`, `data-model`, or
   `api-endpoint` block so the contract is visible above the line diff.
 
-`references/format.md` is the authoritative block catalog. To re-render an
-enriched `recap.md`, run the plan renderer on it:
+`references/format.md` is the authoritative block catalog; `references/diagrams.md`
+(loaded on demand) covers which Mermaid diagram type to use. Diagrams render
+**hand-drawn by default** (add `look=clean` per diagram to opt out). To re-render
+an enriched `recap.md`, run the plan renderer on it:
 `node <skill-dir>/renderer/render.mjs <recap.md> --open`.
 
 ## Report and review
