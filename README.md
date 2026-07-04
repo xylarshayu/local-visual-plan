@@ -225,6 +225,24 @@ comment with zero clicks, alongside or instead of the hosted link.
 ./install.sh
 ```
 
+### Or via the skills CLI
+
+The repo follows the open [Agent Skills](https://agentskills.io) layout, so
+the [skills.sh](https://skills.sh) CLI works too:
+
+```sh
+npx skills add xylarshayu/local-visual-plan            # all three skills
+npx skills add xylarshayu/local-visual-plan -s present # just the base
+```
+
+Note for CLI installs: `present-plan` and `present-recap` are thin adapters —
+install them **alongside `present`** (the default all-three install does
+this). They resolve the shared engine from the sibling `present` install;
+`./install.sh` instead copies the engine into each skill, so either path
+yields working skills.
+
+### What install.sh does
+
 Idempotent — re-run any time to update. It installs **all three** skills into
 each agent skill dir, first removing installs from both prior name
 generations (`visual-plan`, `visual-recap`, `presentation-plan`,
@@ -298,6 +316,12 @@ and `present-recap` don't keep their own copy of the engine in this repo —
 `install.sh` copies `present`'s `renderer/` and `references/` into each at
 install time, and their `SKILL.md` paths (`<skill-dir>/renderer/…`,
 `<skill-dir>/references/…`) assume that installed layout.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). Vendored components (`marked`, Mermaid, the
+Virgil font) remain under their own licenses, enumerated in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Credits & inspiration
 

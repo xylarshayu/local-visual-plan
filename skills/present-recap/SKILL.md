@@ -1,15 +1,20 @@
 ---
 name: present-recap
-description: Turn a git diff — a branch, a commit range, a PR, or the working tree — into one self-contained, interactive HTML recap you can review locally: a file tree of what changed plus the key per-file diffs (each with a Viewed checkbox), optional diagrams / wireframes / data-model / api-endpoint blocks for schema and API changes, and callouts for anything risky. Builds on the `present` base skill for the general authoring, rendering, and feedback mechanics. Use when the user says "recap this PR / branch / commit", "show me what changed", "what changed", "summarize this diff", "/present-recap" (or the older "/visual-recap" / "/presentation-recap"). Also use when the user pastes a blob starting `<!-- presentation-feedback v1 -->`: that's exported review feedback from a page you rendered earlier, not new prose — resolve it against `<skill-dir>/references/feedback.md`. Secrets are masked automatically at collection. Renders fully offline from file:// — no SaaS, no account, no network at view time.
+description: Turn a git diff — a branch, a commit range, a PR, or the working tree — into one self-contained, interactive HTML recap you can review locally: a file tree of what changed plus the key per-file diffs (each with a Viewed checkbox), optional diagrams / wireframes / data-model / api-endpoint blocks for schema and API changes, and callouts for anything risky. Builds on the `present` base skill (install it alongside) for the general authoring, rendering, and feedback mechanics. Use when the user says "recap this PR / branch / commit", "show me what changed", "what changed", "summarize this diff", "/present-recap" (legacy: "/visual-recap"). Also use when the user pastes a blob starting `<!-- presentation-feedback v1 -->`: that's exported review feedback from a page you rendered earlier, not new prose — resolve it against `<skill-dir>/references/feedback.md`. Secrets are masked automatically at collection. Renders fully offline from file:// — no SaaS, no account, no network at view time.
+license: MIT — see LICENSE and THIRD_PARTY_NOTICES.md
 ---
 
 # Present: Recap
 
 Builds on the `present` base skill — all of its authoring craft, block
-catalog, render mechanics, and feedback round-trip apply here unchanged. The
-installed copy is self-sufficient: the engine lives at `<skill-dir>/renderer`
-and the reference catalog at `<skill-dir>/references`, exactly as in
-`present`. A recap is a presentation built **from** a diff instead of toward
+catalog, render mechanics, and feedback round-trip apply here unchanged.
+**Engine resolution:** use `<skill-dir>/renderer` and `<skill-dir>/references`
+when they exist (this repo's `install.sh` copies the engine into each skill).
+When this skill was installed by a skills CLI (e.g. `npx skills add`), the
+folder carries only this file — use the sibling base install instead:
+`../present/renderer` and `../present/references` relative to this skill's
+directory (skills install side by side; `present` must be installed
+alongside). A recap is a presentation built **from** a diff instead of toward
 one: instead of describing a change you're about to make, you describe the
 change that was just made, one altitude above line-by-line review.
 

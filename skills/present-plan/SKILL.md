@@ -1,15 +1,20 @@
 ---
 name: present-plan
-description: Turn an implementation plan into a single self-contained, interactive HTML page you can review and approve locally — ordered steps, file trees, annotated diffs and code, Mermaid diagrams, wireframe mockups, callouts, chapters with a side nav, before/after tabs, and open questions you can answer inline. Builds on the `present` base skill for the general authoring, rendering, and feedback mechanics. Use when the user says "make a visual plan", "plan this visually", "show me a plan I can review/approve", "/present-plan" (or the older "/visual-plan" / "/presentation-plan"), or otherwise needs to SEE and sign off on a direction before code is written. Also use when the user pastes a blob starting `<!-- presentation-feedback v1 -->`: that's exported review feedback from a page you rendered earlier, not new prose — resolve it against `references/feedback.md`. Everything renders fully offline from file:// — no SaaS, no account, no server, no network at view time.
+description: Turn an implementation plan into a single self-contained, interactive HTML page you can review and approve locally — ordered steps, file trees, annotated diffs and code, Mermaid diagrams, wireframe mockups, callouts, chapters with a side nav, before/after tabs, and open questions you can answer inline. Builds on the `present` base skill (install it alongside) for the general authoring, rendering, and feedback mechanics. Use when the user says "make a visual plan", "plan this visually", "show me a plan I can review/approve", "/present-plan" (legacy: "/visual-plan"), or otherwise needs to SEE and sign off on a direction before code is written. Also use when the user pastes a blob starting `<!-- presentation-feedback v1 -->`: that's exported review feedback from a page you rendered earlier, not new prose — resolve it against `references/feedback.md`. Everything renders fully offline from file:// — no SaaS, no account, no server, no network at view time.
+license: MIT — see LICENSE and THIRD_PARTY_NOTICES.md
 ---
 
 # Present: Plan
 
 Builds on the `present` base skill — all of its authoring craft, block
-catalog, render mechanics, and feedback round-trip apply here unchanged. The
-installed copy of this skill is self-sufficient: the engine lives at
-`<skill-dir>/renderer` and the reference catalog at `<skill-dir>/references`,
-exactly as in `present`. This file adds only what's specific to planning.
+catalog, render mechanics, and feedback round-trip apply here unchanged.
+**Engine resolution:** use `<skill-dir>/renderer` and `<skill-dir>/references`
+when they exist (this repo's `install.sh` copies the engine into each skill).
+When this skill was installed by a skills CLI (e.g. `npx skills add`), the
+folder carries only this file — use the sibling base install instead:
+`../present/renderer` and `../present/references` relative to this skill's
+directory (skills install side by side; `present` must be installed
+alongside). This file adds only what's specific to planning.
 
 ## When to use it — and when to skip
 
