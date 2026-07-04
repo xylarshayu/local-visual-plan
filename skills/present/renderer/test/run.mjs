@@ -974,6 +974,77 @@ fixture('<regression: prose anchors & collisions>', (check) => {
 })
 
 // ---------------------------------------------------------------------------
+// Fixture: list-items.md — prose list items (ul + ol + nested) get kind `li`
+// anchors, with collision suffixing, while a steps block's items keep kind
+// `step` (no double-anchoring). The annotation layer is generic over
+// [data-pf-anchor], so pinning a note on an individual bullet now resolves to
+// that <li> rather than the whole enclosing chapter/paragraph.
+// ---------------------------------------------------------------------------
+fixture('list-items.md', (check) => {
+  const src = read('list-items.md')
+  const { html } = renderPlan(src)
+  const map = anchorMap(html)
+  const liKeys = Object.keys(map.anchors).filter((k) => map.anchors[k].kind === 'li')
+
+  check('every prose <li> carries data-pf-anchor + matching id', () => {
+    // Marked emits bare <li> for prose; after tagging none should be left bare
+    // (block <li> already carry class="step"/"tree-row" + their own anchor).
+    assert.ok(!/<li>/.test(html), 'no prose <li> left without an anchor')
+    for (const m of html.matchAll(/<li data-pf-anchor="([^"]+)" id="([^"]+)">/g)) {
+      assert.equal(m[1], m[2], 'data-pf-anchor and id agree on each <li>')
+      assert.match(m[1], /^li:/, 'prose list items use the `li` kind prefix')
+    }
+  })
+
+  check('ul, ol and nested items are all anchored with sensible slugs', () => {
+    for (const a of [
+      'li:alpha-finding-here',   // <ul> item
+      'li:beta-finding-here',    // <ul> item
+      'li:first-numbered-step',  // <ol> item
+      'li:second-numbered-step', // <ol> item
+      'li:parent-topic',         // parent of a nested list — own text only, no child bleed
+      'li:child-detail-one',     // nested <ul> item
+      'li:child-detail-two',     // nested <ul> item
+    ]) {
+      assert.ok(map.anchors[a], `expected anchor ${a}`)
+      assert.equal(map.anchors[a].kind, 'li', `${a} is kind li`)
+      assert.equal(map.anchors[a].lines, null, `${a} lines are contractually null`)
+    }
+    // Label is the item's first ~6 words of text.
+    assert.equal(map.anchors['li:parent-topic'].label, 'Parent topic')
+  })
+
+  check('two identical items collide with a :2 suffix in document order', () => {
+    assert.ok(map.anchors['li:duplicate-line-text'], 'first duplicate item')
+    assert.ok(map.anchors['li:duplicate-line-text:2'], 'second duplicate item gets :2')
+    const order = liKeys.filter((k) => k.startsWith('li:duplicate-line-text'))
+    assert.deepEqual(order, ['li:duplicate-line-text', 'li:duplicate-line-text:2'])
+  })
+
+  check("a steps block's items stay kind `step`, never `li`", () => {
+    assert.equal(map.anchors['step:wire-the-guard'].kind, 'step')
+    assert.equal(map.anchors['step:wire-the-guard:2'].kind, 'step')
+    // No li: anchor ever lands on a rendered block's <li class="step"> row.
+    assert.ok(
+      !/class="step"[^>]*data-pf-anchor="li:/.test(html) &&
+        !/data-pf-anchor="li:[^"]*"[^>]*class="step"/.test(html),
+      'steps <li class="step"> rows are not double-anchored as `li`',
+    )
+    // Every li: anchor came from prose, not from a step title.
+    assert.ok(
+      !liKeys.some((k) => /wire-the-guard/.test(k)),
+      'no prose `li` anchor derived from a step title',
+    )
+  })
+
+  check('all anchor ids are unique across the page', () => {
+    const ids = allIds(html)
+    const dupes = [...new Set(ids.filter((v, i) => ids.indexOf(v) !== i))]
+    assert.deepEqual(dupes, [], `duplicate ids: ${dupes.join(', ')}`)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Sanity: every .md fixture present in fixtures/ was actually exercised above.
 // Guards against adding a fixture file but forgetting to assert on it.
 // ---------------------------------------------------------------------------
@@ -981,7 +1052,7 @@ fixture('<coverage>', (check) => {
   const onDisk = readdirSync(FIXTURES)
     .filter((f) => f.endsWith('.md'))
     .sort()
-  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'unknown-block.md'].sort()
+  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'unknown-block.md'].sort()
   check('every fixture file on disk is covered by a test block', () => {
     assert.deepEqual(
       onDisk,

@@ -40,7 +40,7 @@ unreviewed questions: <n>               (only present when n > 0)
   the user exported without picking one (e.g. a partial review) — never read
   it as approval.
 - **`## note — <kind> "<label>" [<anchor>]`** — one per pinned note, in
-  document order. `<kind>` is one of `h p step file diff code diagram
+  document order. `<kind>` is one of `h p li step file diff code diagram
   wireframe q callout chapter` (a hunk anchor looks like
   `diff:src-actions-upload-ts:h2`). `<label>` is the human-readable text the
   annotate UI showed next to the pin (a step title, a hunk's file+index, a

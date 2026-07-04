@@ -1395,7 +1395,41 @@ function tagProseAnchors(html, reg) {
     const anchor = registerAnchor(reg, "p", slugSource, label, null);
     return `<p data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${inner}</p>`;
   });
+  // Prose list items (both <ul> and <ol>, nested included). Marked emits bare
+  // <li> for prose; custom blocks (steps/filetree/…) are parked as placeholders
+  // at this stage, so their internal <li class="step"|"tree-row"…> never appear
+  // here — only genuine prose items match, each getting its own kind `li` anchor
+  // (a steps block's items keep their kind `step`, never `li`). The slug is the
+  // item's OWN leading text: we capture up to the first nested-list / sibling /
+  // close boundary so a parent's slug isn't polluted by its children, then trim
+  // to ~6 words. Lines are null (same contract as `p` — no cheap source-map
+  // lookup exists for list items, and building one speculatively isn't worth it).
+  html = html.replace(/<li>([\s\S]*?)(?=<ul|<ol|<li|<\/li)/g, (m, inner, offset, str) => {
+    let text = liLeadingText(inner);
+    if (!text) {
+      // Own leading text is empty (e.g. an item whose body is only a nested list
+      // or a parked block); widen to the fuller textContent so it still slugs.
+      text = liLeadingText(str.slice(offset, offset + 400));
+    }
+    if (!text) return m; // truly empty item — nothing to anchor on
+    const slugSource = text.split(" ").slice(0, 6).join(" ");
+    const anchor = registerAnchor(reg, "li", slugSource, slugSource, null);
+    return `<li data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${inner}`;
+  });
   return html;
+}
+
+// Leading text of a prose list item: drop inline tags and any parked
+// block/segment sentinels (so a list item wrapping a custom block doesn't slug
+// on "VPBLOCK_0"), decode the entities we emit, and collapse whitespace.
+function liLeadingText(fragment) {
+  const stripped = String(fragment)
+    .replace(/\x01VPBLOCK_\d+\x02/g, " ")
+    .replace(/VPSEG-?\d+:[A-Za-z0-9+/=]*VPSEG/g, " ");
+  return decodeEntitiesLite(stripTags(stripped))
+    .replace(/[\x00-\x1f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Full markdown->html for a segment of source (used at top level and recursively

@@ -365,6 +365,7 @@ Slugs reuse `slugify()` (lowercase, NFKD, non-alphanumeric → `-`, trimmed).
 | ----------- | ------------------------------------ | ------------------------------------ |
 | `h`         | prose headings `h1`–`h6`             | heading text                         |
 | `p`         | prose paragraphs (top-level `<p>`)   | first ~6 words                       |
+| `li`        | each prose list item `<li>` (`<ul>`/`<ol>`, nested) | item's own leading text, first ~6 words |
 | `step`      | each `li.step` in a `steps` block    | step title                           |
 | `file`      | each `li.tree-row` in a `filetree`   | path                                 |
 | `diff`      | `figure[data-block=diff]`            | `file` attr, else `diff-<index>`     |
