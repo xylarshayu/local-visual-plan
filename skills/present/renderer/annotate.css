@@ -1,0 +1,420 @@
+/* ==========================================================================
+   presentation annotation layer — UI chrome for notes / review / export.
+   Inlined into the page by the engine (marker INLINE:annotate.css). Styled
+   entirely with the styles.css design tokens so light + dark both work, and
+   scoped to .pf-* classes so it never restyles page content (the only content
+   touch is a hover outline in note mode and a transient jump flash). All
+   annotate UI is hidden in print.
+   ========================================================================== */
+
+/* ----- Floating pill (bottom-right) ------------------------------------- */
+.pf-pill {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 45;
+  display: flex;
+  gap: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 0 var(--border-strong);
+}
+.pf-pill-btn {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border);
+  padding: 9px 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, background 0.12s;
+}
+.pf-pill-btn:last-child { border-right: 0; }
+.pf-pill-btn:hover { color: var(--fg); background: var(--bg-sunken); }
+.pf-pill-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.pf-pill-btn[aria-pressed="true"] { color: var(--accent-fg); background: var(--accent); }
+
+/* ----- Note mode: cursor + hover outline -------------------------------- */
+.pf-note-mode { cursor: crosshair; }
+.pf-note-mode [data-pf-anchor] { cursor: crosshair; }
+.pf-hover-target {
+  outline: 2px dashed var(--accent) !important;
+  outline-offset: 2px;
+  background: var(--accent-soft) !important;
+}
+
+/* ----- Jump flash (transient, on content) ------------------------------- */
+.pf-flash {
+  animation: pf-flash-kf 1.2s ease-out;
+}
+@keyframes pf-flash-kf {
+  0%   { box-shadow: 0 0 0 3px var(--ring); background: var(--accent-soft); }
+  100% { box-shadow: 0 0 0 0 transparent; background: transparent; }
+}
+
+/* ----- Overlay layer: pins + permalink ---------------------------------- */
+.pf-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+.pf-pin, .pf-permalink { pointer-events: auto; }
+.pf-pin {
+  position: fixed;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 3px 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pf-pin:hover { filter: brightness(1.08); }
+.pf-pin:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.pf-permalink {
+  position: fixed;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--fg-faint);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.pf-permalink:hover { color: var(--accent); border-color: var(--accent); }
+.pf-permalink:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* ----- Shared popover (composer + viewer) ------------------------------- */
+.pf-composer, .pf-viewer {
+  position: fixed;
+  z-index: 70;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 2px 0 var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px;
+}
+.pf-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pf-pop-anchor {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.pf-composer-text, .pf-vtext {
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  width: 100%;
+  min-height: 68px;
+  resize: vertical;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 7px 9px;
+}
+.pf-composer-text:focus, .pf-vtext:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+
+.pf-aud {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+.pf-aud-opt { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+.pf-pop-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ----- Buttons ---------------------------------------------------------- */
+.pf-btn {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.pf-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pf-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.pf-btn.pf-primary { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
+.pf-btn.pf-primary:hover { color: var(--accent-fg); filter: brightness(1.08); }
+.pf-btn.pf-ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+.pf-btn.pf-ghost:hover { color: var(--accent); }
+.pf-btn.pf-danger { color: var(--del-fg); border-color: var(--del-fg); background: transparent; }
+.pf-btn.pf-danger:hover { color: var(--accent-fg); background: var(--del-fg); }
+
+.pf-x {
+  font-family: var(--sans);
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--fg-faint);
+  background: transparent;
+  border: 0;
+  padding: 2px 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pf-x:hover { color: var(--accent); }
+.pf-x:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+/* ----- Pin viewer notes ------------------------------------------------- */
+.pf-vnote {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.pf-vrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* ----- Review panel ----------------------------------------------------- */
+.pf-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(390px, 92vw);
+  z-index: 60;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -2px 0 0 var(--border-strong);
+  transform: translateX(100%);
+  transition: transform 0.18s ease-out;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pf-panel.pf-open { transform: translateX(0); }
+
+.pf-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 2px solid var(--border-strong);
+  background: var(--bg-sunken);
+  flex-shrink: 0;
+}
+.pf-panel-title {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pf-panel-badge {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 2px 7px;
+}
+.pf-panel-head .pf-x { margin-left: auto; }
+
+.pf-degraded {
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--del-fg);
+  background: var(--del-bg);
+  border-bottom: 1px solid var(--del-gutter);
+  padding: 8px 14px;
+  flex-shrink: 0;
+}
+
+.pf-panel-body { overflow-y: auto; padding: 4px 14px 24px; }
+
+.pf-sec { margin-top: 18px; }
+.pf-sec-h {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin: 0 0 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+.pf-sub-h {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin: 14px 0 6px;
+}
+.pf-muted { color: var(--fg-faint); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.pf-empty { color: var(--fg-muted); font-size: 0.85rem; margin: 0; }
+
+/* Note items */
+.pf-note-item {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  padding: 9px 11px;
+  margin-bottom: 8px;
+}
+.pf-note-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pf-note-kind {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  border: 1px solid var(--border-strong);
+  padding: 1px 5px;
+}
+.pf-jump {
+  font-size: 0.86rem;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-note-label { font-size: 0.86rem; color: var(--fg); flex: 1; }
+.pf-aud-mark {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border: 1px solid currentColor;
+}
+.pf-aud-mark.pf-agent { color: var(--tag-new); }
+.pf-aud-mark.pf-self { color: var(--fg-faint); }
+.pf-note-del { margin-left: auto; }
+.pf-note-text { font-size: 0.86rem; color: var(--fg); margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
+.pf-note-excerpt { font-size: 0.78rem; color: var(--fg-muted); margin-top: 5px; font-style: italic; }
+
+/* Questions summary */
+.pf-qitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pf-qstate {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  flex-shrink: 0;
+}
+.pf-qstate.pf-untouched { color: var(--fg-faint); }
+.pf-qstate.pf-default { color: var(--tag-new); }
+.pf-qstate.pf-custom { color: var(--tag-edit); }
+
+/* Verdict */
+.pf-verdict { display: flex; flex-direction: column; gap: 8px; }
+.pf-verdict-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+/* Export */
+.pf-export-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.pf-export-hint { font-size: 0.76rem; color: var(--fg-faint); margin: 9px 0 0; }
+
+/* ----- Viewed checkbox (inside tab button) ------------------------------ */
+.pf-viewed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 8px;
+  vertical-align: -2px;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--tag-new);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  cursor: pointer;
+}
+.pf-viewed[aria-checked="true"] { border-color: var(--tag-new); background: var(--add-bg); }
+.pf-viewed:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.tab-btn.pf-tab-viewed { opacity: 0.6; }
+.tab-btn.pf-tab-viewed[aria-selected="true"] { opacity: 1; }
+
+/* ----- Toast ------------------------------------------------------------ */
+.pf-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 80;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  color: var(--accent-fg);
+  background: var(--accent);
+  padding: 8px 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s, transform 0.16s;
+}
+.pf-toast.pf-toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ----- Responsive ------------------------------------------------------- */
+@media (max-width: 640px) {
+  .pf-pill { right: 8px; bottom: 8px; }
+  .pf-pill-btn { padding: 8px 10px; font-size: 0.68rem; }
+}
+
+/* ----- Print: hide ALL annotate UI -------------------------------------- */
+@media print {
+  .pf-pill, .pf-overlay, .pf-panel, .pf-composer, .pf-viewer,
+  .pf-permalink, .pf-pin, .pf-toast, .pf-viewed {
+    display: none !important;
+  }
+  .pf-hover-target { outline: 0 !important; background: transparent !important; }
+  .tab-btn.pf-tab-viewed { opacity: 1 !important; }
+}

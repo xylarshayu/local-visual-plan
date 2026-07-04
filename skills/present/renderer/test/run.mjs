@@ -166,6 +166,30 @@ function count(html, needle) {
   return n
 }
 
+/** Extract the raw JSON text of the baked-in anchor map (unparsed). */
+function anchorMapRaw(html) {
+  const m = html.match(/id="pf-anchor-map">([\s\S]*?)<\/script>/)
+  assert.ok(m, 'pf-anchor-map script present')
+  return m[1]
+}
+
+/** Extract + JSON.parse the baked-in anchor map. */
+function anchorMap(html) {
+  return JSON.parse(anchorMapRaw(html))
+}
+
+/** Decode the base64 embedded plan source. */
+function embeddedSource(html) {
+  const m = html.match(/id="pf-source" data-encoding="base64">([\s\S]*?)<\/script>/)
+  assert.ok(m, 'pf-source script present')
+  return Buffer.from(m[1], 'base64').toString('utf8')
+}
+
+/** All `id="..."` attribute values in document order. */
+function allIds(html) {
+  return [...html.matchAll(/\sid="([^"]+)"/g)].map((x) => x[1])
+}
+
 // ---------------------------------------------------------------------------
 // Fixture: all-blocks.md — every block type + both diff modes.
 // ---------------------------------------------------------------------------
@@ -291,6 +315,18 @@ fixture('all-blocks.md', (check) => {
     assert.match(html, /q-default/, '.q-default present')
   })
 
+  check('questions render the interactive answer form (contract markup)', () => {
+    assert.match(html, /class="q-form"/, '.q-form present')
+    assert.match(html, /<textarea class="q-custom"/, '.q-custom textarea present')
+    // Two authored questions -> two radio groups, each with default (checked) + custom.
+    assert.match(html, /<input type="radio" name="q:[^"]+" value="default" checked>/, 'default radio checked')
+    assert.match(html, /<input type="radio" name="q:[^"]+" value="custom">/, 'custom radio present')
+    // The radio group name matches the question's own anchor.
+    const qAnchor = (html.match(/class="question" data-pf-anchor="(q:[^"]+)"/) || [])[1]
+    assert.ok(qAnchor, 'question carries a q: anchor')
+    assert.ok(count(html, `name="${qAnchor}"`) >= 2, 'both radios share the question anchor as name')
+  })
+
   // --- escaping: a <script> in text content must not be live ---
   check('prose-extracted text is HTML-escaped (no injected live tags)', () => {
     // The fixture text never includes a raw <script>; sanity that no
@@ -298,6 +334,88 @@ fixture('all-blocks.md', (check) => {
     // documented escaping by checking the diff/code bodies did not introduce a
     // stray closing </figure> mid-body that would break the structure.
     assert.match(html, /&lt;|&gt;|&amp;/, 'HTML entities present from escaping')
+  })
+
+  // --- anchors: every addressable element carries data-pf-anchor AND id ---
+  check('every data-pf-anchor has a matching id="<anchor>"', () => {
+    const anchors = [...html.matchAll(/data-pf-anchor="([^"]+)"/g)].map((m) => m[1])
+    assert.ok(anchors.length >= 10, `expected many anchors, found ${anchors.length}`)
+    for (const a of anchors) {
+      assert.ok(
+        html.includes(`data-pf-anchor="${a}" id="${a}"`),
+        `anchor ${a} must be accompanied by id="${a}"`,
+      )
+    }
+  })
+
+  check('anchor ids are unique (no duplicate id in the document)', () => {
+    const ids = allIds(html)
+    const dupes = [...new Set(ids.filter((v, i) => ids.indexOf(v) !== i))]
+    assert.deepEqual(dupes, [], `duplicate ids: ${dupes.join(', ')}`)
+  })
+
+  check('kind-prefixed anchors exist for step/file/diff/code/diagram/wireframe/q', () => {
+    for (const kind of ['step', 'file', 'diff', 'code', 'diagram', 'wireframe', 'q']) {
+      assert.match(html, new RegExp(`data-pf-anchor="${kind}:`), `${kind}: anchor present`)
+    }
+    // diff hunk anchor: <parent>:h<i> on the hunk header row.
+    assert.match(html, /data-pf-anchor="diff:[^"]+:h1"/, 'diff hunk h1 anchor present')
+  })
+
+  // --- anchor map + embedded source + docId plumbing ---
+  check('anchor map is valid JSON with the documented shape', () => {
+    const map = anchorMap(html)
+    assert.equal(map.version, 1)
+    assert.match(map.docId, /^pf-[0-9a-f]{12}$/, 'docId is pf- + 12 hex')
+    assert.equal(map.source, null, 'source is null when no sourcePath passed')
+    assert.equal(map.title, 'All Blocks & Both Diff Modes')
+    assert.equal(typeof map.anchors, 'object')
+    // Every anchor entry has kind + label + lines (array|null).
+    for (const [a, v] of Object.entries(map.anchors)) {
+      assert.equal(typeof v.kind, 'string', `${a}.kind`)
+      assert.equal(typeof v.label, 'string', `${a}.label`)
+      assert.ok(v.lines === null || (Array.isArray(v.lines) && v.lines.length === 2), `${a}.lines`)
+    }
+  })
+
+  check('anchor map "source" carries the absolute path when provided', () => {
+    const { html: h2 } = renderPlan(src, { sourcePath: '/abs/path/plan.md' })
+    assert.equal(anchorMap(h2).source, '/abs/path/plan.md')
+  })
+
+  check('a top-level block\'s line range is exact (steps block, counted by hand)', () => {
+    const map = anchorMap(html)
+    // In all-blocks.md the first steps block is:
+    //   line 15 ```steps
+    //   line 16 # Add a size guard to the upload action      <- step 1 title
+    //   ... through line 22 (last `>` rationale)
+    //   line 23 # Wire the validator into the action         <- step 2 title
+    //   lines 24-25 body ; line 26 ```
+    assert.deepEqual(map.anchors['step:add-a-size-guard-to-the-upload-action'].lines, [16, 22])
+    assert.deepEqual(map.anchors['step:wire-the-validator-into-the-action'].lines, [23, 25])
+    // A filetree row is a single source line.
+    assert.deepEqual(map.anchors['file:src-actions-upload-ts'].lines, [32, 32])
+  })
+
+  check('embedded plan source round-trips exactly (base64 decodes to input)', () => {
+    assert.equal(embeddedSource(html), src)
+  })
+
+  check('"</" never appears unescaped inside the anchor-map JSON', () => {
+    const raw = anchorMapRaw(html)
+    assert.ok(!raw.includes('</'), 'no raw "</" inside the JSON island')
+    // ...and it is still valid JSON after the <\/ escaping.
+    JSON.parse(raw)
+  })
+
+  check('renderPlan returns a deterministic docId (same input -> same id)', () => {
+    const a = renderPlan(src).docId
+    const b = renderPlan(src).docId
+    assert.equal(a, b)
+    assert.match(a, /^pf-[0-9a-f]{12}$/)
+    // A one-character change flips it.
+    const c = renderPlan(src + '\n<!-- x -->').docId
+    assert.notEqual(a, c)
   })
 
   // --- offline purity ---
@@ -531,6 +649,331 @@ fixture('empty.md', (check) => {
 })
 
 // ---------------------------------------------------------------------------
+// Fixture: chapters.md — chapter directive, side nav, Overview intro, nesting.
+// ---------------------------------------------------------------------------
+fixture('chapters.md', (check) => {
+  const src = read('chapters.md')
+  const { html } = renderPlan(src, { sourcePath: '/x/chapters.md' })
+
+  check('body switches to the two-column layout via data-has-chapters', () => {
+    assert.match(html, /<body[^>]*\bdata-has-chapters="true"/, 'data-has-chapters on <body>')
+  })
+
+  check('content before the first marker becomes an "Overview" chapter', () => {
+    assert.match(html, /<section class="pf-chapter"[^>]*id="chapter:overview"/, 'Overview section present')
+    assert.match(html, /pf-chapter-heading">Overview</, 'Overview heading rendered')
+    // The intro prose lives inside it.
+    assert.match(html, /This intro sits before any chapter marker/)
+  })
+
+  check('each chapter renders a <section class="pf-chapter"> with anchor + id', () => {
+    for (const slug of ['chapter:overview', 'chapter:the-problem', 'chapter:the-solution']) {
+      assert.ok(
+        html.includes(`<section class="pf-chapter" data-pf-anchor="${slug}" id="${slug}">`),
+        `${slug} section present with matching anchor+id`,
+      )
+    }
+  })
+
+  check('a side nav lists every chapter as a #chapter:<slug> link', () => {
+    assert.match(html, /<nav class="pf-sidenav" aria-label="Chapters">/, 'pf-sidenav present')
+    for (const slug of ['chapter:overview', 'chapter:the-problem', 'chapter:the-solution']) {
+      assert.ok(
+        html.includes(`class="pf-sidenav-link" href="#${slug}"`),
+        `side-nav link to #${slug}`,
+      )
+    }
+  })
+
+  check('blocks and headings nested inside chapters still render + anchor', () => {
+    hasBlock(html, 'steps')
+    // A step inside "The Problem" chapter, with an accurate line range.
+    const map = anchorMap(html)
+    // chapters.md:  line 13 ```steps ; line 14 # Investigate the bug ; line 15 edit... ; line 16 ```
+    assert.deepEqual(map.anchors['step:investigate-the-bug'].lines, [14, 15])
+    // A prose heading inside "The Solution" chapter -> line 20.
+    assert.deepEqual(map.anchors['h:a-sub-heading-in-the-solution'].lines, [20, 20])
+  })
+
+  check('chapter anchors carry accurate line ranges into plan.md', () => {
+    const map = anchorMap(html)
+    // Ranges run from the marker line to the chapter's last non-blank line.
+    assert.deepEqual(map.anchors['chapter:overview'].lines, [6, 7])
+    assert.deepEqual(map.anchors['chapter:the-problem'].lines, [9, 16])
+    assert.deepEqual(map.anchors['chapter:the-solution'].lines, [18, 22])
+  })
+
+  check('chapters build performs no view-time network fetch', () => {
+    assertNoNetworkFetch(html, 'chapters build')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fixture: callout.md — all four tones, markdown bodies, anchors.
+// ---------------------------------------------------------------------------
+fixture('callout.md', (check) => {
+  const src = read('callout.md')
+  const { html } = renderPlan(src)
+
+  check('callout -> <aside data-block="callout" data-tone="..."> per tone', () => {
+    hasBlock(html, 'callout', 4)
+    for (const tone of ['info', 'decision', 'warning', 'risk']) {
+      assert.match(html, new RegExp(`data-block="callout" data-tone="${tone}"`), `${tone} tone present`)
+    }
+  })
+
+  check('titled callouts render a .callout-title; bodies render markdown', () => {
+    assert.match(html, /class="callout-title">An informational note</, 'info title')
+    assert.match(html, /class="callout-title">Careful here</, 'warning title')
+    assert.match(html, /<strong>info<\/strong>/, 'markdown bold in body rendered')
+  })
+
+  check('each callout carries a callout: anchor (+ matching id)', () => {
+    const anchors = [...html.matchAll(/data-block="callout" data-tone="[^"]+" data-pf-anchor="(callout:[^"]+)" id="(callout:[^"]+)"/g)]
+    assert.equal(anchors.length, 4, 'four anchored callouts')
+    for (const m of anchors) assert.equal(m[1], m[2], 'anchor and id match')
+    const map = anchorMap(html)
+    assert.ok(Object.keys(map.anchors).some((k) => k.startsWith('callout:')), 'callout anchors in the map')
+  })
+
+  check('a remote link inside a callout body does not fetch at view time', () => {
+    assertNoNetworkFetch(html, 'callout build')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fixture: data-model.md — entity/field cards, flags→change, was:, PK/FK,
+// relations, unparseable-line preservation, escaping, anchors + line numbers,
+// and title-collision suffixing across two blocks.
+// ---------------------------------------------------------------------------
+fixture('data-model.md', (check) => {
+  const src = read('data-model.md')
+  const { html } = renderPlan(src)
+
+  check('data-model -> <figure data-block="data-model"> + figcaption title', () => {
+    hasBlock(html, 'data-model', 2)
+    assert.match(html, /<figure[^>]*data-block=["']data-model["']/i)
+    assert.match(html, /<figcaption[^>]*>Billing schema<\/figcaption>/)
+    assert.match(html, /class="dm-grid"/, '.dm-grid present')
+  })
+
+  check('ENTITY cards carry data-change from their OWN flag', () => {
+    // user is `.` unchanged EVEN THOUGH it has a `~` field (a field flag must not
+    // bump the entity's change).
+    assert.match(html, /class="dm-entity" data-change="unchanged" data-pf-anchor="data-model:billing-schema:user"/)
+    assert.match(html, /class="dm-entity" data-change="added" data-pf-anchor="data-model:billing-schema:plan"/)
+    assert.match(html, /class="dm-entity" data-change="deleted" data-pf-anchor="data-model:billing-schema:legacy-tiers"/)
+    assert.match(html, /class="dm-entity-name">user</, '.dm-entity-name present')
+  })
+
+  check('FIELD rows carry data-change, name + type', () => {
+    assert.match(html, /class="dm-field" data-change="modified"[^>]*id="data-model:billing-schema:user-plan-id"/)
+    assert.match(html, /class="dm-field" data-change="added"[^>]*id="data-model:billing-schema:user-trial-ends-at"/)
+    assert.match(html, /class="dm-field" data-change="unchanged"[^>]*id="data-model:billing-schema:user-email"/)
+    assert.match(html, /class="dm-field-name">plan_id<\/span><span class="dm-field-type">uuid</)
+  })
+
+  check('was: renders the old value struck-through in .dm-was', () => {
+    // plan_id — was: text  -> a .dm-was carrying "text"
+    assert.match(html, /class="dm-was">text<\/span>/, '.dm-was for the was: value')
+  })
+
+  check('PK/FK badges render, FK shows its -> target', () => {
+    assert.match(html, /class="dm-key" data-key="pk">PK</, 'PK badge')
+    assert.match(html, /class="dm-key" data-key="fk">FK <span class="dm-fk-target">→ plan\.id<\/span>/, 'FK badge + target')
+  })
+
+  check('relations render as a .dm-relations list (no graph layout)', () => {
+    assert.match(html, /<ul class="dm-relations">/, '.dm-relations list present')
+    assert.match(html, /class="dm-rel-entity">user<\/span><span class="dm-rel-card">}o--\|\|<\/span><span class="dm-rel-entity">plan</)
+    assert.match(html, /class="dm-rel-label">belongs to<\/span>/)
+    assert.ok(!/class=["'][^"']*\bmermaid\b/.test(html), 'no mermaid graph emitted for relations')
+  })
+
+  check('unparseable line is preserved as a muted raw line (never dropped)', () => {
+    assert.match(html, /class="dm-raw">\?\?\? not a valid line<\/div>/)
+  })
+
+  check('an entity note is HTML-escaped (embedded <script> never live)', () => {
+    assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt; dropped/, 'note escaped')
+    assert.ok(!/<script>alert\(1\)<\/script>/.test(html), 'no live injected script tag')
+  })
+
+  check('block/entity/field anchors carry data-pf-anchor + matching id', () => {
+    const anchors = [...html.matchAll(/data-pf-anchor="([^"]+)"/g)].map((m) => m[1])
+    for (const a of anchors) {
+      assert.ok(html.includes(`data-pf-anchor="${a}" id="${a}"`), `anchor ${a} has matching id`)
+    }
+    assert.match(html, /data-pf-anchor="data-model:billing-schema"/, 'block anchor')
+    assert.match(html, /data-pf-anchor="data-model:billing-schema:user"/, 'entity anchor')
+    assert.match(html, /data-pf-anchor="data-model:billing-schema:plan-id"/, 'field anchor')
+  })
+
+  check('anchor line numbers are exact (hand-counted in the fixture)', () => {
+    const map = anchorMap(html)
+    assert.deepEqual(map.anchors['data-model:billing-schema'].lines, [9, 20], 'block fence range')
+    assert.equal(map.anchors['data-model:billing-schema'].kind, 'data-model')
+    assert.deepEqual(map.anchors['data-model:billing-schema:user'].lines, [10, 10])
+    assert.equal(map.anchors['data-model:billing-schema:user'].kind, 'entity')
+    assert.deepEqual(map.anchors['data-model:billing-schema:user-plan-id'].lines, [11, 11])
+    assert.equal(map.anchors['data-model:billing-schema:user-plan-id'].kind, 'field')
+    assert.deepEqual(map.anchors['data-model:billing-schema:plan'].lines, [14, 14])
+    assert.deepEqual(map.anchors['data-model:billing-schema:plan-id'].lines, [15, 15])
+    assert.deepEqual(map.anchors['data-model:billing-schema:legacy-tiers'].lines, [17, 17])
+  })
+
+  check('two blocks sharing a title collide with a :n suffix', () => {
+    const map = anchorMap(html)
+    assert.ok(map.anchors['data-model:billing-schema:2'], 'second block gets :2')
+    assert.deepEqual(map.anchors['data-model:billing-schema:2'].lines, [24, 27])
+    assert.deepEqual(map.anchors['data-model:billing-schema:2:invoice'].lines, [25, 25])
+    assert.deepEqual(map.anchors['data-model:billing-schema:2:invoice-id'].lines, [26, 26])
+    const ids = allIds(html)
+    assert.equal(new Set(ids).size, ids.length, 'no duplicate ids')
+  })
+
+  check('data-model build performs no view-time network fetch', () => {
+    assertNoNetworkFetch(html, 'data-model build')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fixture: api-endpoint.md — params (in-badges, flags→change, was:), request/
+// response sections, server-side JSON trees (nesting + collapse-beyond-depth-2),
+// invalid-JSON fallback, escaping, anchors + exact line numbers.
+// ---------------------------------------------------------------------------
+fixture('api-endpoint.md', (check) => {
+  const src = read('api-endpoint.md')
+  const { html } = renderPlan(src)
+
+  check('api-endpoint -> <figure data-block="api-endpoint"> with head', () => {
+    hasBlock(html, 'api-endpoint')
+    assert.match(html, /<figcaption[^>]*>Create upload<\/figcaption>/)
+    assert.match(html, /class="api-method" data-method="POST">POST</, 'method badge (upper-cased)')
+    assert.match(html, /class="api-path">\/v2\/uploads</, 'path rendered')
+  })
+
+  check('missing method/path degrades gracefully (no badge/path, still renders)', () => {
+    const { html: h2 } = renderPlan('---\ntitle: T\n---\n\n```api-endpoint\n. auth token\n```\n')
+    hasBlock(h2, 'api-endpoint')
+    assert.ok(!/class="api-method"/.test(h2), 'no method badge when method missing')
+    assert.ok(!/class="api-path"/.test(h2), 'no path when path missing')
+  })
+
+  check('PARAM rows: in-badge + flag→change; auth free text preserved', () => {
+    assert.match(html, /class="api-param" data-change="unchanged"[^>]*id="api-endpoint:post-v2-uploads:auth"/)
+    assert.match(html, /class="api-param" data-change="added"[^>]*id="api-endpoint:post-v2-uploads:expires-in"/)
+    assert.match(html, /class="api-param" data-change="modified"[^>]*id="api-endpoint:post-v2-uploads:name"/)
+    assert.match(html, /class="api-param" data-change="deleted"[^>]*id="api-endpoint:post-v2-uploads:x-legacy"/)
+    for (const inKind of ['auth', 'query', 'body', 'header']) {
+      assert.match(html, new RegExp(`class="api-in" data-in="${inKind}">${inKind}<`), `api-in badge ${inKind}`)
+    }
+    assert.match(html, /class="api-param-name">Bearer org token</, 'auth free text preserved')
+    assert.match(html, /class="api-param-name">expires_in<\/span><span class="api-param-type">int</)
+  })
+
+  check('was: renders struck; a bad param line is a muted raw line', () => {
+    assert.match(html, /class="api-was">user token<\/span>/, 'auth was: value')
+    assert.match(html, /class="api-raw-line">! not a param line<\/div>/, 'raw param preserved')
+  })
+
+  check('sections: request + response<code> with .api-code badge', () => {
+    assert.match(html, /class="api-section" data-section="request"[^>]*id="api-endpoint:post-v2-uploads:request"/)
+    assert.match(html, /class="api-section" data-section="response" data-code="201"[^>]*id="api-endpoint:post-v2-uploads:resp-201"/)
+    assert.match(html, /class="api-section" data-section="response" data-code="413"/)
+    assert.match(html, /class="api-code">REQUEST</, 'request badge')
+    assert.match(html, /class="api-code">201</, 'response code badge')
+  })
+
+  check('JSON tree: nested <details>, top-level open, collapsed beyond depth 2', () => {
+    assert.match(html, /class="json-tree"/, '.json-tree present')
+    assert.match(html, /<details class="json-node" data-depth="0" open>/, 'top-level open')
+    assert.match(html, /<details class="json-node" data-depth="1" open>/, 'depth 1 open')
+    assert.match(html, /<details class="json-node" data-depth="2" open>/, 'depth 2 open')
+    // depth 3 container is collapsed (no ` open`).
+    assert.match(html, /<details class="json-node" data-depth="3">/, 'depth 3 collapsed')
+    assert.ok(!/<details class="json-node" data-depth="3" open>/.test(html), 'depth 3 must NOT be open')
+    assert.match(html, /class="json-value json-number">1</, 'number value styled')
+    assert.match(html, /class="json-key">meta<\/span>/, 'object key rendered')
+  })
+
+  check('a JSON string value is HTML-escaped (embedded <script> never live)', () => {
+    assert.match(html, /class="json-value json-string">&quot;&lt;script&gt;alert\(1\)&lt;\/script&gt;&quot;</)
+    assert.ok(!/<script>alert\(1\)<\/script>/.test(html), 'no live injected script tag')
+  })
+
+  check('invalid JSON falls back to <pre class="api-raw"> with a hint', () => {
+    assert.match(html, /<pre class="api-raw"><span class="api-raw-hint">not valid JSON<\/span>not json at all<\/pre>/)
+  })
+
+  check('param + section anchors carry data-pf-anchor + matching id', () => {
+    const anchors = [...html.matchAll(/data-pf-anchor="([^"]+)"/g)].map((m) => m[1])
+    for (const a of anchors) {
+      assert.ok(html.includes(`data-pf-anchor="${a}" id="${a}"`), `anchor ${a} has matching id`)
+    }
+  })
+
+  check('anchor line numbers are exact (hand-counted in the fixture)', () => {
+    const map = anchorMap(html)
+    assert.deepEqual(map.anchors['api-endpoint:post-v2-uploads'].lines, [9, 21], 'block fence range')
+    assert.equal(map.anchors['api-endpoint:post-v2-uploads'].kind, 'api-endpoint')
+    assert.deepEqual(map.anchors['api-endpoint:post-v2-uploads:auth'].lines, [10, 10])
+    assert.equal(map.anchors['api-endpoint:post-v2-uploads:auth'].kind, 'param')
+    assert.deepEqual(map.anchors['api-endpoint:post-v2-uploads:expires-in'].lines, [11, 11])
+    assert.deepEqual(map.anchors['api-endpoint:post-v2-uploads:x-legacy'].lines, [13, 13])
+    assert.deepEqual(map.anchors['api-endpoint:post-v2-uploads:request'].lines, [15, 15])
+    assert.equal(map.anchors['api-endpoint:post-v2-uploads:request'].kind, 'request')
+    assert.deepEqual(map.anchors['api-endpoint:post-v2-uploads:resp-201'].lines, [17, 17])
+    assert.equal(map.anchors['api-endpoint:post-v2-uploads:resp-201'].kind, 'response')
+    assert.deepEqual(map.anchors['api-endpoint:post-v2-uploads:resp-413'].lines, [19, 19])
+  })
+
+  check('unique ids across the whole block', () => {
+    const ids = allIds(html)
+    assert.equal(new Set(ids).size, ids.length, 'no duplicate ids')
+  })
+
+  check('api-endpoint build performs no view-time network fetch', () => {
+    assertNoNetworkFetch(html, 'api-endpoint build')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Regression: prose heading + paragraph anchors (inline source, no fixture).
+// ---------------------------------------------------------------------------
+fixture('<regression: prose anchors & collisions>', (check) => {
+  check('headings and paragraphs get content-derived anchors', () => {
+    const src = '---\ntitle: T\n---\n\n## The First Section\n\nA short paragraph of prose here.\n'
+    const { html } = renderPlan(src)
+    assert.match(html, /<h2 data-pf-anchor="h:the-first-section" id="h:the-first-section">/)
+    assert.match(html, /<p data-pf-anchor="p:a-short-paragraph-of-prose[^"]*" id="p:a-short-paragraph-of-prose/)
+    const map = anchorMap(html)
+    // Heading line resolves via source scan (frontmatter counted -> line 5).
+    assert.deepEqual(map.anchors['h:the-first-section'].lines, [5, 5])
+    // Paragraph lines are contractually null.
+    const pKey = Object.keys(map.anchors).find((k) => k.startsWith('p:a-short-paragraph'))
+    assert.equal(map.anchors[pKey].lines, null)
+  })
+
+  check('duplicate step titles get :n collision suffixes in document order', () => {
+    const src = '---\ntitle: T\n---\n\n```steps\n# Same title\nedit a — x\n# Same title\nedit b — y\n```\n'
+    const { html } = renderPlan(src)
+    const stepAnchors = [...html.matchAll(/li class="step" data-pf-anchor="([^"]+)"/g)].map((m) => m[1])
+    assert.deepEqual(stepAnchors, ['step:same-title', 'step:same-title:2'])
+    // Both are unique ids.
+    const ids = allIds(html)
+    assert.equal(new Set(ids).size, ids.length, 'no duplicate ids under collision')
+  })
+
+  check('duplicate headings collide deterministically', () => {
+    const src = '---\ntitle: T\n---\n\n## Repeat\n\ntext one\n\n## Repeat\n\ntext two\n'
+    const { html } = renderPlan(src)
+    assert.match(html, /id="h:repeat"/)
+    assert.match(html, /id="h:repeat:2"/)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Sanity: every .md fixture present in fixtures/ was actually exercised above.
 // Guards against adding a fixture file but forgetting to assert on it.
 // ---------------------------------------------------------------------------
@@ -538,7 +981,7 @@ fixture('<coverage>', (check) => {
   const onDisk = readdirSync(FIXTURES)
     .filter((f) => f.endsWith('.md'))
     .sort()
-  const exercised = ['all-blocks.md', 'empty.md', 'full-plan.md', 'grouping.md', 'unknown-block.md'].sort()
+  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'unknown-block.md'].sort()
   check('every fixture file on disk is covered by a test block', () => {
     assert.deepEqual(
       onDisk,
