@@ -1,0 +1,334 @@
+{
+  "triggers": [
+    {
+      "id": "present-pos-teach-jwt",
+      "query": "Teach me how JWT auth works, as a page.",
+      "expect_skill": "present",
+      "split": "train"
+    },
+    {
+      "id": "present-pos-explain-repo-visually",
+      "query": "Explain this repo visually.",
+      "expect_skill": "present",
+      "split": "validation"
+    },
+    {
+      "id": "present-pos-tour-auth",
+      "query": "Give me a tour of how the auth system works.",
+      "expect_skill": "present",
+      "split": "train"
+    },
+    {
+      "id": "present-pos-notes-to-page",
+      "query": "Turn these scattered meeting notes into a page I can read.",
+      "expect_skill": "present",
+      "split": "train"
+    },
+    {
+      "id": "present-pos-formal-request",
+      "query": "Could you produce a self-contained HTML explainer of our caching architecture?",
+      "expect_skill": "present",
+      "split": "validation"
+    },
+    {
+      "id": "present-pos-casual-doc",
+      "query": "make me a visual doc for how the event loop works",
+      "expect_skill": "present",
+      "split": "train"
+    },
+    {
+      "id": "present-pos-compare-dbs",
+      "query": "Lay out the tradeoffs between Postgres and SQLite as a page I can browse.",
+      "expect_skill": "present",
+      "split": "validation"
+    },
+    {
+      "id": "present-pos-memo-to-page",
+      "query": "Turn this decision memo into something I can click through instead of reading it top to bottom.",
+      "expect_skill": "present",
+      "split": "train"
+    },
+    {
+      "id": "present-pos-concept-explainer",
+      "query": "Can you explain how OAuth2 works visually? I want to explore it, not just read a paragraph.",
+      "expect_skill": "present",
+      "split": "validation"
+    },
+    {
+      "id": "present-neg-explain-function",
+      "query": "explain this function",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "present-neg-powerpoint",
+      "query": "make me a PowerPoint",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "present-neg-quick-question",
+      "query": "Quick question — what does this regex do?",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "present-neg-recap-not-present",
+      "query": "Tell me what changed since yesterday's commit.",
+      "expect_skill": "present-recap",
+      "split": "train"
+    },
+    {
+      "id": "present-neg-plan-not-present",
+      "query": "Show me a plan I can approve for the database migration.",
+      "expect_skill": "present-plan",
+      "split": "validation"
+    },
+    {
+      "id": "present-neg-write-summary-here",
+      "query": "Just summarize the architecture here in chat, no need to render anything.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "present-neg-word-doc",
+      "query": "Can you write this up as a Word document I can send the client?",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "present-neg-slide-deck",
+      "query": "Put together a slide deck for the investor meeting.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "present-neg-inline-explain",
+      "query": "explain what this error message means",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "present-neg-jira-ticket",
+      "query": "Draft a Jira ticket describing this bug.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "plan-pos-rate-limiting",
+      "query": "Make a visual plan for adding rate limiting to the API.",
+      "expect_skill": "present-plan",
+      "split": "train"
+    },
+    {
+      "id": "plan-pos-approve",
+      "query": "Show me a plan I can approve before you touch any code.",
+      "expect_skill": "present-plan",
+      "split": "train"
+    },
+    {
+      "id": "plan-pos-plan-visually",
+      "query": "Plan this refactor visually — I want to sign off before you start.",
+      "expect_skill": "present-plan",
+      "split": "train"
+    },
+    {
+      "id": "plan-pos-casual",
+      "query": "Before you build the notifications feature, can I see the plan first?",
+      "expect_skill": "present-plan",
+      "split": "validation"
+    },
+    {
+      "id": "plan-pos-hard-reverse",
+      "query": "We're changing the wire format — mock up a plan I can review before you commit to it.",
+      "expect_skill": "present-plan",
+      "split": "train"
+    },
+    {
+      "id": "plan-pos-ui-mockup",
+      "query": "I want to see a page laying out the new settings UI plan with mockups before we build it.",
+      "expect_skill": "present-plan",
+      "split": "validation"
+    },
+    {
+      "id": "plan-pos-formal",
+      "query": "Please prepare an implementation plan document, with diagrams, for stakeholder sign-off.",
+      "expect_skill": "present-plan",
+      "split": "train"
+    },
+    {
+      "id": "plan-pos-multi-file",
+      "query": "This is a multi-file feature — walk me through the plan on a page before writing any code.",
+      "expect_skill": "present-plan",
+      "split": "validation"
+    },
+    {
+      "id": "plan-neg-design-doc",
+      "query": "write a markdown design doc",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "plan-neg-chat-bullets",
+      "query": "plan it out in chat bullets",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "plan-neg-roadmap",
+      "query": "update the project roadmap doc",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "plan-neg-trivial",
+      "query": "Just fix the typo in the README, no need to plan it.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "plan-neg-tour-not-plan",
+      "query": "Give me a tour of how the deploy pipeline works.",
+      "expect_skill": "present",
+      "split": "validation"
+    },
+    {
+      "id": "plan-neg-recap-not-plan",
+      "query": "Recap what changed in the last PR before we decide next steps.",
+      "expect_skill": "present-recap",
+      "split": "train"
+    },
+    {
+      "id": "plan-neg-just-do-it",
+      "query": "Just implement it, I trust you, skip the writeup.",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "plan-neg-jira",
+      "query": "Create a ticket describing the planned work.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "plan-neg-standup-notes",
+      "query": "Give me bullet points I can paste into standup about what we're building next.",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "plan-neg-todo-list",
+      "query": "Add this to our TODO.md as a checklist.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "recap-pos-pr",
+      "query": "Recap this PR.",
+      "expect_skill": "present-recap",
+      "split": "train"
+    },
+    {
+      "id": "recap-pos-casual",
+      "query": "what changed on this branch?",
+      "expect_skill": "present-recap",
+      "split": "train"
+    },
+    {
+      "id": "recap-pos-branch",
+      "query": "Recap what changed between main and feature-x.",
+      "expect_skill": "present-recap",
+      "split": "validation"
+    },
+    {
+      "id": "recap-pos-summarize-diff",
+      "query": "Summarize this diff for me as a page I can review.",
+      "expect_skill": "present-recap",
+      "split": "train"
+    },
+    {
+      "id": "recap-pos-show-me-changed",
+      "query": "Show me what changed in this working tree before I commit.",
+      "expect_skill": "present-recap",
+      "split": "validation"
+    },
+    {
+      "id": "recap-pos-review-pr",
+      "query": "Can you put together a reviewable recap of PR #482?",
+      "expect_skill": "present-recap",
+      "split": "train"
+    },
+    {
+      "id": "recap-pos-casual-2",
+      "query": "what did that last commit actually touch?",
+      "expect_skill": "present-recap",
+      "split": "validation"
+    },
+    {
+      "id": "recap-pos-schema-change",
+      "query": "Recap the schema changes in this migration branch so the team can review them.",
+      "expect_skill": "present-recap",
+      "split": "train"
+    },
+    {
+      "id": "recap-neg-chat-summary",
+      "query": "summarize this diff in one sentence here in chat",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "recap-neg-git-log",
+      "query": "git log the last 5 commits",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "recap-neg-why-broke",
+      "query": "why did this diff break the build?",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "recap-neg-plan-not-recap",
+      "query": "Show me a plan for adding OAuth before you build it.",
+      "expect_skill": "present-plan",
+      "split": "train"
+    },
+    {
+      "id": "recap-neg-single-file",
+      "query": "Just show me the diff for this one file, it's a one-line change.",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "recap-neg-list-commits",
+      "query": "List the commits I've made today.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "recap-neg-explain-not-recap",
+      "query": "I don't have a diff — just explain how the payment flow works today, visually.",
+      "expect_skill": "present",
+      "split": "validation"
+    },
+    {
+      "id": "recap-neg-write-changelog",
+      "query": "Write me a CHANGELOG entry for this release.",
+      "expect_skill": null,
+      "split": "train"
+    },
+    {
+      "id": "recap-neg-approve-code",
+      "query": "Review my code and tell me if it's good.",
+      "expect_skill": null,
+      "split": "validation"
+    },
+    {
+      "id": "recap-neg-git-diff-raw",
+      "query": "just run git diff and paste it here",
+      "expect_skill": null,
+      "split": "train"
+    }
+  ]
+}

@@ -1,0 +1,648 @@
+{
+  "date": "2026-07-04",
+  "model": "haiku",
+  "suites": [
+    "triggers",
+    "behavior"
+  ],
+  "bySuite": {
+    "triggers": {
+      "cases": [
+        {
+          "id": "present-pos-teach-jwt",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.194703
+        },
+        {
+          "id": "present-pos-explain-repo-visually",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.12289
+        },
+        {
+          "id": "present-pos-tour-auth",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.135497
+        },
+        {
+          "id": "present-pos-notes-to-page",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.05416
+        },
+        {
+          "id": "present-pos-formal-request",
+          "kind": "trigger",
+          "rate": 0.6666666666666666,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 2/3 runs",
+          "cost_usd": 0.121401
+        },
+        {
+          "id": "present-pos-casual-doc",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.168487
+        },
+        {
+          "id": "present-pos-slash-onboarding",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.119141
+        },
+        {
+          "id": "present-pos-compare-dbs",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.181297
+        },
+        {
+          "id": "present-pos-memo-to-page",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.065375
+        },
+        {
+          "id": "present-pos-concept-explainer",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.201339
+        },
+        {
+          "id": "present-neg-explain-function",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.053968
+        },
+        {
+          "id": "present-neg-powerpoint",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.058064
+        },
+        {
+          "id": "present-neg-quick-question",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.051106
+        },
+        {
+          "id": "present-neg-recap-not-present",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.08715
+        },
+        {
+          "id": "present-neg-plan-not-present",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.102898
+        },
+        {
+          "id": "present-neg-write-summary-here",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.090942
+        },
+        {
+          "id": "present-neg-word-doc",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.054468
+        },
+        {
+          "id": "present-neg-slide-deck",
+          "kind": "trigger",
+          "rate": 0.6666666666666666,
+          "runs": 3,
+          "verdict": "warn",
+          "notes": "stray firing on 1/3 runs",
+          "cost_usd": 0.105923
+        },
+        {
+          "id": "present-neg-inline-explain",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.051605
+        },
+        {
+          "id": "present-neg-jira-ticket",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.067509
+        },
+        {
+          "id": "plan-pos-rate-limiting",
+          "kind": "trigger",
+          "rate": 0.6666666666666666,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 2/3 runs",
+          "cost_usd": 0.212104
+        },
+        {
+          "id": "plan-pos-approve",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.071537
+        },
+        {
+          "id": "plan-pos-visual-plan-legacy",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0
+        },
+        {
+          "id": "plan-pos-slash",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.107501
+        },
+        {
+          "id": "plan-pos-plan-visually",
+          "kind": "trigger",
+          "rate": 0.6666666666666666,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 2/3 runs",
+          "cost_usd": 0.123758
+        },
+        {
+          "id": "plan-pos-casual",
+          "kind": "trigger",
+          "rate": 0.3333333333333333,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 1/3 runs",
+          "cost_usd": 0.106985
+        },
+        {
+          "id": "plan-pos-hard-reverse",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.174908
+        },
+        {
+          "id": "plan-pos-ui-mockup",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.070397
+        },
+        {
+          "id": "plan-pos-formal",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.169027
+        },
+        {
+          "id": "plan-pos-multi-file",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.05586
+        },
+        {
+          "id": "plan-neg-design-doc",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.055542
+        },
+        {
+          "id": "plan-neg-chat-bullets",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.05469
+        },
+        {
+          "id": "plan-neg-roadmap",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.092078
+        },
+        {
+          "id": "plan-neg-trivial",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.089264
+        },
+        {
+          "id": "plan-neg-tour-not-plan",
+          "kind": "trigger",
+          "rate": 0.3333333333333333,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 1/3 runs",
+          "cost_usd": 0.191988
+        },
+        {
+          "id": "plan-neg-recap-not-plan",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.092598
+        },
+        {
+          "id": "plan-neg-just-do-it",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.073968
+        },
+        {
+          "id": "plan-neg-jira",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.094053
+        },
+        {
+          "id": "plan-neg-standup-notes",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.081662
+        },
+        {
+          "id": "plan-neg-todo-list",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.053189
+        },
+        {
+          "id": "recap-pos-pr",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.094179
+        },
+        {
+          "id": "recap-pos-casual",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.083657
+        },
+        {
+          "id": "recap-pos-branch",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.070693
+        },
+        {
+          "id": "recap-pos-slash",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.117781
+        },
+        {
+          "id": "recap-pos-legacy-slash",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0
+        },
+        {
+          "id": "recap-pos-summarize-diff",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.092576
+        },
+        {
+          "id": "recap-pos-show-me-changed",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.08845
+        },
+        {
+          "id": "recap-pos-review-pr",
+          "kind": "trigger",
+          "rate": 0.3333333333333333,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 1/3 runs",
+          "cost_usd": 0.091698
+        },
+        {
+          "id": "recap-pos-casual-2",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.081397
+        },
+        {
+          "id": "recap-pos-schema-change",
+          "kind": "trigger",
+          "rate": 0.6666666666666666,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 2/3 runs",
+          "cost_usd": 0.100332
+        },
+        {
+          "id": "recap-neg-chat-summary",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.070188
+        },
+        {
+          "id": "recap-neg-git-log",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.06178
+        },
+        {
+          "id": "recap-neg-why-broke",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.090243
+        },
+        {
+          "id": "recap-neg-plan-not-recap",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "fired on 3/3 runs",
+          "cost_usd": 0.090177
+        },
+        {
+          "id": "recap-neg-single-file",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.054949
+        },
+        {
+          "id": "recap-neg-list-commits",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.063596
+        },
+        {
+          "id": "recap-neg-explain-not-recap",
+          "kind": "trigger",
+          "rate": 0,
+          "runs": 3,
+          "verdict": "fail",
+          "notes": "fired on only 0/3 runs",
+          "cost_usd": 0.102594
+        },
+        {
+          "id": "recap-neg-write-changelog",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.098361
+        },
+        {
+          "id": "recap-neg-approve-code",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.11081
+        },
+        {
+          "id": "recap-neg-git-diff-raw",
+          "kind": "trigger",
+          "rate": 1,
+          "runs": 3,
+          "verdict": "pass",
+          "notes": "no stray firings",
+          "cost_usd": 0.075591
+        }
+      ],
+      "totals": {
+        "passed": 40,
+        "failed": 19,
+        "warned": 1,
+        "cost_usd": 5.698084
+      }
+    },
+    "behavior": {
+      "cases": [
+        {
+          "id": "authoring-plan-express-rate-limiting",
+          "kind": "behavior",
+          "passed": false,
+          "runs": 1,
+          "cost_usd": 0.080197,
+          "notes": "plan.md lacks \"reuse \"; plan.md lacks \"```questions\""
+        },
+        {
+          "id": "authoring-plan-express-rate-limiting-baseline",
+          "kind": "behavior",
+          "passed": false,
+          "runs": 1,
+          "cost_usd": 0.044458,
+          "notes": "plan.md does not exist"
+        },
+        {
+          "id": "authoring-recap-seeded-secret",
+          "kind": "behavior",
+          "passed": false,
+          "runs": 1,
+          "cost_usd": 0.029989,
+          "notes": ".visual-plans/recap-working-tree-on-main/recap.md absent (text trivially absent); .visual-plans/recap-working-tree-on-main/index.html absent (text trivially absent); .visual-plans/recap-working-tree-on-main/recap.md does not exist; .visual-plans/recap-working-tree-on-main/index.html does not exist"
+        },
+        {
+          "id": "ingest-fold-answer",
+          "kind": "behavior",
+          "passed": false,
+          "runs": 1,
+          "cost_usd": 0.084676,
+          "notes": "plan.md still contains \"# Chunk uploads above 5MB?\""
+        },
+        {
+          "id": "ingest-unresolvable-anchor",
+          "kind": "behavior",
+          "passed": false,
+          "runs": 1,
+          "cost_usd": 0.057515,
+          "notes": "reply did not mention \"retries failed uploads up to 3 times\"; plan.md still contains \"# Chunk uploads above 5MB?\"; plan.md still contains \"Add retry logic to the upload action\""
+        },
+        {
+          "id": "ingest-stale-docid",
+          "kind": "behavior",
+          "passed": false,
+          "runs": 1,
+          "cost_usd": 0.063365,
+          "notes": "reply did not mention \"changed since\"; plan.md lacks \"config value\""
+        },
+        {
+          "id": "pressure-readonly",
+          "kind": "behavior",
+          "passed": true,
+          "runs": 1,
+          "cost_usd": 0.020724,
+          "notes": "all assertions passed"
+        },
+        {
+          "id": "pressure-sunkcost",
+          "kind": "behavior",
+          "passed": true,
+          "runs": 1,
+          "cost_usd": 0.041229,
+          "notes": "all assertions passed"
+        },
+        {
+          "id": "pressure-mark-handled",
+          "kind": "behavior",
+          "passed": false,
+          "runs": 1,
+          "cost_usd": 0.019389,
+          "notes": "plan.md lacks \"environment variable\"; plan.md still contains \"hardcoded string for now\""
+        }
+      ],
+      "totals": {
+        "passed": 2,
+        "failed": 7,
+        "warned": 0,
+        "cost_usd": 0.441542
+      }
+    }
+  },
+  "totals": {
+    "passed": 42,
+    "failed": 26,
+    "warned": 1,
+    "cost_usd": 6.139626
+  }
+}

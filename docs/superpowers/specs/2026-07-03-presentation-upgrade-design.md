@@ -405,4 +405,129 @@ server-side infra deployed separately, straight from this repo or a fork of
 it). `share.mjs` ships self-contained instead: `--tunnel` mode inlines its own
 tiny local file server rather than importing the shared core. Everything else
 in the build plan is unchanged.
-</content>
+
+## Addendum 3 (2026-07-04) — the eval harness
+
+### Trigger
+
+The engine carries 192 deterministic tests (`skills/present/renderer/test/`,
+`share/test/run.mjs`) gating every render/recap/share change. They test
+nothing about the three `SKILL.md` files themselves: does "make a visual
+plan" actually invoke `present-plan` and not `present`; does the agent, once
+triggered, write a `plan.md` that leads with reuse and renders clean; does an
+exported `presentation-feedback v1` blob land the right edit in the right
+place. That's a second failure surface belonging to the prompt, not the
+renderer — `.visual-plans/skill-evals/plan.md` (approved) designs the harness
+for it; this addendum records the verdict and the shape that shipped.
+
+### The research verdict
+
+Three findings drove the design:
+
+- **Anthropic's own position is "build your own harness."** Their [Agent
+  Skills engineering
+  post](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills):
+  there is no built-in way to run these evaluations — evaluations are your
+  source of truth. The runnable methodology lives at
+  [agentskills.io](https://agentskills.io): labeled should/shouldn't-trigger
+  query sets (~20 per skill, 3 runs each, a trigger-rate threshold) and
+  with/without-skill output comparisons graded by assertions. There is no
+  standardized cadence anywhere in the ecosystem — everyone runs evals
+  locally, ad hoc; the Doctrine chapter of the plan (now `evals/README.md`)
+  is this repo defining its own.
+- **Nobody gates on live-model CI — including Anthropic.**
+  [`anthropics/skills`](https://github.com/anthropics/skills) ships no CI at
+  all for its skills. The one real precedent, `skill-creator`'s
+  `run_eval.py` (3 runs per query, 60/40 train/test split, description
+  proposals from failures), is a manually-run authoring tool, not a gate. A
+  modest harness makes this repo more rigorous than the reference
+  implementation.
+- **[obra/superpowers](https://github.com/obra/superpowers)** supplies the
+  missing third leg: RED-GREEN-REFACTOR for skill *rules* — pressure
+  scenarios run against a fresh agent, failures documented verbatim, the
+  skill edited to close each rationalization, re-tested until compliant.
+  Their data point: 6 iterations to bulletproof one discipline rule.
+
+### The three-suite design
+
+One zero-dep runner (`evals/run.mjs`), three suites, per-case isolated
+workspaces — each case runs `claude -p` inside a throwaway workspace whose
+`.claude/skills/` contains exactly the three skills (populated by the same
+copy logic as `install.sh`); baseline runs get an empty skills dir:
+
+1. **Triggers** — ~60 labeled queries per skill: 8–10 positives
+   (formal/casual/competing-skill phrasings) and 8–10 *strong* negatives —
+   near-misses sharing keywords but wanting different behavior. Easy
+   negatives test nothing.
+2. **Authoring** — 2–3 scenarios per skill against tiny fixture projects,
+   graded by `renderPlan()` warnings, `check.mjs`, and plain assertions. A
+   with/without-skill baseline pair on one case gives the delta story the
+   ecosystem measures (LangSmith reported 17%→92% on theirs).
+3. **Ingestion + pressure** — feedback round-trips against seeded `plan.md` +
+   export blobs (clean, unresolvable-anchor, docId-mismatch), plus 2–3
+   superpowers-style pressure cases ("URGENT, skip the page, start coding")
+   graded from `stream-json` tool-use events, not a judge.
+
+### The grading advantage: the renderer is the grader
+
+Every other harness in the survey pays an LLM judge to answer "is the output
+right?" This one doesn't need to: a skill's output is `plan.md`/`recap.md` in
+a strict, versioned grammar, so `renderPlan()`'s own warnings, `check.mjs`,
+the anchor map, and plain string/tool-event assertions grade authoring and
+ingestion correctness deterministically, for free. LLM judging is deferred
+to the one thing code can't grade — altitude, prose taste — and v1 skips it
+entirely; it's added later only if code-graded evals stop finding problems
+first.
+
+### The frozen case schema + pass criteria
+
+Field names match agentskills.io (`expect_skill`, `split`, …) so cases stay
+portable to other harnesses later. Pass criteria, pinned: a positive trigger
+case passes at rate ≥ 2/3 over 3 runs; a negative fails the suite at a
+stray-fire rate ≥ 2/3 (one stray firing in three is a warning, recorded, not
+fatal). Behavior assertions are all-or-nothing per case. `split`
+(`train`/`validation`) is honored only while tuning a description —
+validation cases never choose one. Full schema, worked examples, and the
+assertion-type catalog: `evals/README.md`.
+
+### The model-matrix rationale
+
+`--matrix` runs a suite across both haiku and sonnet — a call sharpened by
+review feedback on the plan, not the original sketch, and it's exactly
+right: **a heavy model can out-reason a weak skill** — brute intelligence
+papers over a vague description or a mushy workflow, so a sonnet-only pass
+rate can look clean while the skill itself is badly specified. **Haiku's
+pass rate is the sensitive instrument for skill quality; sonnet's is the
+fidelity check for what users actually run.** Baselines and pre-release
+sweeps therefore run both, matching Anthropic's own checklist item to test
+skills across model tiers.
+
+### Portability
+
+The skills already work beyond Claude Code — `install.sh` targets
+`~/.agents/skills` for Cursor, Codex, Gemini CLI, OpenCode, and Copilot, and
+`SKILL.md` is the cross-vendor open standard. The eval runner in v1 drives
+`claude -p` only; the case schema is deliberately agent-neutral, so a
+Quorum-style multi-CLI runner — evaling the same cases against `codex exec`
+or another agent CLI — is a natural later extension of the schema, not a
+rewrite.
+
+### No-CI posture
+
+Confirmed, not just proposed: cost anchors from the research (~$5.59 for a
+250-invocation trigger study; behavior cases are multi-turn and cost more)
+plus expected nondeterminism rule out a merge gate. `evals/run.mjs` is never
+invoked by any CI config in this repo — manual at edit time per
+`evals/README.md`'s doctrine, full sweep before tagging a release, same
+posture as every surveyed repo including `anthropics/skills`. Committed
+`evals/results/*.json` files carry the regression story across months
+without re-running anything.
+
+### Approval
+
+`.visual-plans/skill-evals/plan.md` was approved via the **third** real
+`presentation-feedback v1` round-trip — the same mechanism this document's
+Addenda 1 and 2 credit for the three-skill restructure and `present-share`
+respectively — verdict: approve. Notable this time: the feedback loop
+reviewed a plan for evaluating the feedback loop's own skills, closing the
+recursion once around.

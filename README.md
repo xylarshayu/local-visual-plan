@@ -265,6 +265,29 @@ Targets:
 The script resolves its own location, so you can run it from anywhere. If it ever
 loses its executable bit: `chmod +x install.sh` (or run `sh install.sh`).
 
+## Evals
+
+`skills/present/renderer/test/` and `share/test/run.mjs` are 192
+deterministic, offline unit tests against the renderer, recap collector, and
+share server — they gate every engine change. `SKILL.md` files are prompts,
+though, and prompts have a failure surface those tests can't see: does the
+right skill trigger on a real query, does the agent author a valid
+`plan.md`, does a feedback round-trip land the right edit. `evals/` is a
+small, zero-dependency harness for that layer — it drives the real
+`claude -p` CLI against labeled cases and grades the output deterministically
+(the renderer is the grader), not an LLM judge.
+
+Three suites, one sentence each: **triggers** — does a query fire the right
+skill and stay quiet on near-misses; **authoring** — does the agent write a
+`plan.md`/recap that renders clean against tiny fixture projects;
+**ingestion + pressure** — does a feedback round-trip land in the right
+place, and does the skill hold its discipline under time/authority pressure.
+`node evals/run.mjs all --matrix` is the canonical pre-release sweep (haiku +
+sonnet, all three suites, results committed to `evals/results/`) — it's never
+CI-gated, same as every surveyed repo. See
+[`evals/README.md`](evals/README.md) for when to run what, pass criteria,
+and how to add a case.
+
 ## Repo layout
 
 ```
@@ -302,6 +325,15 @@ local-visual-plan/
     serve.mjs                      # standalone node:http mount for a bare VM
     fastify-plugin.mjs             # thin fastify wrapper over the same core, for an existing server
     test/run.mjs                   # zero-dep: token auth, size cap, docId lifting, TTL expiry, manifest round-trip, CSP header
+  evals/
+    run.mjs                       # zero-dep runner: workspace isolation, stream-json parsing, graders, cost accounting
+    cases/
+      triggers.json               # ~60 labeled queries across the three skills, train/validation split
+      behavior.json               # authoring + ingestion + pressure cases, code-graded assertions
+    fixtures/                     # tiny fixture projects + seeded plan.md/export blobs the behavior cases run against
+    results/                      # committed run outputs, <date>-<label>.json (cost + pass/fail per case)
+    README.md                     # the doctrine: what each suite measures, when to run what, cost, how to add a case
+    LEARNINGS.md                  # observed-failure intake feeding the RED-GREEN-REFACTOR ratchet
   docs/superpowers/specs/
     2026-06-20-local-visual-plan-design.md      # the original engine design
     2026-07-03-presentation-upgrade-design.md   # the annotation/chapters/callout upgrade + three-skill restructure addendum
