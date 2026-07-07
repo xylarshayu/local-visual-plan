@@ -55,7 +55,8 @@ in `evals/cases/triggers.json` / `evals/cases/behavior.json` themselves.
 **Default weight for routine runs** (adopted after the first baseline — the
 full matrix is a once-per-era measurement, not the everyday tool): routine
 re-checks run the **validation split on haiku only** (~$1, a few minutes,
-silent — the runner suppresses browser-opening in eval workspaces). The full
+silent — the runner suppresses browser-opening in eval workspaces):
+`node evals/run.mjs triggers --split validation --model haiku`. The full
 haiku+sonnet matrix is reserved for releases, model upgrades, and re-baselining
 after a big skill rework. Every eval invocation prints its cost; if a run
 surprises you, stop and reconsider the scope rather than normalizing it.

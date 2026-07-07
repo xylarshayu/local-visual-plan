@@ -117,6 +117,8 @@ const USAGE = `usage: node evals/run.mjs [triggers|behavior|all] [options]
   suite                which suite to run (default: all)
   --cases-file <path>  cases JSON to load (default: evals/cases/<suite>.json)
   --cases <substr>     only run cases whose id contains <substr>
+  --split <s>          triggers only: run just train or validation cases
+                       (the README's routine run: --split validation --model haiku)
   --model <m>          model alias, e.g. haiku | sonnet (default: ${DEFAULTS.model})
   --matrix             run the suite once per model in [haiku, sonnet]
   --runs N             runs per case (default: ${DEFAULTS.triggerRuns} triggers / ${DEFAULTS.behaviorRuns} behavior)
@@ -128,7 +130,7 @@ const USAGE = `usage: node evals/run.mjs [triggers|behavior|all] [options]
 
 function parseArgs(argv) {
   const a = {
-    suite: null, casesFile: null, casesFilter: null, model: null, matrix: false,
+    suite: null, casesFile: null, casesFilter: null, split: null, model: null, matrix: false,
     runs: null, maxTurns: null, keep: false, dryRun: false, out: null, label: null,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -143,6 +145,8 @@ function parseArgs(argv) {
     else if (x.startsWith("--cases-file=")) a.casesFile = x.slice("--cases-file=".length);
     else if (x === "--cases") a.casesFilter = takeVal(x);
     else if (x.startsWith("--cases=")) a.casesFilter = x.slice("--cases=".length);
+    else if (x === "--split") a.split = takeVal(x);
+    else if (x.startsWith("--split=")) a.split = x.slice("--split=".length);
     else if (x === "--model") a.model = takeVal(x);
     else if (x.startsWith("--model=")) a.model = x.slice("--model=".length);
     else if (x === "--matrix") a.matrix = true;
@@ -162,6 +166,7 @@ function parseArgs(argv) {
   if (!a.suite) a.suite = "all";
   if (a.runs !== null && (!Number.isFinite(a.runs) || a.runs < 1)) die("--runs must be a positive integer", 2);
   if (a.maxTurns !== null && (!Number.isFinite(a.maxTurns) || a.maxTurns < 1)) die("--max-turns must be a positive integer", 2);
+  if (a.split !== null && a.split !== "train" && a.split !== "validation") die('--split must be "train" or "validation"', 2);
   return a;
 }
 
@@ -690,6 +695,7 @@ async function main() {
     if (cases === null) die(`cases file ${path} has no "${suite}" array`);
     cases.forEach((c, i) => (suite === "triggers" ? validateTrigger : validateBehavior)(c, i, path));
     if (a.casesFilter) cases = cases.filter((c) => c.id.includes(a.casesFilter));
+    if (a.split && suite === "triggers") cases = cases.filter((c) => c.split === a.split);
     if (cases.length === 0) {
       console.error(`note: ${suite}: no cases${a.casesFilter ? ` matching "${a.casesFilter}"` : ""} — skipping.`);
       continue;

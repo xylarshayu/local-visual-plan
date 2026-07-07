@@ -1134,6 +1134,59 @@ fixture('<regression: placeholder & attrs>', (check) => {
 })
 
 // ---------------------------------------------------------------------------
+// SKILL.md frontmatter: strict-YAML portability.
+//
+// Claude Code's loader is lenient, but the skills.sh CLI (`npx skills add`)
+// parses frontmatter with the strict `yaml` package and silently drops any
+// skill whose frontmatter throws — the repo then installs as "No valid skills
+// found". Our house style is single-line plain scalars, so every value must
+// avoid the plain-scalar killers: `: ` (starts a nested mapping) and ` #`
+// (starts a comment), plus YAML indicator chars in leading position. A value
+// passing these rules parses identically under strict YAML and under naive
+// line-regex parsers — which is the whole portability story.
+// ---------------------------------------------------------------------------
+fixture('SKILL.md frontmatter (strict-YAML portability)', (check) => {
+  const skillsRoot = join(__dirname, '..', '..', '..')
+  const YAML_INDICATORS = /^[-?:,\[\]{}#&*!|>'"%@`]/
+  for (const dir of ['present', 'present-plan', 'present-recap']) {
+    const path = join(skillsRoot, dir, 'SKILL.md')
+    let raw
+    try {
+      raw = readFileSync(path, 'utf8')
+    } catch {
+      continue // adapter dirs absent in a CLI-installed copy; repo layout has all three
+    }
+    check(`${dir}: frontmatter block present and single-line plain scalars only`, () => {
+      const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/)
+      assert.ok(m, 'file must open with a --- frontmatter block')
+      const fields = {}
+      let inMetadata = false
+      for (const line of m[1].split(/\r?\n/)) {
+        if (!line.trim()) continue
+        if (/^\s+/.test(line)) {
+          assert.ok(inMetadata, `unexpected continuation line (multi-line values break naive parsers): ${line}`)
+          continue
+        }
+        inMetadata = false
+        const kv = line.match(/^([A-Za-z][A-Za-z0-9_-]*):(?:\s(.*))?$/)
+        assert.ok(kv, `frontmatter line must be "key: value": ${line}`)
+        const [, key, value = ''] = kv
+        if (value === '') { inMetadata = true; continue } // nested block (e.g. metadata:)
+        assert.ok(!value.includes(': '), `${key}: contains ": " — strict YAML reads a nested mapping and the skills CLI drops the skill`)
+        assert.ok(!value.includes(' #'), `${key}: contains " #" — strict YAML truncates it as a comment`)
+        assert.ok(!YAML_INDICATORS.test(value), `${key}: starts with a YAML indicator char — quote-free plain scalar required`)
+        assert.ok(!value.endsWith(':'), `${key}: ends with ":" — strict YAML reads a nested mapping`)
+        fields[key] = value
+      }
+      assert.equal(fields.name, dir, 'name must match the skill directory')
+      assert.ok(/^[a-z0-9-]{1,64}$/.test(fields.name), 'name must be lowercase-hyphen, ≤64 chars')
+      assert.ok(fields.description, 'description is required')
+      assert.ok([...fields.description].length <= 1024, `description is ${[...fields.description].length} chars (max 1024)`)
+    })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // Summary + exit code.
 // ---------------------------------------------------------------------------
 console.log('\n' + '─'.repeat(60))

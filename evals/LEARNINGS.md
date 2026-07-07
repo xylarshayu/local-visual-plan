@@ -20,6 +20,30 @@ and then `skill-edited` (the fix, GREEN) — in that order, not the reverse.
 
 ## Entries (newest first)
 
+### skills.sh CLI drops all three skills — strict-YAML frontmatter
+
+- **Date:** 2026-07-06
+- **Observed:** A teammate ran `npx skills add xylarshayu/local-visual-plan`
+  (skills 1.5.14, Windows) and got "No valid skills found. Skills require a
+  SKILL.md with name and description." The CLI's `parseFrontmatter` uses the
+  strict `yaml` package; every unquoted `description:` contained `: `
+  sequences ("HTML page: chapters…", "(legacy: \"/visual-plan\")",
+  "`-->`: that's…"), which strict YAML reads as a nested mapping — parse
+  throws, `parseSkillMd` catch-returns null, all three skills dropped.
+- **Context:** real use — first outside install attempt. Never seen locally
+  because Claude Code's own frontmatter loader is lenient. The trap is
+  guaranteed to recur: the eval doctrine actively encourages `description:`
+  edits, and a colon-space reads as perfectly normal prose punctuation.
+- **Frequency:** first occurrence (all three skills at once).
+- **Status:** skill-edited — descriptions reworded to drop every `: `
+  (punctuation-only; wording otherwise identical), plus a deterministic guard
+  in `renderer/test/run.mjs` ("SKILL.md frontmatter (strict-YAML
+  portability)") that re-fails on `: `, ` #`, leading YAML indicators,
+  multi-line values, name/dir mismatch, and >1024-char descriptions. Guarded
+  by the unit suite rather than an eval case — it's a parse-time property,
+  deterministic and free to check. Verified end-to-end by running the real
+  `skills` CLI (extracted npm tarball) against the repo: 3 skills installed.
+
 ### Annotation layer can't anchor a single list item
 
 - **Date:** 2026-07-04
