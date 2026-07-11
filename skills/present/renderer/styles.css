@@ -318,6 +318,14 @@ body {
   margin: 2.4em 0;
 }
 
+/* Interactive GFM task-list checkboxes (rendered enabled, wired by
+   annotate.js). Cursor + accent color only, same treatment as a question's
+   radio input — layout stays the browser default. */
+.plan-main li input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
 /* ----- Shared block frame ----------------------------------------------- */
 figure[data-block],
 div[data-block],

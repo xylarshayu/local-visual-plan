@@ -1045,6 +1045,78 @@ fixture('list-items.md', (check) => {
 })
 
 // ---------------------------------------------------------------------------
+// Fixture: task-list.md — GFM task-list items ("- [ ]" / "- [x]") get kind
+// `task` anchors (distinct from a plain prose `li`) and render their checkbox
+// ENABLED (no `disabled` attribute), with the source-authored checked state
+// preserved as-is — the client-side layer (annotate.js) is what later applies
+// any stored override on top of this at boot. Collision suffixing, nesting,
+// and adjacency to a plain (non-task) list all reuse the same `li` machinery
+// list-items.md already covers, so this fixture only asserts what's NEW.
+// ---------------------------------------------------------------------------
+fixture('task-list.md', (check) => {
+  const src = read('task-list.md')
+  const { html } = renderPlan(src)
+  const map = anchorMap(html)
+
+  check('every checkbox renders enabled (no disabled attribute)', () => {
+    assert.ok(!/<input[^>]*\bdisabled/i.test(html), 'no disabled checkbox anywhere in the page')
+    assert.ok(/<input type="checkbox">/.test(html), 'unchecked box renders as a plain enabled checkbox')
+    assert.ok(/<input checked="" type="checkbox">/.test(html), 'checked box keeps checked="" and is still enabled')
+  })
+
+  check('task items get kind `task`, never `li`', () => {
+    for (const a of [
+      'task:unchecked-item-one',
+      'task:checked-item-two',
+      'task:parent-task-with-a-child',
+      'task:child-task-one',
+      'task:child-task-two',
+    ]) {
+      assert.ok(map.anchors[a], `expected anchor ${a}`)
+      assert.equal(map.anchors[a].kind, 'task', `${a} is kind task`)
+      assert.equal(map.anchors[a].lines, null, `${a} lines are contractually null, same as li/p`)
+    }
+  })
+
+  check('a plain bullet list next to task items stays kind `li`, unaffected', () => {
+    assert.equal(map.anchors['li:plain-bullet-one'].kind, 'li')
+    assert.equal(map.anchors['li:plain-bullet-two'].kind, 'li')
+    assert.ok(!Object.keys(map.anchors).some((k) => k.startsWith('task:plain-bullet')), 'plain bullets never get a task: anchor')
+  })
+
+  check('label is the fuller item text (not the 6-word slug a plain `li` keeps)', () => {
+    const long = map.anchors['task:a-rather-long-unchecked-item-that']
+    assert.ok(long, 'expected the long item to have registered under its 6-word slug')
+    assert.ok(long.label.length > 'A rather long unchecked item'.length, 'label is fuller than the id slug')
+    assert.ok(long.label.endsWith('…'), 'label truncates with an ellipsis past 80 chars')
+    assert.equal(map.anchors['task:checked-item-two'].label, 'Checked item two', 'a short label is not padded/altered')
+  })
+
+  check('duplicate task text collides with a :2 suffix, in document order', () => {
+    assert.ok(map.anchors['task:duplicate-task-text'])
+    assert.ok(map.anchors['task:duplicate-task-text:2'])
+    const order = Object.keys(map.anchors).filter((k) => k.startsWith('task:duplicate-task-text'))
+    assert.deepEqual(order, ['task:duplicate-task-text', 'task:duplicate-task-text:2'])
+  })
+
+  check('a nested task under a task parent gets its own distinct anchor (not swallowed by the parent)', () => {
+    assert.notEqual(map.anchors['task:parent-task-with-a-child'], map.anchors['task:child-task-one'])
+    // The parent's own <li> markup only carries ITS OWN checkbox, not the child's,
+    // between its opening tag and the nested <ul> — verifies the parent didn't
+    // slurp the child's checkbox/text into its own label.
+    const parentLi = html.match(/<li data-pf-anchor="task:parent-task-with-a-child"[^>]*>([\s\S]*?)<ul>/)
+    assert.ok(parentLi, 'parent <li> found with a nested <ul> after its own content')
+    assert.equal((parentLi[1].match(/<input/g) || []).length, 1, 'parent li content (before the nested <ul>) has exactly one checkbox — its own')
+  })
+
+  check('all anchor ids are unique across the page', () => {
+    const ids = allIds(html)
+    const dupes = [...new Set(ids.filter((v, i) => ids.indexOf(v) !== i))]
+    assert.deepEqual(dupes, [], `duplicate ids: ${dupes.join(', ')}`)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Sanity: every .md fixture present in fixtures/ was actually exercised above.
 // Guards against adding a fixture file but forgetting to assert on it.
 // ---------------------------------------------------------------------------
@@ -1052,7 +1124,7 @@ fixture('<coverage>', (check) => {
   const onDisk = readdirSync(FIXTURES)
     .filter((f) => f.endsWith('.md'))
     .sort()
-  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'unknown-block.md'].sort()
+  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'task-list.md', 'unknown-block.md'].sort()
   check('every fixture file on disk is covered by a test block', () => {
     assert.deepEqual(
       onDisk,

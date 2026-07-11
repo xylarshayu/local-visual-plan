@@ -200,12 +200,13 @@ check("slugify + verdictToken", () => {
 check("migrateState fills defaults and coerces bad shapes", () => {
   const d = migrateState(null);
   /* vm objects live in another realm, so compare structurally via JSON. */
-  assert.equal(JSON.stringify(d), JSON.stringify({ version: 1, notes: [], answers: {}, verdict: null, viewed: {} }));
+  assert.equal(JSON.stringify(d), JSON.stringify({ version: 1, notes: [], answers: {}, verdict: null, viewed: {}, checks: {} }));
   const m = migrateState({
     notes: [{ anchor: "p:x", text: "hi" }, { text: "no anchor -> dropped" }],
     answers: { "q:a": { mode: "weird" }, "q:b": "not-object" },
     verdict: "bogus",
-    viewed: { "diff:1": true, "diff:2": false }
+    viewed: { "diff:1": true, "diff:2": false },
+    checks: { "task:a": true, "task:b": false, "task:c": "yes" }
   });
   assert.equal(m.notes.length, 1);
   assert.equal(m.notes[0].audience, "agent");
@@ -214,6 +215,57 @@ check("migrateState fills defaults and coerces bad shapes", () => {
   assert.ok(!("q:b" in m.answers));
   assert.equal(m.verdict, null);
   assert.equal(JSON.stringify(m.viewed), JSON.stringify({ "diff:1": true }));
+  /* checks keeps explicit false (unlike viewed, which only keeps truthy) —
+     an unchecked override must survive a reload just as much as a checked
+     one — and drops non-boolean garbage. */
+  assert.equal(JSON.stringify(m.checks), JSON.stringify({ "task:a": true, "task:b": false }));
+});
+
+/* ---- 9. checklist export: stored override wins, default is the fallback -- */
+check("checklist block: stored override wins over source default, unchecked stays unchecked", () => {
+  const checklistMap = {
+    version: 1, docId: "pf-abc123", source: "/home/you/project/.visual-plans/demo/plan.md", title: "Demo Plan Title",
+    anchors: {
+      "task:confirm-schema": { kind: "task", label: "Confirm schema reviewed", lines: null, default: false },
+      "task:run-migration": { kind: "task", label: "Run the migration", lines: null, default: true },
+      "task:smoke-test": { kind: "task", label: "Smoke test the endpoint", lines: null, default: false }
+    }
+  };
+  const checklistOrder = ["task:confirm-schema", "task:run-migration", "task:smoke-test"];
+  const state = {
+    version: 1, verdict: null, viewed: {}, answers: {}, notes: [],
+    checks: { "task:confirm-schema": true } // user ticked it; the other two never touched
+  };
+  const out = buildExportMarkdown(state, checklistMap, checklistOrder);
+  const expected =
+    "<!-- presentation-feedback v1 -->\n" +
+    "doc: demo-plan-title (pf-abc123)\n" +
+    "source: /home/you/project/.visual-plans/demo/plan.md\n" +
+    "verdict: none\n" +
+    "\n" +
+    "## checklist — 2/3 checked\n" +
+    "- [x] Confirm schema reviewed [task:confirm-schema]\n" +
+    "- [x] Run the migration [task:run-migration]\n" +
+    "- [ ] Smoke test the endpoint [task:smoke-test]\n";
+  assert.equal(out, expected);
+});
+
+check("checklist block: a stored false overrides a source-authored true default", () => {
+  const map = {
+    version: 1, docId: "pf-def456", source: null, title: "Override Test",
+    anchors: { "task:seed-data": { kind: "task", label: "Seed test data", lines: null, default: true } }
+  };
+  const order = ["task:seed-data"];
+  const state = { version: 1, verdict: null, viewed: {}, answers: {}, notes: [], checks: { "task:seed-data": false } };
+  const out = buildExportMarkdown(state, map, order);
+  assert.ok(out.includes("## checklist — 0/1 checked"));
+  assert.ok(out.includes("- [ ] Seed test data [task:seed-data]"));
+  assert.ok(!out.includes("- [x] Seed test data"));
+});
+
+check("no task anchors -> no checklist block (docs without task lists are unaffected)", () => {
+  const out = buildExportMarkdown(PF.defaultState(), richMap, richOrder);
+  assert.ok(!out.includes("## checklist"), "richMap has no task-kind anchors; nothing to summarize");
 });
 
 console.log("\nannotate.js pure-logic tests: " + passed + " passed");

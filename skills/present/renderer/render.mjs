@@ -1405,7 +1405,22 @@ function tagProseAnchors(html, reg) {
   // to ~6 words. Lines are null (same contract as `p` — no cheap source-map
   // lookup exists for list items, and building one speculatively isn't worth it).
   html = html.replace(/<li>([\s\S]*?)(?=<ul|<ol|<li|<\/li)/g, (m, inner, offset, str) => {
-    let text = liLeadingText(inner);
+    // GFM task-list items ("- [ ] " / "- [x] ") are marked's own extension: its
+    // Parser prepends a checkbox <input disabled type="checkbox"> as the very
+    // first thing inside the <li> (vendor/marked.esm.js, Parser#parse "list"
+    // case + Renderer#checkbox) — loose lists may wrap it in a leading <p>.
+    // Detect that shape so a task item gets its own `task:` anchor kind (kept
+    // distinct from a plain `li:` prose bullet) and its checkbox is enabled —
+    // this reuses the exact same registerAnchor plumbing (grammar, collision
+    // numbering, doc order) notes/steps/questions already use, rather than
+    // inventing a parallel id scheme for checklists.
+    const taskMatch = /^\s*(?:<p>\s*)?<input\b[^>]*\btype="checkbox"[^>]*>/i.exec(inner);
+    let taggedInner = inner;
+    if (taskMatch) {
+      const enabled = taskMatch[0].replace(/\s*disabled=""/i, "");
+      taggedInner = enabled + inner.slice(taskMatch[0].length);
+    }
+    let text = liLeadingText(taggedInner);
     if (!text) {
       // Own leading text is empty (e.g. an item whose body is only a nested list
       // or a parked block); widen to the fuller textContent so it still slugs.
@@ -1413,8 +1428,16 @@ function tagProseAnchors(html, reg) {
     }
     if (!text) return m; // truly empty item — nothing to anchor on
     const slugSource = text.split(" ").slice(0, 6).join(" ");
+    if (taskMatch) {
+      // Fuller label than a plain `li` (whose label is just the 6-word slug) —
+      // the checklist export wants readable item text, not a truncated slug;
+      // mirrors the `p` prose convention (short id slug, longer display label).
+      const label = text.length > 80 ? text.slice(0, 79) + "…" : text;
+      const anchor = registerAnchor(reg, "task", slugSource, label, null);
+      return `<li data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${taggedInner}`;
+    }
     const anchor = registerAnchor(reg, "li", slugSource, slugSource, null);
-    return `<li data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${inner}`;
+    return `<li data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${taggedInner}`;
   });
   return html;
 }

@@ -2,7 +2,8 @@
    Responsibilities: click-to-annotate notes (composer + pins + viewer), a
    right-side review panel, questions-form wiring, verdict, persistence
    (localStorage keyed pf:<docId> with in-memory fallback), viewed checkboxes,
-   permalinks, and the versioned feedback export.
+   GFM task-list checkbox toggling, permalinks, and the versioned feedback
+   export.
 
    This file is inlined verbatim into the rendered page by the engine at the
    "INLINE:annotate.js" marker. It must stay self-contained: no imports,
@@ -54,7 +55,7 @@
   }
 
   function defaultState() {
-    return { version: 1, notes: [], answers: {}, verdict: null, viewed: {} };
+    return { version: 1, notes: [], answers: {}, verdict: null, viewed: {}, checks: {} };
   }
 
   /* Coerce arbitrary stored JSON into the current, well-formed shape so a
@@ -90,6 +91,15 @@
     if (raw.viewed && typeof raw.viewed === "object") {
       Object.keys(raw.viewed).forEach(function (k) { if (raw.viewed[k]) s.viewed[k] = true; });
     }
+    // Task-list checkbox overrides, keyed by anchor -> boolean. Same shape and
+    // coercion discipline as `viewed`; unlike `viewed` an explicit `false` is
+    // meaningful here (it can override a source-authored `- [x]` back to
+    // unchecked), so both true and false are kept, not just truthy entries.
+    if (raw.checks && typeof raw.checks === "object") {
+      Object.keys(raw.checks).forEach(function (k) {
+        if (typeof raw.checks[k] === "boolean") s.checks[k] = raw.checks[k];
+      });
+    }
     return s;
   }
 
@@ -114,6 +124,29 @@
     ].join("\n");
 
     var blocks = [];
+
+    /* Task-list checkboxes (kind `task`), in doc order. A compact progress
+       summary up front: recipients want "how far did they get" before the
+       detail below. Effective checked state is the stored override
+       (state.checks[anchor]) if the user ever toggled it, else the
+       source-authored `- [x]` default captured on the anchor map at boot —
+       same fallback shape as an accepted-default answer reading
+       anchors[a].default, never invented here. */
+    var checks = state.checks || {};
+    var taskAnchors = order.filter(function (a) { return kindOf(a) === "task"; });
+    if (taskAnchors.length) {
+      var checkedItems = [], uncheckedItems = [];
+      taskAnchors.forEach(function (a) {
+        var isChecked = Object.prototype.hasOwnProperty.call(checks, a)
+          ? !!checks[a]
+          : !!(anchors[a] && anchors[a].default);
+        (isChecked ? checkedItems : uncheckedItems).push(a);
+      });
+      var checklistLines = ["## checklist — " + checkedItems.length + "/" + taskAnchors.length + " checked"];
+      checkedItems.forEach(function (a) { checklistLines.push("- [x] " + labelOf(a) + " [" + a + "]"); });
+      uncheckedItems.forEach(function (a) { checklistLines.push("- [ ] " + labelOf(a) + " [" + a + "]"); });
+      blocks.push(checklistLines.join("\n"));
+    }
 
     /* Agent-audience notes in document order; detached anchors sort last but
        are never dropped (excerpt is the re-anchor evidence). */
@@ -686,6 +719,35 @@
     });
   }
 
+  /* ----- Task-list checkboxes (GFM `- [ ]` / `- [x]`) ------------------- */
+  // Anchored exactly like a prose list item (kind `task`, same registerAnchor
+  // grammar as notes/steps/questions), so a note pinned on a checklist line
+  // shares its anchor with the checkbox itself. render.mjs already emits the
+  // checkbox enabled and reflecting the source-authored default; this wires
+  // persistence on top: stored state (state.checks[anchor]) overrides the
+  // source default on load (requirement: stored state wins), and every toggle
+  // is persisted immediately, same discipline as a note edit or a verdict pick.
+  function wireChecklist() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pf-anchor^="task:"]'), function (li) {
+      var box = li.querySelector('input[type="checkbox"]');
+      if (!box) return;
+      var anchor = li.getAttribute("data-pf-anchor");
+      // Enrich the anchor map with the source-authored default (mirrors the
+      // question-default enrichment above) BEFORE any stored override is
+      // applied, so buildExportMarkdown's checklist fallback — and a future
+      // reload with no stored entry — both still have the true source state.
+      var meta = map.anchors[anchor] || (map.anchors[anchor] = { kind: "task", label: "", lines: null });
+      meta.default = box.checked;
+      if (Object.prototype.hasOwnProperty.call(state.checks, anchor)) {
+        box.checked = state.checks[anchor]; // stored state wins
+      }
+      box.addEventListener("change", function () {
+        state.checks[anchor] = box.checked;
+        persist();
+      });
+    });
+  }
+
   /* ----- Viewed checkboxes (recap diffs) ------------------------------- */
   function wireViewed() {
     Array.prototype.forEach.call(document.querySelectorAll("[data-block=tabs]"), function (group) {
@@ -923,6 +985,7 @@
   /* ----- Boot ----------------------------------------------------------- */
   function boot() {
     wireQuestions();
+    wireChecklist();
     wireViewed();
     updateCount();
     updateDegraded();
