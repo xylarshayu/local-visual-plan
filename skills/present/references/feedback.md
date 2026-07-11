@@ -15,6 +15,10 @@ doc: <slug> (<docId>)
 source: <absolute plan.md path or "unknown">
 verdict: approve | request-changes | none
 
+## checklist — <checked>/<total> checked
+- [x] <item text> [<anchor>]
+- [ ] <item text> [<anchor>]
+
 ## note — <kind> "<label>" [<anchor>]
 > <excerpt ≤140 chars of the anchored element's text>
 <the user's note text>
@@ -39,8 +43,19 @@ unreviewed questions: <n>               (only present when n > 0)
 - **`verdict:`** — one of `approve` / `request-changes` / `none`. `none` means
   the user exported without picking one (e.g. a partial review) — never read
   it as approval.
+- **`## checklist — <checked>/<total> checked`** — present only when the plan
+  has at least one GFM task-list item (`- [ ]` / `- [x]`). One `- [x]`/`- [ ]`
+  line per task item, checked items first, each carrying its own `[<anchor>]`
+  (kind `task`) so a checklist item can also be the target of a `## note`. The
+  checked/unchecked state is whatever the reviewer's page currently shows —
+  their own toggles if they clicked any boxes, else the plan's own authored
+  `- [x]`/`- [ ]` for boxes they never touched. Nothing to fold back into
+  `plan.md`: the source `- [ ]`/`- [x]` markers ARE the checklist; treat
+  unchecked items still needing attention as the reviewer's real progress
+  signal alongside their notes/verdict, not as something to "answer" like a
+  question.
 - **`## note — <kind> "<label>" [<anchor>]`** — one per pinned note, in
-  document order. `<kind>` is one of `h p li step file diff code diagram
+  document order. `<kind>` is one of `h p li task step file diff code diagram
   wireframe q callout chapter` (a hunk anchor looks like
   `diff:src-actions-upload-ts:h2`). `<label>` is the human-readable text the
   annotate UI showed next to the pin (a step title, a hunk's file+index, a
