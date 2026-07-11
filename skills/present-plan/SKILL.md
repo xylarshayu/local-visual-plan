@@ -1,6 +1,6 @@
 ---
 name: present-plan
-description: Turn an implementation plan into a single self-contained, interactive HTML page you can review and approve locally — ordered steps, file trees, annotated diffs and code, Mermaid diagrams, wireframe mockups, callouts, chapters with a side nav, before/after tabs, and open questions you can answer inline. Builds on the `present` base skill (install it alongside) for the general authoring, rendering, and feedback mechanics. Use when the user says "make a visual plan", "plan this visually", "show me a plan I can review/approve", "/present-plan" (legacy "/visual-plan"), or otherwise needs to SEE and sign off on a direction before code is written. Also use when the user pastes a blob starting `<!-- presentation-feedback v1 -->` — that's exported review feedback from a page you rendered earlier, not new prose; resolve it against `references/feedback.md`. Everything renders fully offline from file:// — no SaaS, no account, no server, no network at view time.
+description: Turn an implementation plan into a single self-contained, interactive HTML page you can review and approve locally — ordered steps, file trees, annotated diffs and code, Mermaid diagrams, wireframe mockups, callouts, chapters with a side nav, before/after tabs, and open questions you can answer inline. Builds on the `present` base skill (install it alongside) for the general authoring, rendering, and feedback mechanics. Use when the user says "make a visual plan", "plan this visually", "show me a plan I can review/approve", "/present-plan" (legacy "/visual-plan"), or otherwise needs to SEE and sign off on a direction before code is written. Also use when the user pastes a blob starting `<!-- presentation-feedback` — that's exported review feedback from a page you rendered earlier, not new prose; resolve it against `references/feedback.md`. Everything renders fully offline from file:// — no SaaS, no account, no server, no network at view time.
 license: MIT — see LICENSE and THIRD_PARTY_NOTICES.md
 ---
 
@@ -79,15 +79,23 @@ local.
 4. **Present and request approval.** Give the user the printed `url:` /
    Windows path and a 2–3 line summary of the approach, and ask them to
    review the page and sign off. That review is the gate — proceed to
-   implementation only after approval. Tell them, briefly, that the page
-   itself takes feedback (note mode, questions, a verdict, Export).
+   implementation only after the user says go (in chat, or in a note). Tell
+   them, briefly, that the page itself takes feedback (note mode, questions,
+   tickable checklists, Export).
 5. **On a `presentation-feedback` paste**, work the ingestion algorithm in
    `<skill-dir>/references/feedback.md`: verify `doc`/`source`/docId still
    match `plan.md`, resolve each anchor, act on every note and answer in
    document order — fold each accepted-default/custom answer back into the
    plan body (the decision moves into the step/section it concerns, and the
    question drops out of the `questions` block) — never silently skip a note.
-   Re-render, respond to each note explicitly, present v2.
+   Write your per-note responses to `.visual-plans/<slug>/replies.json` — one
+   `{anchor, note, reply}` entry per `## note`, `anchor` copied verbatim from
+   the paste — and re-render with `--replies <that file>` (the renderer diffs
+   against the page it overwrites and highlights what changed, with a
+   ‹ n/m › changes navigator for the reviewer; each reply shows as an inline
+   card at the element it answers), respond to each note explicitly in chat
+   too, present v2 — and surface the printed `changes:` line so the user
+   knows they can walk just the edits.
 
 ## Optional: self-review before handoff
 

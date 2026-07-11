@@ -36,13 +36,39 @@ hosted dependency entirely.
 
 ## What's new since v1
 
-- **Interactive questions + a verdict.** Each open question in a `questions`
-  block renders as a form — *Accept default* / *Answer differently* — and the
-  review panel collects one overall verdict (approve / request-changes).
+- **Interactive questions.** Each open question in a `questions` block renders
+  as a form — *Accept default* / *Answer differently* — and leaving the
+  pre-selected default in place counts as accepting it.
 - **Click-to-annotate review.** Note mode lets you pin a note on any anchored
-  element (a step, a diff hunk, a paragraph, a whole block), marked *for the
-  agent* or *note to self*; **Export** copies a structured blob you paste back
-  into the agent, which resolves it to exact `plan.md` lines and acts on it.
+  element (a step, a diff hunk, a paragraph, a table cell, a whole block),
+  marked *for the agent* or *note to self*; **Export** copies a structured
+  blob you paste back into the agent, which resolves it to exact `plan.md`
+  lines and acts on it.
+- **Change highlights on re-render.** When the agent updates the plan and
+  re-renders, the new page diffs itself against the version it replaced:
+  edited and new elements are highlighted, with a floating ‹ n/m › navigator
+  (keys `n`/`p`) and a "Changed in this version" panel list to walk exactly
+  what moved.
+- **Version history + compare dropdown.** Every re-render prepends the prior
+  version's anchor map to a `pf-history` island (capped at 8, newest first);
+  the changes navigator gains a version dropdown ("vs v3", "vs v2", …) that
+  re-diffs the page against any prior version entirely in the browser.
+- **Agent reply threads.** After ingesting an export, the agent re-renders
+  with `--replies <file>` — each reply appears as an inline card right at the
+  element it answers, plus an "Agent replies" list in the review panel.
+- **Text-selection notes.** Select text inside any anchored element to pin a
+  note on just that phrase — the selection is highlighted with a `<mark>`,
+  and the export's `>` excerpt is the exact selected text.
+- **Presenter mode.** Pages with chapters get a *Present* button in the
+  floating pill: one chapter at a time, ← → / Space / PageUp/PageDown to
+  navigate, Esc to exit, with a clickable chapter progress rail and counter.
+- **Review-progress meter.** The pill shows a live review percentage (scroll
+  depth, checklist ticks, questions touched, diffs viewed — only the
+  components the doc actually has), with per-component bars in the review
+  panel.
+- **`--watch` mode.** Re-renders on every save and serves the page at a
+  loopback-only localhost URL with SSE live reload — the HTML on disk stays
+  offline-pure (the reload snippet is injected at serve time only).
 - **Chapters + side nav.** `<!-- chapter: Title -->` directives split one file
   into sections with a scrollspy sidebar and deep links — still one HTML file.
 - **`callout` block** — `tone=info|decision|warning|risk` — for a decision or
@@ -79,8 +105,8 @@ the interactivity JS, and (unless `--lean`) the Mermaid bundle. **No external
 URLs, no CDN, no web fonts, no network at view time, no server, no account.** It
 renders fully offline from `file://` — disconnect your network and it still
 works. Dependencies (`marked`, `mermaid`) are **vendored** in
-`renderer/vendor/`, so there is **zero `npm install`**. Notes, question
-answers, and the verdict you pin in the annotation layer live in the browser's
+`renderer/vendor/`, so there is **zero `npm install`**. Notes and question
+answers you pin in the annotation layer live in the browser's
 `localStorage` (or, where that's blocked, in page memory) — Export is the only
 way any of it leaves the page, and that's a manual copy/paste you control.
 
@@ -135,6 +161,12 @@ Common flags:
 - `--open` / `--no-open` — open the result in the browser (via the opener's
   `$BROWSER` → `wslview` → `explorer.exe` → `xdg-open` fallback chain). Default
   is **not** to open unless `--open` is passed.
+- `--replies <path>` — a JSON file of agent replies to reviewer notes
+  (`{"replies":[{"anchor":"…","reply":"…","note":"…"?}]}`), shown as inline
+  cards at the elements they answer.
+- `--watch` — re-render on every save and serve the page at a loopback-only
+  localhost URL with SSE live reload (the file on disk stays offline-pure;
+  the change-highlight baseline is frozen at watch start).
 
 By default the HTML is written to `./.visual-plans/<slug>/index.html` relative to
 the current directory (`<slug>` is the kebab-cased title), falling back to
@@ -299,7 +331,7 @@ local-visual-plan/
         format.md                  # authoritative block contract (author <-> renderer); incl. data-model, api-endpoint
         wireframe.md                # wireframe authoring + .wf-* CSS class catalog
         diagrams.md                 # which Mermaid diagram type to use, per-type syntax
-        feedback.md                 # presentation-feedback v1: export grammar + ingestion algorithm
+        feedback.md                 # presentation-feedback v2: export grammar + ingestion algorithm
       renderer/
         render.mjs                 # CLI + programmatic renderer (Node ESM, zero npm install)
         recap.mjs                  # diff collector -> plan-shaped markdown; feeds render.mjs

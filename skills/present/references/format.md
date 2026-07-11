@@ -366,8 +366,13 @@ Slugs reuse `slugify()` (lowercase, NFKD, non-alphanumeric → `-`, trimmed).
 | `h`         | prose headings `h1`–`h6`             | heading text                         |
 | `p`         | prose paragraphs (top-level `<p>`)   | first ~6 words                       |
 | `li`        | each prose list item `<li>` (`<ul>`/`<ol>`, nested) | item's own leading text, first ~6 words |
+| `task`      | each GFM task-list item (`- [ ]` / `- [x]`) | item's own leading text, first ~6 words (label keeps up to 80 chars) |
+| `table`     | each prose GFM `<table>`             | header-row text, first ~6 words      |
+| `row`       | each body `<tr>` of a prose table    | `<table-anchor>:<leading-cell text, ~4 words>` |
+| `cell`      | each body `<td>` of a prose table    | `<row-anchor>:<column-header>` (headerless → `c<n>`) |
+| `pre`       | plain fenced code blocks (```` ```js ```` etc. — not the custom `code` block) | language + first ~4 words of code |
 | `step`      | each `li.step` in a `steps` block    | step title                           |
-| `file`      | each `li.tree-row` in a `filetree`   | path                                 |
+| `file`      | each `li.tree-row` in a `filetree`, and each file line inside a step (`<step-anchor>:<path>`) | path |
 | `diff`      | `figure[data-block=diff]`            | `file` attr, else `diff-<index>`     |
 | `code`      | `figure[data-block=code]`            | `file` attr, else `<lang>-<index>`   |
 | `diagram`   | `figure[data-block=diagram]`         | `title` attr, else `diagram-<index>` |
@@ -378,6 +383,7 @@ Slugs reuse `slugify()` (lowercase, NFKD, non-alphanumeric → `-`, trimmed).
 | `data-model`| `figure[data-block=data-model]`      | `title` attr, else `data-model-<index>` |
 | `entity`    | each `.dm-entity` in a `data-model`  | `<block-anchor>:<entity-name>`       |
 | `field`     | each `.dm-field` in a `data-model`   | `<block-anchor>:<entity>.<field>`    |
+| `relation`  | each `.dm-relation` line in a `data-model` | `<block-anchor>:rel-<lhs>-<rhs>` |
 | `api-endpoint` | `figure[data-block=api-endpoint]` | `method` + `path`, else `title`, else `api-endpoint-<index>` |
 | `param`     | each `.api-param` in an `api-endpoint` | `<block-anchor>:<param-name>` (auth → `auth`) |
 | `request`   | the request `.api-section`           | `<block-anchor>:request`             |
@@ -392,9 +398,10 @@ collapsibles, and chapters too.
 <script type="application/json" id="pf-anchor-map">
 {"version":1,
  "docId":"pf-<first 12 hex of sha256 of the exact plan.md source>",
+ "renderedAt":"<ISO 8601 timestamp of this render>",
  "source":"<absolute path of the input plan.md, or null when rendered without a path>",
  "title":"<plan title>",
- "anchors":{"<anchor>":{"kind":"<kind>","label":"<human label>","lines":[start,end]|null}}}
+ "anchors":{"<anchor>":{"kind":"<kind>","label":"<human label>","lines":[start,end]|null,"sig":"<8 hex>"?}}}
 </script>
 ```
 
@@ -402,6 +409,65 @@ collapsibles, and chapters too.
 (frontmatter included in the count); `null` when not statically determinable
 (e.g. paragraphs, or blocks nested inside a `tabs`/`collapsible` body). Any `</`
 inside the JSON is written as `<\/` so the script can never terminate early.
+
+`sig` (optional, additive since 2026-07) is the first 8 hex of the SHA-256 of
+the element's whitespace-collapsed source text — the content fingerprint the
+re-render diff below uses to tell an edited element from an untouched one.
+Absent when the element has no derivable source text.
+
+`renderedAt` (additive since 2026-07) is the ISO timestamp of this render;
+each version-history entry (below) carries forward the timestamp of the
+version it preserves.
+
+**Change highlights (re-render diff).** When the renderer is given the previous
+version of the plan — automatically, by lifting `pf-source` out of the page it
+is about to overwrite at the output path, or explicitly via `--prev <old
+plan.md | old index.html>`; disabled with `--fresh`; under `--watch` the
+baseline is frozen at watch start, so the page accumulates everything changed
+during the session — it re-renders the old source in memory and compares
+anchor maps by `sig`:
+
+- same anchor, same `sig` → untouched; same anchor, different `sig` →
+  `data-pf-changed="edited"` on the element
+- anchor not in the old map with an unseen `sig` → `data-pf-changed="new"`
+  (verbatim-moved content — same `sig` elsewhere in the old map — is NOT
+  marked)
+- old anchors that vanished (and whose `sig` isn't anywhere in the new map)
+  are listed as removals
+
+and bakes the result into a second JSON island:
+
+```
+<script type="application/json" id="pf-changes">
+{"version":1,"prevDocId":"pf-…",
+ "changes":[{"anchor":"<anchor>","type":"edited"|"new"}, …],
+ "removed":[{"anchor":"<anchor>","kind":"<kind>","label":"<label>"}, …]}
+</script>
+```
+
+The annotation layer styles the marked elements (accent bar + tint), demotes a
+marked container whose only change is a marked descendant to
+`data-pf-changed="parent"` (kept quiet), and shows a floating ‹ n/m › changes
+navigator (keys `n`/`p`) plus a "Changed in this version" list in the review
+panel. The CLI prints `changes: <e> edited, <n> new, <r> removed` when a diff
+ran.
+
+**Version history** — each re-render also prepends the previous version's
+*stripped* anchor map — kind + label + `sig` only; line ranges are dropped,
+since they only mean anything against that version's source — to a third JSON
+island, newest first, capped at 8 entries:
+
+```
+<script type="application/json" id="pf-history">
+{"version":1,"entries":[
+ {"docId":"pf-…","renderedAt":"<ISO timestamp>"|null,
+  "anchors":{"<anchor>":{"kind":"<kind>","label":"<label>","sig":"<8 hex>"?}}}, …]}
+</script>
+```
+
+The changes navigator grows a version dropdown ("vs v3", "vs v2", …) that
+re-diffs the current version against ANY listed entry entirely in the
+browser — the same `sig` comparison as above — and re-highlights on the fly.
 
 **Embedded source** — the exact `plan.md` bytes, so the page is self-describing:
 

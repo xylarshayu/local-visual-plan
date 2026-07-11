@@ -1,19 +1,18 @@
-# `presentation-feedback v1` — the export/ingestion contract
+# `presentation-feedback v2` — the export/ingestion contract
 
 This is the paste-back contract between the rendered page's **Export** button
-and the agent reading what the user pastes. It's versioned (`v1`) so both
+and the agent reading what the user pastes. It's versioned (`v2`) so both
 sides — `annotate.js`'s exporter and this file — evolve together instead of
 silently drifting apart. Read this when a user pastes a blob starting
-`<!-- presentation-feedback v1 -->` and you need to act on it, or when you're
-asked to change what Export produces (don't, without bumping the version).
+`<!-- presentation-feedback` and you need to act on it, or when you're asked
+to change what Export produces (don't, without bumping the version).
 
 ## 1. The grammar (normative — reproduce exactly)
 
 ```
-<!-- presentation-feedback v1 -->
+<!-- presentation-feedback v2 -->
 doc: <slug> (<docId>)
 source: <absolute plan.md path or "unknown">
-verdict: approve | request-changes | none
 
 ## checklist — <checked>/<total> checked
 - [x] <item text> [<anchor>]
@@ -25,9 +24,23 @@ verdict: approve | request-changes | none
 
 ## answer — "<question label>" [<anchor>]
 accepted default: <default text>        (or)        custom: <user text>
-
-unreviewed questions: <n>               (only present when n > 0)
 ```
+
+### Changes from v1
+
+- **`verdict:` is gone.** v1 carried an approve / request-changes / none
+  tri-state; it was ceremony, not signal. What to do next comes from the
+  notes/answers themselves and from what the user says in chat.
+- **`unreviewed questions: <n>` is gone, and every question now exports an
+  `## answer`.** The question form pre-selects the default, so leaving it
+  untouched IS accepting the default — v1 calling that "unreviewed" misread
+  the user's intent. In v2, `accepted default:` covers both the explicit
+  click and the left-in-place default; there is no third state.
+- A paste starting `<!-- presentation-feedback v1 -->` comes from a page
+  rendered before this change. Ingest it with this same algorithm, plus:
+  treat its `verdict:` line as informational chat-level signal only, and
+  treat questions it counts as "unreviewed" exactly like v2 accepted
+  defaults unless the user says otherwise.
 
 ## 2. Field-by-field
 
@@ -40,9 +53,6 @@ unreviewed questions: <n>               (only present when n > 0)
 - **`source:`** — the absolute path to `plan.md` on the machine that rendered
   the page, or the literal string `unknown` if the page was rendered from
   stdin or later moved. You need this file to resolve anchors to lines.
-- **`verdict:`** — one of `approve` / `request-changes` / `none`. `none` means
-  the user exported without picking one (e.g. a partial review) — never read
-  it as approval.
 - **`## checklist — <checked>/<total> checked`** — present only when the plan
   has at least one GFM task-list item (`- [ ]` / `- [x]`). One `- [x]`/`- [ ]`
   line per task item, checked items first, each carrying its own `[<anchor>]`
@@ -52,27 +62,29 @@ unreviewed questions: <n>               (only present when n > 0)
   `- [x]`/`- [ ]` for boxes they never touched. Nothing to fold back into
   `plan.md`: the source `- [ ]`/`- [x]` markers ARE the checklist; treat
   unchecked items still needing attention as the reviewer's real progress
-  signal alongside their notes/verdict, not as something to "answer" like a
-  question.
+  signal alongside their notes, not as something to "answer" like a question.
 - **`## note — <kind> "<label>" [<anchor>]`** — one per pinned note, in
-  document order. `<kind>` is one of `h p li task step file diff code diagram
-  wireframe q callout chapter` (a hunk anchor looks like
-  `diff:src-actions-upload-ts:h2`). `<label>` is the human-readable text the
+  document order. `<kind>` is one of `h p li task step file diff hunk code pre
+  diagram wireframe q callout chapter table row cell data-model entity field
+  relation api-endpoint param request response` (a hunk anchor looks like
+  `diff:src-actions-upload-ts:h2`; a table cell like
+  `table:option-cost:rewrite:cost`). `<label>` is the human-readable text the
   annotate UI showed next to the pin (a step title, a hunk's file+index, a
-  heading's text) — informational, not authoritative; the anchor is. The `>`
-  line is a ≤140-char excerpt of the anchored element's own text, present so
-  the note is still resolvable even if the anchor drifts (§3.2). Everything
-  after the excerpt, up to the next `##`, is the user's note verbatim.
-- **`## answer — "<question label>" [<anchor>]`** — one per question the user
-  interacted with (accepted the default, or wrote a custom answer). Untouched
-  questions do **not** get an `## answer` block — see `unreviewed questions:`.
+  cell's column+value) — informational, not authoritative; the anchor is. The
+  `>` line is a ≤140-char excerpt of the anchored element's own text — or, for
+  a note pinned on a **text selection** inside the element, the exact selected
+  text (a substring of it) — present so the note is still resolvable even if
+  the anchor drifts (§3.2; the algorithm is unchanged, and a selection excerpt
+  just matches more precisely). Everything after the excerpt, up to the next
+  `##`, is the user's note verbatim.
+- **`## answer — "<question label>" [<anchor>]`** — exactly one per question
+  in the plan, in document order.
 - **`accepted default: <text>`** vs **`custom: <text>`** — exactly one follows
   each `## answer` header. `accepted default:` echoes the plan's own
   `default:` text verbatim (so you don't have to re-open `plan.md` to know
-  what was accepted); `custom:` is the user's own words.
-- **`unreviewed questions: <n>`** — only emitted when `n > 0`; a count, not a
-  list. It exists so "the user didn't get to all of it" is never mistaken for
-  "the user accepted everything by default."
+  what was accepted) and covers both an explicit "Accept default" click and a
+  question the reviewer simply left on its pre-selected default; `custom:` is
+  the user's own words.
 - Notes marked **note to self** in the composer never appear in this export —
   the grammar has no field for them. If a paste has zero `## note` blocks but
   the user says they left some, those were all self-notes; there is no hidden
@@ -80,12 +92,14 @@ unreviewed questions: <n>               (only present when n > 0)
 
 ## 3. Ingestion algorithm
 
-Run this whenever a message **begins with** `<!-- presentation-feedback v1 -->`
-— treat it as structured input to process, not prose to summarize back.
+Run this whenever a message **begins with** `<!-- presentation-feedback` —
+treat it as structured input to process, not prose to summarize back. A
+feedback paste is a request to update the plan: act on it, fold it in,
+re-render, and hand back the new version.
 
 ### 3.1 Verify identity
 
-1. Parse `doc:`, `source:`, `verdict:` from the header.
+1. Parse `doc:` and `source:` from the header.
 2. If `source:` is `unknown` or the path doesn't exist on disk, stop and ask
    the user for the current `plan.md` path — anchors can't resolve to lines
    without it, and excerpt-matching against nothing isn't matching.
@@ -105,7 +119,8 @@ session (you just produced it, or the user points you at it — default
 location is `.visual-plans/<slug>/index.html` next to `source:`), parse its
 `<script id="pf-anchor-map" type="application/json">` and look the anchor up
 directly for `{kind, label, lines: [start, end]}`. Read exactly those 1-based
-lines of `source:` for full context.
+lines of `source:` for full context. (Anchors with `lines: null` — prose
+paragraphs, list items, table cells — resolve by excerpt instead.)
 
 Fallback — **excerpt matching**: search `source:` for the `>` excerpt text.
 Try, in order: (a) exact substring match; (b) whitespace-collapsed,
@@ -150,32 +165,56 @@ For each `## answer`:
    plan" means: it becomes part of the plan, not a note about the plan.
 3. Remove that question's `# ` entry from the `questions` block entirely. A
    resolved question does not linger there re-asking something already decided.
-4. Leave every question **not** named in an `## answer` untouched in the
-   `questions` block — including the ones counted by `unreviewed questions:`.
 
-### 3.5 Handle the verdict
+Every question gets an answer in v2, so a fully-worked paste normally leaves
+the `questions` block empty (drop it, or leave it empty for the next round's
+questions). If the user says in chat that they haven't really looked at some
+question, honor that over the export — put it back / leave it open.
 
-- **`approve`** — after acting on every note/answer above, the plan is signed
-  off: proceed to implementation (`presentation-plan`) or treat the change as
-  accepted (`presentation-recap`).
-- **`request-changes`** — after acting on every note/answer, re-render and
-  present a new version for another pass (§3.6). Don't ask "does this look
-  good now?" in chat — the re-rendered page is the next thing to review, same
-  as the first round.
-- **`none`** — informational only; don't infer approval or rejection. Say what
-  you did with the notes/answers and ask what's next.
-
-### 3.6 Re-render and respond
+### 3.5 Re-render and respond
 
 Re-run the renderer on the edited `plan.md` (the same command the skill always
-uses: `node <skill-dir>/renderer/render.mjs <plan.md> --open`), surface the
-printed `url:` / (WSL) `windows:` line same as any other render, and respond
-to **every** note and answer explicitly — one line each, by anchor/label, is
-enough. This is v2 of the review loop; if the user pins more notes on v2 and
-exports again, the same algorithm applies fresh (the docId will differ because
-the source changed — expected, not an error). Notes never re-anchor across
-versions by design — that's why acting on all of them before re-rendering
-matters.
+uses: `node <skill-dir>/renderer/render.mjs <plan.md> --open`). Because the
+previous render still sits at the output path, the renderer automatically
+diffs the new version against it and **highlights what changed** — edited and
+new elements get a marker bar, and the page shows a floating changes
+navigator (‹ n/m › — also the `n`/`p` keys) plus a "Changed in this version"
+list in the review panel, so the reviewer can walk exactly what moved instead
+of re-reading the whole plan. The renderer prints a
+`changes: <e> edited, <n> new, <r> removed` line — surface it, along with the
+printed `url:` / (WSL) `windows:` line, same as any other render. (Pass
+`--fresh` to suppress the highlights; pass `--prev <old plan.md or old
+index.html>` to diff against something other than the overwritten page.)
+
+Deliver your per-note responses **on the page too**: write a replies file
+next to the plan — the convention is `.visual-plans/<slug>/replies.json` —
+with one entry per `## note`, and pass it to that same re-render as
+`--replies <file>`:
+
+```
+{"replies":[{"anchor":"step:add-a-size-guard-to-the-upload-action",
+             "note":"Make the 5MB limit a config value",
+             "reply":"Done — the limit now reads MAX_UPLOAD_BYTES from config"}]}
+```
+
+`anchor` is copied **verbatim** from the paste's `[<anchor>]`; `note` is a
+short quote of the user's note; `reply` is what you did. The page renders each
+reply as an inline card right at the anchored element (a table-cell anchor's
+card surfaces after the enclosing table) plus an "Agent replies" list in the
+review panel; a reply whose anchor no longer resolves still appears in the
+panel list, marked unresolved.
+
+Respond to **every** note and answer explicitly in chat as well — one line
+each, by anchor/label, is enough; the reply cards supplement the chat
+response, never replace it. This is v2 of the review loop; if the user pins more
+notes on the new page and exports again, the same algorithm applies fresh
+(the docId will differ because the source changed — expected, not an error).
+Notes never re-anchor across versions by design — that's why acting on all of
+them before re-rendering matters.
+
+Whether to proceed to implementation after the round-trip is a chat-level
+decision: the user saying "looks good, go" (in chat, or in a note) is the
+gate. Absent that, present the updated page and wait.
 
 ## 4. Worked example
 
@@ -207,10 +246,9 @@ default: No — single PUT until real >5MB usage appears.
 Pasted export:
 
 ```
-<!-- presentation-feedback v1 -->
+<!-- presentation-feedback v2 -->
 doc: add-upload-size-guard (pf-3f8a2c1d9e01)
 source: /home/xylar/proj/.visual-plans/add-upload-size-guard/plan.md
-verdict: request-changes
 
 ## note — step "Add a size guard to the upload action" [step:add-a-size-guard-to-the-upload-action]
 > reuse src/lib/client.ts — uploadFile() already handles the PUT
@@ -242,5 +280,7 @@ Resulting plan edit:
 4. Response to the user: "step *Add a size guard*: made the limit a config
    value (`MAX_UPLOAD_BYTES`) as asked. Chunking question: kept your accepted
    default — single PUT, no chunking — and folded it into the plan; it's gone
-   from the open-questions list." Then re-render and surface the new `url:`.
-</content>
+   from the open-questions list." Then re-render (the changed step and its new
+   file line come up highlighted, with the changes navigator pointing at
+   them), surface the printed `changes:` and `url:` lines, and wait for the
+   user's go-ahead in chat.

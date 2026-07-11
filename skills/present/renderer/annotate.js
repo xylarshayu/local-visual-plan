@@ -1,9 +1,10 @@
 /* presentation annotation layer — vanilla JS, no framework, runs from file://.
    Responsibilities: click-to-annotate notes (composer + pins + viewer), a
-   right-side review panel, questions-form wiring, verdict, persistence
-   (localStorage keyed pf:<docId> with in-memory fallback), viewed checkboxes,
-   GFM task-list checkbox toggling, permalinks, and the versioned feedback
-   export.
+   right-side review panel, questions-form wiring, persistence (localStorage
+   keyed pf:<docId> with in-memory fallback), viewed checkboxes, GFM task-list
+   checkbox toggling, permalinks, the changed-since-last-version navigator
+   (reads the pf-changes island the renderer bakes in), and the versioned
+   feedback export.
 
    This file is inlined verbatim into the rendered page by the engine at the
    "INLINE:annotate.js" marker. It must stay self-contained: no imports,
@@ -47,15 +48,68 @@
     return s;
   }
 
-  /* Map internal verdict (null | "approve" | "request-changes") to its token. */
-  function verdictToken(v) {
-    if (v === "approve") return "approve";
-    if (v === "request-changes") return "request-changes";
-    return "none";
+  function defaultState() {
+    return { version: 1, notes: [], answers: {}, viewed: {}, checks: {}, progress: { depth: 0 } };
   }
 
-  function defaultState() {
-    return { version: 1, notes: [], answers: {}, verdict: null, viewed: {}, checks: {} };
+  /* Diff two anchor maps by content signature — the byte-level twin of
+     render.mjs's computeChanges, so the changes navigator can re-target any
+     prior version carried in the pf-history island without a re-render:
+     same id+sig -> untouched; same id, new sig -> edited; new id with a sig
+     unseen in the old map -> new (a verbatim move is NOT a change); old ids
+     whose sig survives nowhere -> removed. */
+  function diffAnchorMaps(curAnchors, curOrder, oldAnchors) {
+    curAnchors = curAnchors || {};
+    oldAnchors = oldAnchors || {};
+    var order = Array.isArray(curOrder) ? curOrder.slice() : [];
+    var inOrder = {};
+    order.forEach(function (a) { inOrder[a] = true; });
+    Object.keys(curAnchors).forEach(function (a) { if (!inOrder[a]) order.push(a); });
+
+    var oldSigs = {}, newSigs = {};
+    Object.keys(oldAnchors).forEach(function (a) {
+      if (oldAnchors[a] && oldAnchors[a].sig) oldSigs[oldAnchors[a].sig] = true;
+    });
+    order.forEach(function (a) {
+      if (curAnchors[a] && curAnchors[a].sig) newSigs[curAnchors[a].sig] = true;
+    });
+
+    var changed = [];
+    order.forEach(function (a) {
+      var n = curAnchors[a];
+      if (!n) return;
+      var o = oldAnchors[a];
+      if (o && o.sig === n.sig) return;
+      if (n.sig && oldSigs[n.sig]) return;   /* moved verbatim */
+      if (!n.sig && o) return;               /* sig-less but pre-existing: unknowable */
+      changed.push({ anchor: a, type: o ? "edited" : "new" });
+    });
+    var removed = [];
+    Object.keys(oldAnchors).forEach(function (a) {
+      var o = oldAnchors[a];
+      if (!o || curAnchors[a] !== undefined) return;
+      if (o.sig && newSigs[o.sig]) return;   /* moved — lives on under a new id */
+      removed.push({ anchor: a, kind: o.kind || "", label: o.label || "" });
+    });
+    return { changed: changed, removed: removed };
+  }
+
+  /* Review progress: the mean of whichever components the document actually
+     has, as an integer percent. `depth` is a 0..1 max-scroll fraction;
+     `counts` is [{done, total}] for checklist / questions / viewed diffs —
+     zero-total components are skipped, not counted as done. */
+  function reviewProgress(parts) {
+    var comps = [];
+    if (parts && typeof parts.depth === "number" && isFinite(parts.depth)) {
+      comps.push(Math.max(0, Math.min(1, parts.depth)));
+    }
+    ((parts && parts.counts) || []).forEach(function (c) {
+      if (c && typeof c.total === "number" && c.total > 0) {
+        comps.push(Math.max(0, Math.min(1, (c.done || 0) / c.total)));
+      }
+    });
+    if (!comps.length) return 0;
+    return Math.round(100 * comps.reduce(function (a, b) { return a + b; }, 0) / comps.length);
   }
 
   /* Coerce arbitrary stored JSON into the current, well-formed shape so a
@@ -67,7 +121,7 @@
       s.notes = raw.notes
         .filter(function (n) { return n && typeof n.anchor === "string"; })
         .map(function (n) {
-          return {
+          var out = {
             id: typeof n.id === "string" && n.id ? n.id : "n" + Math.random().toString(36).slice(2, 9),
             anchor: n.anchor,
             excerpt: typeof n.excerpt === "string" ? n.excerpt : "",
@@ -75,7 +129,17 @@
             audience: n.audience === "self" ? "self" : "agent",
             ts: typeof n.ts === "number" ? n.ts : 0
           };
+          /* Text-quote selection anchor (W3C-annotation-style): kept only when
+             the full {text, prefix, suffix} string triple is intact. */
+          if (n.sel && typeof n.sel.text === "string" && n.sel.text &&
+              typeof n.sel.prefix === "string" && typeof n.sel.suffix === "string") {
+            out.sel = { text: n.sel.text, prefix: n.sel.prefix, suffix: n.sel.suffix };
+          }
+          return out;
         });
+    }
+    if (raw.progress && typeof raw.progress.depth === "number" && isFinite(raw.progress.depth)) {
+      s.progress.depth = Math.max(0, Math.min(1, raw.progress.depth));
     }
     if (raw.answers && typeof raw.answers === "object") {
       Object.keys(raw.answers).forEach(function (k) {
@@ -87,7 +151,8 @@
         };
       });
     }
-    if (raw.verdict === "approve" || raw.verdict === "request-changes") s.verdict = raw.verdict;
+    /* v2 dropped the verdict tri-state — a `verdict` key in an older stored
+       blob is silently discarded here. */
     if (raw.viewed && typeof raw.viewed === "object") {
       Object.keys(raw.viewed).forEach(function (k) { if (raw.viewed[k]) s.viewed[k] = true; });
     }
@@ -103,8 +168,11 @@
     return s;
   }
 
-  /* The normative feedback export (presentation-feedback v1). See the pinned
-     contract — the agent-side parser depends on this byte-for-byte. */
+  /* The normative feedback export (presentation-feedback v2). See the pinned
+     contract — the agent-side parser depends on this byte-for-byte. v2 dropped
+     v1's `verdict:` header line and its trailing `unreviewed questions:` count:
+     every question now exports an answer (leaving the pre-selected default in
+     place IS accepting the default, not skipping the question). */
   function buildExportMarkdown(state, map, docOrder) {
     state = state || {};
     map = map || {};
@@ -117,10 +185,9 @@
     function labelOf(a) { return (anchors[a] && anchors[a].label) || ""; }
 
     var header = [
-      "<!-- presentation-feedback v1 -->",
+      "<!-- presentation-feedback v2 -->",
       "doc: " + slugify(map.title || "untitled") + " (" + (map.docId || "pf-unknown") + ")",
-      "source: " + (map.source || "unknown"),
-      "verdict: " + verdictToken(state.verdict)
+      "source: " + (map.source || "unknown")
     ].join("\n");
 
     var blocks = [];
@@ -165,17 +232,18 @@
       );
     });
 
-    /* Questions the user interacted with (present in state.answers), in doc
-       order; untouched questions feed the trailing count. */
+    /* Every question exports exactly one answer, in doc order. The form
+       pre-selects the default, so a question the user never clicked has the
+       same meaning as an explicit "Accept default" — both export as
+       `accepted default:`. (v1 counted untouched questions as "unreviewed",
+       which misread leaving the default in place as skipping the question.) */
     var answers = state.answers || {};
     var questionAnchors = order.filter(function (a) { return kindOf(a) === "q"; });
-    var unreviewed = 0;
     questionAnchors.forEach(function (a) {
       var ans = answers[a];
-      if (!ans) { unreviewed++; return; }
       var head = "## answer — \"" + labelOf(a) + "\" [" + a + "]";
       var line;
-      if (ans.mode === "custom") {
+      if (ans && ans.mode === "custom") {
         line = "custom: " + (ans.text == null ? "" : String(ans.text));
       } else {
         var def = (anchors[a] && anchors[a].default != null) ? String(anchors[a].default) : "";
@@ -183,7 +251,6 @@
       }
       blocks.push(head + "\n" + line);
     });
-    if (unreviewed > 0) blocks.push("unreviewed questions: " + unreviewed);
 
     var body = blocks.join("\n\n");
     return body ? header + "\n\n" + body + "\n" : header + "\n";
@@ -194,10 +261,11 @@
     slugify: slugify,
     normalizeText: normalizeText,
     normalizeExcerpt: normalizeExcerpt,
-    verdictToken: verdictToken,
     defaultState: defaultState,
     migrateState: migrateState,
-    buildExportMarkdown: buildExportMarkdown
+    buildExportMarkdown: buildExportMarkdown,
+    diffAnchorMaps: diffAnchorMaps,
+    reviewProgress: reviewProgress
   };
 
   var GLOBAL = (typeof window !== "undefined") ? window
@@ -454,7 +522,7 @@
       if (viewerAnchor) placePopover(viewer, elForAnchor(viewerAnchor) || document.body);
     });
   }
-  window.addEventListener("scroll", function () { permalink.hidden = true; scheduleReposition(); }, true);
+  window.addEventListener("scroll", function () { permalink.hidden = true; hideSelChip(); scheduleReposition(); }, true);
   window.addEventListener("resize", scheduleReposition);
 
   /* ----- Note mode ------------------------------------------------------ */
@@ -485,7 +553,8 @@
   function isOwnUI(target) {
     return !!(target.closest && (target.closest(".pf-pill") || target.closest(".pf-panel") ||
       target.closest(".pf-composer") || target.closest(".pf-viewer") || target.closest(".pf-overlay") ||
-      target.closest(".pf-toast")));
+      target.closest(".pf-toast") || target.closest(".pf-selchip") || target.closest(".pf-reply") ||
+      target.closest(".pf-changes-bar") || target.closest(".pf-present-rail")));
   }
 
   document.addEventListener("mouseover", function (ev) {
@@ -534,7 +603,9 @@
   function closeComposer() {
     if (composer) { composer.remove(); composer = null; composerAnchor = null; }
   }
-  function openComposer(anchor, node) {
+  /* `sel` (optional) is a captured text selection {text, prefix, suffix}
+     inside the anchored element — the note then pins to that exact quote. */
+  function openComposer(anchor, node, sel) {
     closeComposer();
     closeViewer();
     composerAnchor = anchor;
@@ -543,6 +614,7 @@
     composer.innerHTML =
       '<div class="pf-pop-head"><span class="pf-pop-anchor"></span>' +
         '<button type="button" class="pf-x" data-pf-close aria-label="Cancel">×</button></div>' +
+      (sel ? '<blockquote class="pf-sel-quote"></blockquote>' : '') +
       '<textarea class="pf-composer-text" placeholder="Your note…" aria-label="Note text"></textarea>' +
       '<div class="pf-aud" role="radiogroup" aria-label="Audience">' +
         '<label class="pf-aud-opt"><input type="radio" name="pf-aud" value="agent" checked> for the agent</label>' +
@@ -553,6 +625,10 @@
         '<button type="button" class="pf-btn pf-primary" data-pf-pin>Pin note</button>' +
       '</div>';
     composer.querySelector(".pf-pop-anchor").textContent = kindLabel;
+    if (sel) {
+      var q = composer.querySelector(".pf-sel-quote");
+      if (q) q.textContent = "“" + normalizeExcerpt(sel.text, 120) + "”";
+    }
     document.body.appendChild(composer);
     placePopover(composer, node || elForAnchor(anchor) || document.body);
     var ta = composer.querySelector(".pf-composer-text");
@@ -567,7 +643,7 @@
         var text = ta.value;
         if (!normalizeText(text)) { ta.focus(); return; }
         var aud = composer.querySelector('input[name="pf-aud"]:checked');
-        addNote(anchor, text, aud ? aud.value : "agent");
+        addNote(anchor, text, aud ? aud.value : "agent", sel);
         closeComposer();
         exitNoteMode();
       }
@@ -605,6 +681,7 @@
     notes.forEach(function (n) {
       html +=
         '<div class="pf-vnote" data-note="' + n.id + '">' +
+          (n.sel ? '<blockquote class="pf-sel-quote">“' + escapeHtml(normalizeExcerpt(n.sel.text, 120)) + '”</blockquote>' : '') +
           '<textarea class="pf-vtext" aria-label="Note text">' + escapeHtml(n.text) + '</textarea>' +
           '<div class="pf-vrow">' +
             '<span class="pf-aud" role="radiogroup" aria-label="Audience">' +
@@ -649,16 +726,21 @@
   });
 
   /* ----- Note mutations ------------------------------------------------- */
-  function addNote(anchor, text, audience) {
-    state.notes.push({
+  function addNote(anchor, text, audience, sel) {
+    var note = {
       id: uid(),
       anchor: anchor,
-      excerpt: excerptFor(anchor),
+      /* A selection note's excerpt IS the selected text — more precise for
+         the agent-side excerpt matching than the whole element's text. */
+      excerpt: sel ? normalizeExcerpt(sel.text, 140) : excerptFor(anchor),
       text: text,
       audience: audience === "self" ? "self" : "agent",
       ts: Date.now()
-    });
+    };
+    if (sel) note.sel = { text: sel.text, prefix: sel.prefix, suffix: sel.suffix };
+    state.notes.push(note);
     persist();
+    if (sel) paintSelMarks();
     renderAll();
   }
   function updateNote(id, patch) {
@@ -680,14 +762,127 @@
       return true;
     });
     persist();
+    unwrapSelMarks(id);
     if (viewer && viewerAnchor === anchor) renderViewer();
     renderAll();
   }
+
+  /* ----- Text-selection notes -------------------------------------------
+     Select text inside any anchored element and a small chip offers to pin a
+     note to that exact quote. The note stores a text-quote anchor
+     {text, prefix, suffix} (à la the W3C annotation model); the quote is
+     re-found on load by prefix+text+suffix (then text alone) against the
+     element's textContent and wrapped in <mark> segments per text node, so a
+     selection crossing inline tags highlights cleanly. If the quote can't be
+     re-found (the element changed), the note still shows via its pin. */
+  var selChip = null;
+  function hideSelChip() {
+    if (selChip) { selChip.remove(); selChip = null; }
+  }
+  function captureSel(target, range, text) {
+    var pre = document.createRange();
+    pre.selectNodeContents(target);
+    pre.setEnd(range.startContainer, range.startOffset);
+    var post = document.createRange();
+    post.selectNodeContents(target);
+    post.setStart(range.endContainer, range.endOffset);
+    return { text: text, prefix: pre.toString().slice(-30), suffix: post.toString().slice(0, 30) };
+  }
+  function maybeShowSelChip() {
+    hideSelChip();
+    var s = window.getSelection && window.getSelection();
+    if (!s || s.isCollapsed || s.rangeCount === 0) return;
+    var text = s.toString();
+    if (normalizeText(text).length < 3) return;
+    var range = s.getRangeAt(0);
+    var node = range.commonAncestorContainer;
+    var host = node.nodeType === 1 ? node : node.parentElement;
+    var target = host && host.closest ? host.closest("[data-pf-anchor]") : null;
+    if (!target || isOwnUI(host)) return;
+    var anchor = target.getAttribute("data-pf-anchor");
+    var selInfo;
+    try { selInfo = captureSel(target, range, text); } catch (e) { return; }
+    var r = range.getBoundingClientRect();
+    selChip = el("button", "pf-selchip", { type: "button", "aria-label": "Add a note on this selection" });
+    selChip.textContent = "💬 Note on selection";
+    selChip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - 70, window.innerWidth - 160)) + "px";
+    selChip.style.top = Math.max(4, r.top - 34) + "px";
+    document.body.appendChild(selChip);
+    selChip.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      hideSelChip();
+      openComposer(anchor, target, selInfo);
+    });
+  }
+  document.addEventListener("mouseup", function (ev) {
+    if (noteMode) return;                        /* element flow owns clicks there */
+    if (isOwnUI(ev.target)) return;
+    setTimeout(maybeShowSelChip, 0);             /* let the selection settle */
+  });
+
+  /* Wrap [start,end) of `root`'s textContent in per-text-node <mark>s. */
+  function wrapTextRange(root, start, end, noteId) {
+    var nodes = [];
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var tn;
+    while ((tn = walker.nextNode())) nodes.push(tn);
+    var pos = 0;
+    nodes.forEach(function (node) {
+      var len = node.nodeValue.length;
+      var ns = pos, ne = pos + len;
+      pos = ne;
+      var s2 = Math.max(start, ns), e2 = Math.min(end, ne);
+      if (s2 >= e2) return;
+      var target = node;
+      if (s2 - ns > 0) target = target.splitText(s2 - ns);
+      if (e2 - s2 < target.nodeValue.length) target.splitText(e2 - s2);
+      var mark = document.createElement("mark");
+      mark.className = "pf-sel-mark";
+      mark.setAttribute("data-pf-selmark", noteId);
+      target.parentNode.insertBefore(mark, target);
+      mark.appendChild(target);
+    });
+  }
+  function paintSelMarks() {
+    state.notes.forEach(function (n) {
+      if (!n.sel) return;
+      if (document.querySelector('[data-pf-selmark="' + n.id + '"]')) return;  /* already painted */
+      var host = elForAnchor(n.anchor);
+      if (!host) return;
+      var full = host.textContent;
+      var idx = -1;
+      if (n.sel.prefix || n.sel.suffix) {
+        var i = full.indexOf(n.sel.prefix + n.sel.text + n.sel.suffix);
+        if (i !== -1) idx = i + n.sel.prefix.length;
+      }
+      if (idx === -1) idx = full.indexOf(n.sel.text);
+      if (idx === -1) return;                    /* quote drifted — pin still shows */
+      try { wrapTextRange(host, idx, idx + n.sel.text.length, n.id); } catch (e) { /* leave unpainted */ }
+    });
+  }
+  function unwrapSelMarks(noteId) {
+    Array.prototype.slice.call(document.querySelectorAll('[data-pf-selmark="' + noteId + '"]')).forEach(function (m) {
+      var parent = m.parentNode;
+      while (m.firstChild) parent.insertBefore(m.firstChild, m);
+      parent.removeChild(m);
+      parent.normalize();
+    });
+  }
+  /* Clicking a highlight opens the viewer for its note's anchor. */
+  document.addEventListener("click", function (ev) {
+    if (noteMode) return;
+    var m = ev.target.closest && ev.target.closest(".pf-sel-mark");
+    if (!m) return;
+    var host = m.closest("[data-pf-anchor]");
+    if (host) openViewer(host.getAttribute("data-pf-anchor"), host);
+  });
 
   /* ----- Questions wiring ---------------------------------------------- */
   function recordAnswer(anchor, mode, text) {
     state.answers[anchor] = { mode: mode === "custom" ? "custom" : "default", text: mode === "custom" ? (text || "") : "" };
     persist();
+    paintProgress();
     if (panelOpen()) renderPanel();
   }
   function wireQuestions() {
@@ -726,7 +921,7 @@
   // checkbox enabled and reflecting the source-authored default; this wires
   // persistence on top: stored state (state.checks[anchor]) overrides the
   // source default on load (requirement: stored state wins), and every toggle
-  // is persisted immediately, same discipline as a note edit or a verdict pick.
+  // is persisted immediately, same discipline as a note edit or an answer.
   function wireChecklist() {
     Array.prototype.forEach.call(document.querySelectorAll('[data-pf-anchor^="task:"]'), function (li) {
       var box = li.querySelector('input[type="checkbox"]');
@@ -744,6 +939,7 @@
       box.addEventListener("change", function () {
         state.checks[anchor] = box.checked;
         persist();
+        paintProgress();
       });
     });
   }
@@ -774,6 +970,7 @@
           else state.viewed[anchor] = true;
           persist();
           paint();
+          paintProgress();
         }
         chk.addEventListener("click", toggle);
         chk.addEventListener("keydown", function (ev) {
@@ -785,6 +982,336 @@
     });
   }
 
+  /* ----- Changed-since-last-version navigator ---------------------------
+     The renderer bakes a `pf-changes` JSON island into a re-render that was
+     diffed against the previous version, and stamps `data-pf-changed`
+     ("edited" | "new") on the affected elements. This wires the reading side:
+     demote container marks to the most specific change, then offer a small
+     floating prev/next stepper (plus n / p keys) that walks the changes in
+     document order, and a "Changed in this version" list in the panel.
+     When a `pf-history` island is present (older versions' anchor maps), a
+     version dropdown re-diffs against ANY prior version in the browser via
+     PFAnnotate.diffAnchorMaps and re-applies the marks live. */
+  var changesData = null;
+  var changesItems = [];     /* [{anchor, type}] doc order, most-specific only */
+  var changesRemoved = [];   /* removals for the panel, per selected version */
+  var historyEntries = [];   /* pf-history entries, newest first */
+  var changesVersionLabel = "";
+
+  function readIsland(id) {
+    try {
+      var node = document.getElementById(id);
+      if (node && node.textContent) {
+        var parsed = JSON.parse(node.textContent);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch (e) { /* malformed island */ }
+    return null;
+  }
+
+  function clearChangeMarks() {
+    Array.prototype.slice.call(document.querySelectorAll("[data-pf-changed]")).forEach(function (m) {
+      m.removeAttribute("data-pf-changed");
+    });
+  }
+  function applyChangeMarks(changed) {
+    changed.forEach(function (c) {
+      var node = elForAnchor(c.anchor);
+      if (node) node.setAttribute("data-pf-changed", c.type);
+    });
+  }
+  /* (1) anything inside a NEW ancestor is implied by it — unmark it;
+     (2) a marked element still containing marked descendants becomes a
+         "parent" (kept out of the nav, styled faintly). */
+  function demoteContainerMarks() {
+    var markedEls = Array.prototype.slice.call(document.querySelectorAll("[data-pf-changed]"));
+    markedEls.forEach(function (m) {
+      if (m.parentElement && m.parentElement.closest('[data-pf-changed="new"]')) {
+        m.removeAttribute("data-pf-changed");
+      }
+    });
+    markedEls.forEach(function (m) {
+      if (m.getAttribute("data-pf-changed") == null) return;
+      if (m.querySelector('[data-pf-changed="new"], [data-pf-changed="edited"]')) {
+        m.setAttribute("data-pf-changed", "parent");
+      }
+    });
+  }
+  function collectChangeItems() {
+    changesItems = [];
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-pf-changed="new"], [data-pf-changed="edited"]'),
+      function (m) {
+        changesItems.push({ anchor: m.getAttribute("data-pf-anchor") || m.id, type: m.getAttribute("data-pf-changed") });
+      }
+    );
+  }
+
+  function wireChanges() {
+    changesData = readIsland("pf-changes");
+    var hist = readIsland("pf-history");
+    historyEntries = hist && Array.isArray(hist.entries) ? hist.entries : [];
+    if (!changesData) return;
+    changesRemoved = Array.isArray(changesData.removed) ? changesData.removed : [];
+    changesVersionLabel = historyEntries.length ? "v" + historyEntries.length : "previous";
+
+    demoteContainerMarks();
+    collectChangeItems();
+    if (!changesItems.length && !changesRemoved.length) return;
+
+    var bar = el("div", "pf-changes-bar", { role: "navigation", "aria-label": "Changes since a previous version" });
+    var verSel = "";
+    if (historyEntries.length > 1) {
+      /* Current page is v(N+1) where N = history length; entry i (newest
+         first) is v(N-i). Default: compare with the newest (the baked diff). */
+      verSel = '<select class="pf-changes-vsel" data-pf-chg-ver aria-label="Compare with version">';
+      historyEntries.forEach(function (h, i) {
+        var vnum = historyEntries.length - i;
+        verSel += '<option value="' + i + '">vs v' + vnum + "</option>";
+      });
+      verSel += "</select>";
+    }
+    bar.innerHTML =
+      '<span class="pf-changes-label" data-pf-chg-count></span>' + verSel +
+      '<button type="button" class="pf-changes-step" data-pf-chg-prev aria-label="Previous change (p)">‹</button>' +
+      '<span class="pf-changes-pos" aria-live="polite" data-pf-chg-pos></span>' +
+      '<button type="button" class="pf-changes-step" data-pf-chg-next aria-label="Next change (n)">›</button>' +
+      '<button type="button" class="pf-x" data-pf-chg-close aria-label="Hide the changes navigator">×</button>';
+    document.body.appendChild(bar);
+    var countEl2 = bar.querySelector("[data-pf-chg-count]");
+    var posEl = bar.querySelector("[data-pf-chg-pos]");
+    var cursor = -1;
+    function paintBar() {
+      countEl2.textContent = changesItems.length + " change" + (changesItems.length === 1 ? "" : "s");
+      posEl.textContent = (cursor >= 0 ? cursor + 1 : "–") + "/" + changesItems.length;
+    }
+    function gotoChange(i) {
+      if (!changesItems.length) return;
+      cursor = ((i % changesItems.length) + changesItems.length) % changesItems.length;
+      paintBar();
+      jumpTo(changesItems[cursor].anchor);
+    }
+    function retarget(entryIdx) {
+      var entry = historyEntries[entryIdx];
+      if (!entry || !entry.anchors) return;
+      var diff = diffAnchorMaps(map.anchors, docOrder, entry.anchors);
+      clearChangeMarks();
+      applyChangeMarks(diff.changed);
+      demoteContainerMarks();
+      collectChangeItems();
+      changesRemoved = diff.removed;
+      changesVersionLabel = "v" + (historyEntries.length - entryIdx);
+      cursor = -1;
+      paintBar();
+      scheduleReposition();
+      if (panelOpen()) renderPanel();
+    }
+    paintBar();
+    bar.addEventListener("click", function (ev) {
+      if (ev.target.closest("[data-pf-chg-close]")) { bar.remove(); return; }
+      if (ev.target.closest("[data-pf-chg-prev]")) { gotoChange(cursor - 1); return; }
+      if (ev.target.closest("[data-pf-chg-next]")) { gotoChange(cursor + 1); return; }
+    });
+    var sel2 = bar.querySelector("[data-pf-chg-ver]");
+    if (sel2) sel2.addEventListener("change", function () { retarget(parseInt(sel2.value, 10) || 0); });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+      var t = ev.target;
+      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (!document.body.contains(bar)) return;
+      if (presenterOn) return;
+      if (ev.key === "n") { ev.preventDefault(); gotoChange(cursor + 1); }
+      else if (ev.key === "p") { ev.preventDefault(); gotoChange(cursor - 1); }
+    });
+  }
+
+  /* ----- Agent reply cards ----------------------------------------------
+     A re-render made with --replies bakes a `pf-replies` island: the agent's
+     per-note responses from the last feedback round. Each resolvable reply
+     renders as an inline card at its anchored element (table-part anchors
+     surface after the enclosing table — a card can't live inside <tr>);
+     unresolvable ones only appear in the panel's list, marked as such. */
+  var repliesData = [];   /* [{anchor, reply, note?, resolved}] */
+  function insertCardNear(host, card) {
+    if (host.closest("td, th, tr, thead, tbody") || host.tagName === "TBODY" || host.tagName === "TR") {
+      var table = host.closest("table");
+      if (table) { table.insertAdjacentElement("afterend", card); return; }
+    }
+    if (host.tagName === "LI") { host.appendChild(card); return; }
+    host.insertAdjacentElement("afterend", card);
+  }
+  function wireReplies() {
+    var island = readIsland("pf-replies");
+    var list = island && Array.isArray(island.replies) ? island.replies : [];
+    list.forEach(function (r) {
+      if (!r || typeof r.anchor !== "string" || typeof r.reply !== "string") return;
+      var host = elForAnchor(r.anchor);
+      var entry = { anchor: r.anchor, reply: r.reply, note: typeof r.note === "string" ? r.note : "", resolved: !!host };
+      repliesData.push(entry);
+      if (!host) return;
+      var card = el("aside", "pf-reply", { "data-pf-reply": r.anchor });
+      var head = el("div", "pf-reply-head");
+      head.textContent = "↩ agent reply";
+      card.appendChild(head);
+      if (entry.note) {
+        var quote = el("blockquote", "pf-reply-quote");
+        quote.textContent = entry.note;
+        card.appendChild(quote);
+      }
+      var bodyEl = el("div", "pf-reply-body");
+      bodyEl.textContent = entry.reply;
+      card.appendChild(bodyEl);
+      insertCardNear(host, card);
+    });
+  }
+
+  /* ----- Presenter mode --------------------------------------------------
+     Chaptered documents get a Present button: one chapter at a time, a top
+     progress rail (clickable segments + counter), ← → / Space / PageUp/Down
+     to navigate, Esc to exit. Plain scroll layout is restored on exit. */
+  var presenterOn = false;
+  var presenterIdx = 0;
+  var presenterRail = null;
+  var presenterChapters = [];
+  function presenterAvailable() {
+    presenterChapters = Array.prototype.slice.call(document.querySelectorAll("section.pf-chapter"));
+    return presenterChapters.length > 1;
+  }
+  function paintPresenter() {
+    presenterChapters.forEach(function (c, i) {
+      c.classList.toggle("pf-present-cur", i === presenterIdx);
+    });
+    if (!presenterRail) return;
+    var segs = presenterRail.querySelectorAll(".pf-present-seg");
+    Array.prototype.forEach.call(segs, function (s, i) {
+      s.classList.toggle("pf-present-seg-cur", i === presenterIdx);
+      s.classList.toggle("pf-present-seg-done", i < presenterIdx);
+    });
+    var title = presenterRail.querySelector(".pf-present-title");
+    var chapterHead = presenterChapters[presenterIdx].querySelector(".pf-chapter-heading");
+    if (title) title.textContent = chapterHead ? normalizeText(chapterHead.textContent) : "";
+    var count = presenterRail.querySelector(".pf-present-count");
+    if (count) count.textContent = (presenterIdx + 1) + "/" + presenterChapters.length;
+  }
+  function presenterGoto(i) {
+    presenterIdx = Math.max(0, Math.min(presenterChapters.length - 1, i));
+    paintPresenter();
+    window.scrollTo(0, 0);
+    scheduleReposition();
+  }
+  function enterPresenter() {
+    if (presenterOn || !presenterAvailable()) return;
+    presenterOn = true;
+    /* start at the chapter currently in view */
+    presenterIdx = 0;
+    for (var i = 0; i < presenterChapters.length; i++) {
+      if (presenterChapters[i].getBoundingClientRect().bottom > 120) { presenterIdx = i; break; }
+    }
+    document.body.classList.add("pf-present");
+    presenterRail = el("div", "pf-present-rail", { role: "navigation", "aria-label": "Presenter" });
+    var segsHtml = "";
+    presenterChapters.forEach(function (c, i) {
+      var head = c.querySelector(".pf-chapter-heading");
+      segsHtml += '<button type="button" class="pf-present-seg" data-pf-seg="' + i + '" title="' +
+        escapeHtml(head ? normalizeText(head.textContent) : "chapter " + (i + 1)) + '"></button>';
+    });
+    presenterRail.innerHTML =
+      '<div class="pf-present-segs">' + segsHtml + "</div>" +
+      '<div class="pf-present-meta">' +
+        '<span class="pf-present-title"></span>' +
+        '<span class="pf-present-count"></span>' +
+        '<span class="pf-present-hint">← → navigate · Esc exit</span>' +
+        '<button type="button" class="pf-x" data-pf-present-close aria-label="Exit presenter">×</button>' +
+      "</div>";
+    document.body.appendChild(presenterRail);
+    presenterRail.addEventListener("click", function (ev) {
+      if (ev.target.closest("[data-pf-present-close]")) { exitPresenter(); return; }
+      var seg = ev.target.closest("[data-pf-seg]");
+      if (seg) presenterGoto(parseInt(seg.getAttribute("data-pf-seg"), 10) || 0);
+    });
+    closePanel();
+    presenterGoto(presenterIdx);
+  }
+  function exitPresenter() {
+    if (!presenterOn) return;
+    presenterOn = false;
+    document.body.classList.remove("pf-present");
+    presenterChapters.forEach(function (c) { c.classList.remove("pf-present-cur"); });
+    var cur = presenterChapters[presenterIdx];
+    if (presenterRail) { presenterRail.remove(); presenterRail = null; }
+    if (cur) cur.scrollIntoView({ block: "start" });
+    scheduleReposition();
+  }
+  document.addEventListener("keydown", function (ev) {
+    if (!presenterOn) return;
+    var t = ev.target;
+    if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT" || t.isContentEditable)) return;
+    if (ev.key === "ArrowRight" || ev.key === "PageDown" || (ev.key === " " && !ev.shiftKey)) {
+      ev.preventDefault(); presenterGoto(presenterIdx + 1);
+    } else if (ev.key === "ArrowLeft" || ev.key === "PageUp" || (ev.key === " " && ev.shiftKey)) {
+      ev.preventDefault(); presenterGoto(presenterIdx - 1);
+    }
+  });
+
+  /* ----- Review-progress meter -------------------------------------------
+     A live percentage in the pill: the mean of max scroll depth plus each
+     countable the document actually has (checklist ticks, questions touched,
+     diffs viewed). Depth persists per doc version like everything else. */
+  var progressEl = null;
+  var persistDepthTimer = null;
+  function progressParts() {
+    var counts = [];
+    var boxes = document.querySelectorAll('[data-pf-anchor^="task:"] input[type="checkbox"]');
+    if (boxes.length) {
+      var done = 0;
+      Array.prototype.forEach.call(boxes, function (b) { if (b.checked) done++; });
+      counts.push({ label: "Checklist", done: done, total: boxes.length });
+    }
+    var qAnchors = docOrder.filter(function (a) { return metaFor(a).kind === "q"; });
+    if (qAnchors.length) {
+      var qDone = qAnchors.filter(function (a) { return !!state.answers[a]; }).length;
+      counts.push({ label: "Questions touched", done: qDone, total: qAnchors.length });
+    }
+    var viewable = document.querySelectorAll(".pf-viewed").length;
+    if (viewable) {
+      counts.push({ label: "Diffs viewed", done: Object.keys(state.viewed).length, total: viewable });
+    }
+    return { depth: state.progress.depth || 0, counts: counts };
+  }
+  function paintProgress() {
+    if (!progressEl) return;
+    progressEl.textContent = reviewProgress(progressParts()) + "%";
+    if (panelOpen()) {
+      var sec = panel.querySelector("[data-pf-prog-sec]");
+      if (sec) sec.innerHTML = progressSectionHtml();
+    }
+  }
+  function progressSectionHtml() {
+    var parts = progressParts();
+    var html = "";
+    function row(label, frac, detail) {
+      var pct = Math.round(100 * Math.max(0, Math.min(1, frac)));
+      return '<div class="pf-prog-row"><span class="pf-prog-label">' + escapeHtml(label) + "</span>" +
+        '<span class="pf-prog-bar"><i style="width:' + pct + '%"></i></span>' +
+        '<span class="pf-prog-detail">' + escapeHtml(detail) + "</span></div>";
+    }
+    html += row("Read", parts.depth, Math.round(parts.depth * 100) + "%");
+    parts.counts.forEach(function (c) { html += row(c.label, c.done / c.total, c.done + "/" + c.total); });
+    return html;
+  }
+  function updateDepth() {
+    var doc = document.documentElement;
+    var total = doc.scrollHeight - window.innerHeight;
+    var d = total <= 0 ? 1 : Math.min(1, Math.max(0, window.scrollY / total));
+    if (d > (state.progress.depth || 0)) {
+      state.progress.depth = d;
+      clearTimeout(persistDepthTimer);
+      persistDepthTimer = setTimeout(persist, 400);
+      paintProgress();
+    }
+  }
+  window.addEventListener("scroll", function () { if (!presenterOn) updateDepth(); }, { passive: true });
+
   /* ----- Review panel --------------------------------------------------- */
   var pill = el("div", "pf-pill", { role: "region", "aria-label": "Annotation tools" });
   pill.innerHTML =
@@ -792,6 +1319,8 @@
       '<span aria-hidden="true">💬</span> Add note</button>' +
     '<button type="button" class="pf-pill-btn" data-pf-toggle-panel aria-label="Open review panel">' +
       'Notes (<span data-pf-count>0</span>)</button>' +
+    '<button type="button" class="pf-pill-btn pf-pill-progress" data-pf-progress aria-label="Review progress — open panel" title="Review progress">0%</button>' +
+    '<button type="button" class="pf-pill-btn" data-pf-present aria-label="Presenter mode" hidden>Present</button>' +
     '<button type="button" class="pf-pill-btn" data-pf-export aria-label="Open export">Export</button>';
   document.body.appendChild(pill);
   var addBtn = pill.querySelector("[data-pf-add]");
@@ -870,27 +1399,53 @@
     }
     html += '</section>';
 
-    /* Questions */
+    /* Questions — leaving the pre-selected default in place IS an answer, so
+       an untouched question shows as "default", same as an explicit accept. */
     var qAnchors = docOrder.filter(function (a) { return metaFor(a).kind === "q"; });
     if (qAnchors.length) {
       html += '<section class="pf-sec"><h3 class="pf-sec-h">Questions</h3>';
       qAnchors.forEach(function (a) {
         var ans = state.answers[a];
-        var st = !ans ? '<span class="pf-qstate pf-untouched">untouched</span>'
-          : ans.mode === "custom" ? '<span class="pf-qstate pf-custom">custom answer</span>'
-          : '<span class="pf-qstate pf-default">accepted default</span>';
+        var st = (ans && ans.mode === "custom")
+          ? '<span class="pf-qstate pf-custom">custom answer</span>'
+          : '<span class="pf-qstate pf-default">default</span>';
         html += '<div class="pf-qitem"><a class="pf-jump" href="#' + escapeHtml(a) + '" data-pf-jump="' + escapeHtml(a) + '">' +
           escapeHtml(labelFor(a)) + '</a>' + st + '</div>';
       });
       html += '</section>';
     }
 
-    /* Verdict */
-    html += '<section class="pf-sec"><h3 class="pf-sec-h">Verdict</h3><div class="pf-verdict" role="radiogroup" aria-label="Verdict">' +
-      verdictRadio("approve", "Approve", state.verdict === "approve") +
-      verdictRadio("request-changes", "Request changes", state.verdict === "request-changes") +
-      verdictRadio("none", "No verdict", !state.verdict) +
-      '</div></section>';
+    /* Progress */
+    html += '<section class="pf-sec"><h3 class="pf-sec-h">Progress</h3><div data-pf-prog-sec>' +
+      progressSectionHtml() + '</div></section>';
+
+    /* Agent replies from the last feedback round (re-render with --replies) */
+    if (repliesData.length) {
+      html += '<section class="pf-sec"><h3 class="pf-sec-h">Agent replies</h3>';
+      repliesData.forEach(function (r) {
+        var head = r.resolved
+          ? '<a class="pf-jump" href="#' + escapeHtml(r.anchor) + '" data-pf-jump="' + escapeHtml(r.anchor) + '">' + escapeHtml(labelFor(r.anchor)) + '</a>'
+          : '<span class="pf-note-label">' + escapeHtml(r.anchor) + ' <span class="pf-muted">(element no longer present)</span></span>';
+        html += '<div class="pf-reply-item">' + head +
+          '<div class="pf-note-text">' + escapeHtml(r.reply) + '</div></div>';
+      });
+      html += '</section>';
+    }
+
+    /* Changes vs a previous version (only on a re-render with a diff) */
+    if (changesData && (changesItems.length || changesRemoved.length)) {
+      html += '<section class="pf-sec"><h3 class="pf-sec-h">Changed vs ' + escapeHtml(changesVersionLabel) + '</h3>';
+      changesItems.forEach(function (c) {
+        html += '<div class="pf-qitem"><a class="pf-jump" href="#' + escapeHtml(c.anchor) + '" data-pf-jump="' + escapeHtml(c.anchor) + '">' +
+          escapeHtml(labelFor(c.anchor)) + '</a><span class="pf-qstate pf-chg-' + (c.type === "new" ? "new" : "edited") + '">' +
+          (c.type === "new" ? "new" : "edited") + '</span></div>';
+      });
+      changesRemoved.forEach(function (r) {
+        html += '<div class="pf-qitem"><span class="pf-note-label">' + escapeHtml(r.label || r.anchor) + '</span>' +
+          '<span class="pf-qstate pf-chg-removed">removed</span></div>';
+      });
+      html += '</section>';
+    }
 
     /* Export */
     html += '<section class="pf-sec pf-export"><h3 class="pf-sec-h">Export</h3>' +
@@ -914,16 +1469,12 @@
         ? '<a class="pf-jump" href="#' + escapeHtml(n.anchor) + '" data-pf-jump="' + escapeHtml(n.anchor) + '">' + escapeHtml(labelFor(n.anchor)) + '</a>'
         : '<span class="pf-note-label">' + escapeHtml(labelFor(n.anchor)) + '</span>');
     var body = '<div class="pf-note-text">' + escapeHtml(n.text) + '</div>';
-    var excerpt = !jumpable && n.excerpt ? '<div class="pf-note-excerpt">“' + escapeHtml(n.excerpt) + '”</div>' : '';
+    var excerpt = ((!jumpable && n.excerpt) || n.sel)
+      ? '<div class="pf-note-excerpt">“' + escapeHtml(n.sel ? normalizeExcerpt(n.sel.text, 120) : n.excerpt) + '”</div>' : '';
     return '<div class="pf-note-item">' +
       '<div class="pf-note-head">' + head + aud +
         '<button type="button" class="pf-x pf-note-del" data-pf-delnote="' + n.id + '" aria-label="Delete note">×</button>' +
       '</div>' + excerpt + body + '</div>';
-  }
-
-  function verdictRadio(value, label, checked) {
-    return '<label class="pf-verdict-opt"><input type="radio" name="pf-verdict" value="' + value + '"' +
-      (checked ? " checked" : "") + '> ' + escapeHtml(label) + '</label>';
   }
 
   /* Panel event delegation */
@@ -939,13 +1490,6 @@
     }
     if (ev.target.closest("[data-pf-download]")) { downloadExport(); return; }
   });
-  panel.addEventListener("change", function (ev) {
-    var v = ev.target.closest('input[name="pf-verdict"]');
-    if (v && v.checked) {
-      state.verdict = (v.value === "approve" || v.value === "request-changes") ? v.value : null;
-      persist();
-    }
-  });
 
   /* ----- Pill wiring ---------------------------------------------------- */
   addBtn.addEventListener("click", function () { if (noteMode) exitNoteMode(); else enterNoteMode(); });
@@ -955,14 +1499,20 @@
     var ex = panel.querySelector(".pf-export");
     if (ex) ex.scrollIntoView({ block: "nearest" });
   });
+  progressEl = pill.querySelector("[data-pf-progress]");
+  progressEl.addEventListener("click", function () { if (!panelOpen()) openPanel(); });
+  var presentBtn = pill.querySelector("[data-pf-present]");
+  presentBtn.addEventListener("click", function () { if (presenterOn) exitPresenter(); else enterPresenter(); });
 
   /* ----- Global Esc ----------------------------------------------------- */
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") return;
     if (composer) { closeComposer(); exitNoteMode(); return; }
     if (viewer) { closeViewer(); return; }
+    if (selChip) { hideSelChip(); return; }
     if (noteMode) { exitNoteMode(); return; }
     if (panelOpen()) { closePanel(); return; }
+    if (presenterOn) { exitPresenter(); return; }
   });
 
   /* ----- Render orchestration ------------------------------------------ */
@@ -987,6 +1537,12 @@
     wireQuestions();
     wireChecklist();
     wireViewed();
+    wireChanges();
+    wireReplies();
+    paintSelMarks();
+    if (presenterAvailable()) presentBtn.hidden = false;
+    updateDepth();
+    paintProgress();
     updateCount();
     updateDegraded();
     renderPins();

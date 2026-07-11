@@ -4,7 +4,7 @@
    only globals are a `window` stub and `console`. Because there is no `document`
    in that context, the IIFE hits its DOM-boot guard and returns early, but not
    before attaching window.PFAnnotate. We then assert buildExportMarkdown emits
-   the normative presentation-feedback v1 format byte-for-byte.
+   the normative presentation-feedback v2 format byte-for-byte.
 
    Run:  node skills/presentation-plan/renderer/test/annotate.mjs   */
 
@@ -26,7 +26,7 @@ vm.runInContext(code, sandbox, { filename: "annotate.js" });
 
 const PF = sandbox.window.PFAnnotate;
 assert.ok(PF, "window.PFAnnotate must be attached even without a DOM");
-const { buildExportMarkdown, normalizeExcerpt, slugify, migrateState, verdictToken } = PF;
+const { buildExportMarkdown, normalizeExcerpt, slugify, migrateState } = PF;
 
 let passed = 0;
 function check(name, fn) {
@@ -52,14 +52,13 @@ const richMap = {
 const richOrder = ["step:add-size-guard", "diff:upload-ts", "q:chunk-uploads", "q:token-scope", "q:untouched-one"];
 
 /* ---- 1. empty doc: header only ---------------------------------------- */
-check("empty state -> header only, verdict none", () => {
+check("empty state -> header only (v2: no verdict line)", () => {
   const emptyMap = { version: 1, docId: "pf-xyz", source: null, title: "Nothing Here", anchors: {} };
   const out = buildExportMarkdown(PF.defaultState(), emptyMap, []);
   const expected =
-    "<!-- presentation-feedback v1 -->\n" +
+    "<!-- presentation-feedback v2 -->\n" +
     "doc: nothing-here (pf-xyz)\n" +
-    "source: unknown\n" +
-    "verdict: none\n";
+    "source: unknown\n";
   assert.equal(out, expected);
 });
 
@@ -75,7 +74,6 @@ check("agent notes exported in doc order, self note excluded", () => {
   const notesOnlyOrder = ["step:add-size-guard", "diff:upload-ts"];
   const state = {
     version: 1,
-    verdict: "approve",
     viewed: {},
     answers: {},
     notes: [
@@ -86,10 +84,9 @@ check("agent notes exported in doc order, self note excluded", () => {
   };
   const out = buildExportMarkdown(state, notesOnlyMap, notesOnlyOrder);
   const expected =
-    "<!-- presentation-feedback v1 -->\n" +
+    "<!-- presentation-feedback v2 -->\n" +
     "doc: demo-plan-title (pf-abc123)\n" +
     "source: /home/you/project/.visual-plans/demo/plan.md\n" +
-    "verdict: approve\n" +
     "\n" +
     "## note — step \"Add a size guard\" [step:add-size-guard]\n" +
     "> reuse src/lib/client.ts — uploadFile() already handles the PUT\n" +
@@ -105,7 +102,6 @@ check("agent notes exported in doc order, self note excluded", () => {
 /* ---- 3. THE MIXED CASE (pasted in the report) ------------------------- */
 const mixedState = {
   version: 1,
-  verdict: "request-changes",
   viewed: {},
   answers: {
     "q:chunk-uploads": { mode: "custom", text: "Yes, but only behind a flag." },
@@ -118,10 +114,9 @@ const mixedState = {
   ]
 };
 const mixedExpected =
-  "<!-- presentation-feedback v1 -->\n" +
+  "<!-- presentation-feedback v2 -->\n" +
   "doc: demo-plan-title (pf-abc123)\n" +
   "source: /home/you/project/.visual-plans/demo/plan.md\n" +
-  "verdict: request-changes\n" +
   "\n" +
   "## note — step \"Add a size guard\" [step:add-size-guard]\n" +
   "> reuse src/lib/client.ts — uploadFile() already handles the PUT\n" +
@@ -137,31 +132,39 @@ const mixedExpected =
   "## answer — \"Per-user or per-org tokens?\" [q:token-scope]\n" +
   "accepted default: Per-org — matches the existing ownership model.\n" +
   "\n" +
-  "unreviewed questions: 1\n";
+  "## answer — \"Rename the flag?\" [q:untouched-one]\n" +
+  "accepted default: Keep the current name.\n";
 
-check("mixed: custom + accepted-default answers + unreviewed count", () => {
+check("mixed: custom + explicit default + untouched default all export as answers", () => {
   const out = buildExportMarkdown(mixedState, richMap, richOrder);
   assert.equal(out, mixedExpected);
 });
 
-/* ---- 4. verdict none + all questions untouched ------------------------ */
-check("verdict none + all questions untouched -> unreviewed count only", () => {
-  const state = { version: 1, verdict: null, viewed: {}, answers: {}, notes: [] };
+/* ---- 4. all questions untouched -> every default exported as accepted -- */
+check("all questions untouched -> each exports its accepted default (no unreviewed count)", () => {
+  const state = { version: 1, viewed: {}, answers: {}, notes: [] };
   const out = buildExportMarkdown(state, richMap, richOrder);
   const expected =
-    "<!-- presentation-feedback v1 -->\n" +
+    "<!-- presentation-feedback v2 -->\n" +
     "doc: demo-plan-title (pf-abc123)\n" +
     "source: /home/you/project/.visual-plans/demo/plan.md\n" +
-    "verdict: none\n" +
     "\n" +
-    "unreviewed questions: 3\n";
+    "## answer — \"Chunk uploads above 5MB?\" [q:chunk-uploads]\n" +
+    "accepted default: Chunk above 5MB by default.\n" +
+    "\n" +
+    "## answer — \"Per-user or per-org tokens?\" [q:token-scope]\n" +
+    "accepted default: Per-org — matches the existing ownership model.\n" +
+    "\n" +
+    "## answer — \"Rename the flag?\" [q:untouched-one]\n" +
+    "accepted default: Keep the current name.\n";
   assert.equal(out, expected);
+  assert.ok(!out.includes("unreviewed"), "v2 has no unreviewed count");
 });
 
 /* ---- 5. detached note (anchor not in doc order) still exported -------- */
 check("detached agent note still exported, sorted last", () => {
   const state = {
-    version: 1, verdict: null, viewed: {}, answers: {},
+    version: 1, viewed: {}, answers: {},
     notes: [
       { id: "a", anchor: "step:add-size-guard", excerpt: "guard", text: "in-order note", audience: "agent", ts: 1 },
       { id: "z", anchor: "step:vanished-anchor", excerpt: "the text that was here", text: "detached note", audience: "agent", ts: 2 }
@@ -186,25 +189,21 @@ check("normalizeExcerpt collapses whitespace and truncates at 140 with ellipsis"
   assert.equal(normalizeExcerpt(null), "");
 });
 
-/* ---- 7. slugify + verdictToken ---------------------------------------- */
-check("slugify + verdictToken", () => {
+/* ---- 7. slugify --------------------------------------------------------- */
+check("slugify", () => {
   assert.equal(slugify("From visual-plan to presentation!"), "from-visual-plan-to-presentation");
   assert.equal(slugify(""), "untitled");
-  assert.equal(verdictToken("approve"), "approve");
-  assert.equal(verdictToken("request-changes"), "request-changes");
-  assert.equal(verdictToken(null), "none");
-  assert.equal(verdictToken("garbage"), "none");
 });
 
 /* ---- 8. migrateState defaults / coercion ------------------------------ */
 check("migrateState fills defaults and coerces bad shapes", () => {
   const d = migrateState(null);
   /* vm objects live in another realm, so compare structurally via JSON. */
-  assert.equal(JSON.stringify(d), JSON.stringify({ version: 1, notes: [], answers: {}, verdict: null, viewed: {}, checks: {} }));
+  assert.equal(JSON.stringify(d), JSON.stringify({ version: 1, notes: [], answers: {}, viewed: {}, checks: {}, progress: { depth: 0 } }));
   const m = migrateState({
     notes: [{ anchor: "p:x", text: "hi" }, { text: "no anchor -> dropped" }],
     answers: { "q:a": { mode: "weird" }, "q:b": "not-object" },
-    verdict: "bogus",
+    verdict: "approve",
     viewed: { "diff:1": true, "diff:2": false },
     checks: { "task:a": true, "task:b": false, "task:c": "yes" }
   });
@@ -213,7 +212,7 @@ check("migrateState fills defaults and coerces bad shapes", () => {
   assert.ok(typeof m.notes[0].id === "string" && m.notes[0].id.length > 0);
   assert.equal(m.answers["q:a"].mode, "default");
   assert.ok(!("q:b" in m.answers));
-  assert.equal(m.verdict, null);
+  assert.ok(!("verdict" in m), "a v1 stored verdict is dropped, not carried");
   assert.equal(JSON.stringify(m.viewed), JSON.stringify({ "diff:1": true }));
   /* checks keeps explicit false (unlike viewed, which only keeps truthy) —
      an unchecked override must survive a reload just as much as a checked
@@ -233,15 +232,14 @@ check("checklist block: stored override wins over source default, unchecked stay
   };
   const checklistOrder = ["task:confirm-schema", "task:run-migration", "task:smoke-test"];
   const state = {
-    version: 1, verdict: null, viewed: {}, answers: {}, notes: [],
+    version: 1, viewed: {}, answers: {}, notes: [],
     checks: { "task:confirm-schema": true } // user ticked it; the other two never touched
   };
   const out = buildExportMarkdown(state, checklistMap, checklistOrder);
   const expected =
-    "<!-- presentation-feedback v1 -->\n" +
+    "<!-- presentation-feedback v2 -->\n" +
     "doc: demo-plan-title (pf-abc123)\n" +
     "source: /home/you/project/.visual-plans/demo/plan.md\n" +
-    "verdict: none\n" +
     "\n" +
     "## checklist — 2/3 checked\n" +
     "- [x] Confirm schema reviewed [task:confirm-schema]\n" +
@@ -256,7 +254,7 @@ check("checklist block: a stored false overrides a source-authored true default"
     anchors: { "task:seed-data": { kind: "task", label: "Seed test data", lines: null, default: true } }
   };
   const order = ["task:seed-data"];
-  const state = { version: 1, verdict: null, viewed: {}, answers: {}, notes: [], checks: { "task:seed-data": false } };
+  const state = { version: 1, viewed: {}, answers: {}, notes: [], checks: { "task:seed-data": false } };
   const out = buildExportMarkdown(state, map, order);
   assert.ok(out.includes("## checklist — 0/1 checked"));
   assert.ok(out.includes("- [ ] Seed test data [task:seed-data]"));
@@ -266,6 +264,71 @@ check("checklist block: a stored false overrides a source-authored true default"
 check("no task anchors -> no checklist block (docs without task lists are unaffected)", () => {
   const out = buildExportMarkdown(PF.defaultState(), richMap, richOrder);
   assert.ok(!out.includes("## checklist"), "richMap has no task-kind anchors; nothing to summarize");
+});
+
+/* ---- 10. selection anchors + progress survive migration ----------------- */
+check("migrateState keeps a well-formed sel triple, drops a broken one, clamps depth", () => {
+  const m = migrateState({
+    notes: [
+      { anchor: "p:a", text: "x", sel: { text: "quoted bit", prefix: "before ", suffix: " after" } },
+      { anchor: "p:b", text: "y", sel: { text: "no prefix" } },
+      { anchor: "p:c", text: "z" }
+    ],
+    progress: { depth: 3.7 }
+  });
+  assert.equal(JSON.stringify(m.notes[0].sel), JSON.stringify({ text: "quoted bit", prefix: "before ", suffix: " after" }));
+  assert.ok(!("sel" in m.notes[1]), "partial sel triple dropped");
+  assert.ok(!("sel" in m.notes[2]));
+  assert.equal(m.progress.depth, 1, "depth clamped to [0,1]");
+  assert.equal(migrateState({ progress: { depth: "0.5" } }).progress.depth, 0, "non-number depth ignored");
+});
+
+/* ---- 11. diffAnchorMaps: the browser-side twin of computeChanges -------- */
+check("diffAnchorMaps: edited / new / moved-verbatim / removed", () => {
+  const { diffAnchorMaps } = PF;
+  const cur = {
+    "h:intro": { kind: "h", label: "Intro", sig: "aaaaaaaa" },
+    "p:changed": { kind: "p", label: "Changed", sig: "bbbbbbbb" },
+    "p:fresh": { kind: "p", label: "Fresh", sig: "cccccccc" },
+    "p:moved-here": { kind: "p", label: "Moved", sig: "dddddddd" }
+  };
+  const order = ["h:intro", "p:changed", "p:fresh", "p:moved-here"];
+  const old = {
+    "h:intro": { kind: "h", label: "Intro", sig: "aaaaaaaa" },
+    "p:changed": { kind: "p", label: "Changed", sig: "b0b0b0b0" },
+    "p:moved-away": { kind: "p", label: "Moved", sig: "dddddddd" },
+    "p:gone": { kind: "p", label: "Gone", sig: "eeeeeeee" }
+  };
+  const d = diffAnchorMaps(cur, order, old);
+  assert.equal(JSON.stringify(d.changed), JSON.stringify([
+    { anchor: "p:changed", type: "edited" },
+    { anchor: "p:fresh", type: "new" }
+  ]), "moved-verbatim content is not a change; edits and additions are");
+  assert.equal(JSON.stringify(d.removed), JSON.stringify([
+    { anchor: "p:gone", kind: "p", label: "Gone" }
+  ]), "a moved-away anchor is not removed; a vanished sig is");
+});
+check("diffAnchorMaps: sig-less pre-existing anchors stay quiet; empty maps are safe", () => {
+  const { diffAnchorMaps } = PF;
+  const d = diffAnchorMaps(
+    { "p:x": { kind: "p", label: "X" } },
+    ["p:x"],
+    { "p:x": { kind: "p", label: "X" } }
+  );
+  assert.equal(d.changed.length, 0, "no sig on either side -> unknowable -> unmarked");
+  const e = diffAnchorMaps(null, null, null);
+  assert.equal(e.changed.length + e.removed.length, 0);
+});
+
+/* ---- 12. reviewProgress -------------------------------------------------- */
+check("reviewProgress: mean of present components, zero-total components skipped", () => {
+  const { reviewProgress } = PF;
+  assert.equal(reviewProgress({ depth: 1, counts: [] }), 100);
+  assert.equal(reviewProgress({ depth: 0.5, counts: [{ done: 1, total: 2 }] }), 50);
+  assert.equal(reviewProgress({ depth: 1, counts: [{ done: 0, total: 4 }, { done: 0, total: 0 }] }), 50,
+    "a 0/0 component is skipped, not counted as done or undone");
+  assert.equal(reviewProgress({}), 0);
+  assert.equal(reviewProgress({ depth: 9, counts: [{ done: 7, total: 2 }] }), 100, "inputs clamp to [0,1]");
 });
 
 console.log("\nannotate.js pure-logic tests: " + passed + " passed");

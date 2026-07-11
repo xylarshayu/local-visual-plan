@@ -109,6 +109,30 @@ export async function openFile(filePath) {
   return { ok: false, via: null, targets };
 }
 
+/**
+ * Open an http(s) URL (e.g. the --watch live server) with the same opener
+ * chain as openFile, minus the path conversions — every opener in the chain
+ * accepts a URL argument directly.
+ * @returns {Promise<boolean>} whether any opener succeeded
+ */
+export async function openUrl(url) {
+  const interop = wslInteropWorks();
+  const attempts = [];
+  if (process.env.BROWSER) {
+    const parts = process.env.BROWSER.trim().split(/\s+/);
+    if (interop || !WIN_OPENERS.has(parts[0])) {
+      attempts.push({ cmd: parts[0], args: [...parts.slice(1), url] });
+    }
+  }
+  if (interop && hasCommand("wslview")) attempts.push({ cmd: "wslview", args: [url] });
+  if (interop && hasCommand("explorer.exe")) attempts.push({ cmd: "explorer.exe", args: [url] });
+  if (hasCommand("xdg-open")) attempts.push({ cmd: "xdg-open", args: [url] });
+  for (const a of attempts) {
+    try { await launch(a.cmd, a.args); return true; } catch { /* next */ }
+  }
+  return false;
+}
+
 // CLI entry
 if (import.meta.url === `file://${process.argv[1]}`) {
   const target = process.argv[2];

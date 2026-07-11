@@ -14,7 +14,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { renderPlan } from '../render.mjs'
+import { renderPlan, extractIsland, extractPrevVersion } from '../render.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = join(__dirname, 'fixtures')
@@ -1256,6 +1256,330 @@ fixture('SKILL.md frontmatter (strict-YAML portability)', (check) => {
       assert.ok([...fields.description].length <= 1024, `description is ${[...fields.description].length} chars (max 1024)`)
     })
   }
+})
+
+// ---------------------------------------------------------------------------
+// Granular anchors: prose tables (table / row / cell), plain code fences,
+// step file lines, data-model relations.
+// ---------------------------------------------------------------------------
+fixture('granular anchors: prose tables', (check) => {
+  const src =
+    '---\ntitle: T\n---\n\n' +
+    '| Feature | Cost | Notes |\n' +
+    '| --- | --- | --- |\n' +
+    '| Upload guard | low | reuses the client |\n' +
+    '| Chunking | high | deferred |\n'
+  const { html, anchors } = renderPlan(src)
+
+  check('table itself is anchored (kind table, slug from headers)', () => {
+    assert.match(html, /<table data-pf-anchor="table:feature-cost-notes" id="table:feature-cost-notes">/)
+    assert.equal(anchors['table:feature-cost-notes'].kind, 'table')
+    assert.equal(anchors['table:feature-cost-notes'].label, 'Feature · Cost · Notes')
+  })
+  check('each body row is a child anchor of the table (kind row)', () => {
+    assert.match(html, /<tr data-pf-anchor="table:feature-cost-notes:upload-guard" id="table:feature-cost-notes:upload-guard">/)
+    assert.match(html, /<tr data-pf-anchor="table:feature-cost-notes:chunking" id="table:feature-cost-notes:chunking">/)
+    assert.equal(anchors['table:feature-cost-notes:upload-guard'].kind, 'row')
+  })
+  check('each body cell is a child anchor of its row, slugged by column header', () => {
+    const cell = anchors['table:feature-cost-notes:upload-guard:cost']
+    assert.ok(cell, 'cell anchor registered')
+    assert.equal(cell.kind, 'cell')
+    assert.equal(cell.label, 'Cost: low')
+    assert.match(html, /<td data-pf-anchor="table:feature-cost-notes:upload-guard:cost" id="table:feature-cost-notes:upload-guard:cost">low<\/td>/)
+  })
+  check('header row (thead) cells stay unanchored', () => {
+    assert.ok(!/<th[^>]*data-pf-anchor/.test(html), 'no anchors on th')
+  })
+  check('diff tables keep their own anchor scheme (no table/row/cell kinds)', () => {
+    const d = renderPlan('---\ntitle: T\n---\n\n```diff file=a.ts\n@@ -1 +1 @@\n-a\n+b\n```\n')
+    assert.ok(!Object.values(d.anchors).some((a) => a.kind === 'table' || a.kind === 'row' || a.kind === 'cell'))
+  })
+  check('duplicate row leads get collision-suffixed anchors', () => {
+    const d = renderPlan('---\ntitle: T\n---\n\n| A |\n| --- |\n| same |\n| same |\n')
+    const rows = Object.keys(d.anchors).filter((a) => d.anchors[a].kind === 'row')
+    assert.equal(rows.length, 2)
+    assert.notEqual(rows[0], rows[1])
+  })
+})
+
+fixture('granular anchors: code fences, step files, dm relations', (check) => {
+  check('plain fenced code block gets a kind pre anchor; custom blocks untouched', () => {
+    const { html, anchors } = renderPlan(
+      '---\ntitle: T\n---\n\n```js\nconst answer = 42\n```\n\n```code lang=ts\nlet x = 1\n```\n',
+    )
+    const pres = Object.keys(anchors).filter((a) => anchors[a].kind === 'pre')
+    assert.equal(pres.length, 1, 'exactly one pre anchor (the ```js fence)')
+    assert.equal(anchors[pres[0]].label, 'js · const answer = 42')
+    assert.match(html, new RegExp(`<pre data-pf-anchor="${pres[0]}" id="${pres[0]}"><code class="language-js">`))
+    // the custom code block still uses its own kind
+    assert.ok(Object.values(anchors).some((a) => a.kind === 'code'))
+  })
+  check('mermaid/diagram/unknown pres are not re-anchored', () => {
+    const { html } = renderPlan('---\ntitle: T\n---\n\n```diagram\nflowchart LR\n  A-->B\n```\n')
+    assert.ok(!/<pre data-pf-anchor="pre:/.test(html))
+  })
+  check('each step file line is a child anchor (kind file) of its step', () => {
+    const { html, anchors } = renderPlan(
+      '---\ntitle: T\n---\n\n```steps\n# Add the guard\nreuse src/lib/client.ts — client is fine\nedit src/actions/upload.ts — add the check\n```\n',
+    )
+    const a = 'step:add-the-guard:src-actions-upload-ts'
+    assert.ok(anchors[a], 'file child anchor registered under the step')
+    assert.equal(anchors[a].kind, 'file')
+    assert.equal(anchors[a].label, 'edit src/actions/upload.ts')
+    assert.match(html, new RegExp(`<li data-change="edit" data-pf-anchor="${a}" id="${a}">`))
+    assert.ok(anchors[a].lines, 'file line carries a real plan.md line')
+  })
+  check('data-model relation lines are child anchors (kind relation)', () => {
+    const { html, anchors } = renderPlan(
+      '---\ntitle: T\n---\n\n```data-model title=DM\n. user\n.   id uuid PK\n. plan\n.   id uuid PK\nuser ||--o{ plan : owns\n```\n',
+    )
+    const a = 'data-model:dm:rel-user-plan'
+    assert.ok(anchors[a], 'relation anchor registered')
+    assert.equal(anchors[a].kind, 'relation')
+    assert.equal(anchors[a].label, 'user ||--o{ plan : owns')
+    assert.match(html, new RegExp(`<li class="dm-relation" data-pf-anchor="${a}" id="${a}">`))
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Change detection: re-render vs a previous source marks edited/new elements,
+// bakes a pf-changes island, and leaves moved-but-identical content unmarked.
+// ---------------------------------------------------------------------------
+fixture('change detection (prevSource diff)', (check) => {
+  // The second paragraph shares its first six words (the slug window) across
+  // versions, so its anchor id is stable and the diff reads as an EDIT; a
+  // paragraph whose leading words change gets a new id and reads as NEW —
+  // still highlighted, just labeled differently.
+  const v1 =
+    '---\ntitle: T\n---\n\n' +
+    '## Approach\n\n' +
+    'First paragraph stays the same.\n\n' +
+    'Second paragraph is quite long and will be edited later.\n\n' +
+    '```steps\n# Add the guard\nedit src/upload.ts — add the check\n```\n'
+  const v2 =
+    '---\ntitle: T\n---\n\n' +
+    '## Approach\n\n' +
+    'First paragraph stays the same.\n\n' +
+    'Second paragraph is quite long and was edited right here.\n\n' +
+    'A brand new paragraph.\n\n' +
+    '```steps\n# Add the guard\nedit src/upload.ts — add the check\n```\n'
+
+  check('anchor map entries carry content signatures', () => {
+    const { anchors } = renderPlan(v1)
+    assert.ok(Object.values(anchors).every((a) => !('sig' in a) || /^[0-9a-f]{8}$/.test(a.sig)))
+    assert.ok(anchors['h:approach'].sig, 'headings are signed')
+    assert.ok(anchors['step:add-the-guard'].sig, 'steps are signed')
+  })
+  check('no prevSource (or identical source) -> no pf-changes island, no marks', () => {
+    const a = renderPlan(v1)
+    assert.ok(!a.html.includes('id="pf-changes"'))
+    assert.equal(a.changes, null)
+    const b = renderPlan(v1, { prevSource: v1 })
+    assert.ok(!b.html.includes('id="pf-changes"'))
+  })
+  check('edited element is marked data-pf-changed="edited"', () => {
+    const { html } = renderPlan(v2, { prevSource: v1 })
+    assert.match(html, /data-pf-anchor="p:second-paragraph-is-quite-long-and" id="p:second-paragraph-is-quite-long-and" data-pf-changed="edited"/)
+  })
+  check('new element is marked data-pf-changed="new"', () => {
+    const { html } = renderPlan(v2, { prevSource: v1 })
+    assert.match(html, /data-pf-anchor="p:a-brand-new-paragraph" id="p:a-brand-new-paragraph" data-pf-changed="new"/)
+  })
+  check('unchanged and moved-verbatim elements are NOT marked', () => {
+    const { html, changes } = renderPlan(v2, { prevSource: v1 })
+    assert.ok(!/p:first-paragraph-stays-the-same" data-pf-changed/.test(html), 'unchanged paragraph unmarked')
+    assert.ok(!changes.changed.some((c) => c.anchor === 'step:add-the-guard'), 'untouched step not a change')
+    // move the untouched step earlier: content identical -> still no mark
+    const v3 =
+      '---\ntitle: T\n---\n\n```steps\n# Add the guard\nedit src/upload.ts — add the check\n```\n\n## Approach\n\nFirst paragraph stays the same.\n\nSecond paragraph is quite long and will be edited later.\n'
+    const moved = renderPlan(v3, { prevSource: v1 })
+    assert.ok(!moved.changes.changed.some((c) => c.anchor.startsWith('step:')), 'moved-verbatim step not a change')
+  })
+  check('pf-changes island lists changes and removals with prevDocId', () => {
+    const { html, changes } = renderPlan(v2, { prevSource: v1 })
+    const m = /<script type="application\/json" id="pf-changes">([\s\S]*?)<\/script>/.exec(html)
+    assert.ok(m, 'island present')
+    const parsed = JSON.parse(m[1])
+    assert.equal(parsed.prevDocId, renderPlan(v1).docId)
+    assert.deepEqual(parsed.changes, changes.changed)
+    // removal: drop the second paragraph entirely
+    const v4 = v1.replace('Second paragraph is quite long and will be edited later.\n\n', '')
+    const rem = renderPlan(v4, { prevSource: v1 })
+    assert.ok(rem.changes.removed.some((r) => r.anchor === 'p:second-paragraph-is-quite-long-and'))
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Version history: renderedAt in the anchor map, the pf-history island
+// (creation, entry shape, chaining across renders, and the 8-entry cap).
+// ---------------------------------------------------------------------------
+fixture('history island & renderedAt', (check) => {
+  const v1 =
+    '---\ntitle: T\n---\n\n' +
+    'Alpha paragraph in version one.\n\n' +
+    'Shared closing paragraph stays put.\n'
+  const v2 =
+    '---\ntitle: T\n---\n\n' +
+    'Beta paragraph replaces the alpha one.\n\n' +
+    'Shared closing paragraph stays put.\n'
+  const v3 =
+    '---\ntitle: T\n---\n\n' +
+    'Gamma paragraph replaces the beta one.\n\n' +
+    'Shared closing paragraph stays put.\n'
+
+  check('anchor map carries a renderedAt ISO timestamp', () => {
+    const { html } = renderPlan(v1)
+    const map = extractIsland(html, 'pf-anchor-map')
+    assert.ok(map, 'anchor map island parses')
+    assert.equal(typeof map.renderedAt, 'string', 'renderedAt is a string')
+    const t = Date.parse(map.renderedAt)
+    assert.ok(Number.isFinite(t), 'renderedAt parses as a date')
+    // Full ISO round-trip: toISOString() output parses back to the same instant.
+    assert.equal(new Date(t).toISOString(), map.renderedAt, 'renderedAt is canonical ISO 8601')
+  })
+
+  check('first render (no prevSource) has no pf-history island', () => {
+    const { html } = renderPlan(v1)
+    assert.ok(!html.includes('id="pf-history"'), 'no pf-history island on a first render')
+    assert.equal(extractIsland(html, 'pf-history'), null, 'extractIsland returns null when absent')
+  })
+
+  const page2 = renderPlan(v2, { prevSource: v1, prevRenderedAt: '2026-07-10T12:00:00.000Z' })
+  const hist2 = extractIsland(page2.html, 'pf-history')
+
+  check('re-render with prevSource bakes a one-entry history island', () => {
+    assert.ok(hist2, 'pf-history island present and parseable')
+    assert.equal(hist2.version, 1)
+    assert.ok(Array.isArray(hist2.entries), 'entries is an array')
+    assert.equal(hist2.entries.length, 1, 'exactly one entry after the first re-render')
+    assert.equal(hist2.entries[0].docId, renderPlan(v1).docId, "entry.docId is the PREVIOUS version's docId")
+    assert.equal(hist2.entries[0].renderedAt, '2026-07-10T12:00:00.000Z', 'entry carries the passed prevRenderedAt')
+  })
+
+  check('history anchors keep kind/label (+8-hex sig), and NEVER lines', () => {
+    const anchors = hist2.entries[0].anchors
+    const keys = Object.keys(anchors)
+    assert.ok(keys.length > 0, 'entry has anchors')
+    for (const a of keys) {
+      assert.equal(typeof anchors[a].kind, 'string', `${a}.kind is a string`)
+      assert.equal(typeof anchors[a].label, 'string', `${a}.label is a string`)
+      assert.ok(!('lines' in anchors[a]), `${a} must not carry lines in history`)
+      if ('sig' in anchors[a]) assert.match(anchors[a].sig, /^[0-9a-f]{8}$/, `${a}.sig is 8 hex chars`)
+    }
+    assert.ok(keys.some((a) => anchors[a].sig), 'at least one history anchor is signed')
+  })
+
+  check('history chains: v3 over v2 prepends the newest entry first', () => {
+    const page3 = renderPlan(v3, { prevSource: v2, prevHistory: hist2.entries })
+    const hist3 = extractIsland(page3.html, 'pf-history')
+    assert.ok(hist3, 'chained pf-history island present')
+    assert.equal(hist3.entries.length, 2, 'two entries after two re-renders')
+    assert.equal(hist3.entries[0].docId, renderPlan(v2).docId, "newest entry (v2's docId) comes first")
+    assert.equal(hist3.entries[1].docId, renderPlan(v1).docId, "v1's entry carried forward behind it")
+  })
+
+  check('history is capped at 8 entries total', () => {
+    const dummies = Array.from({ length: 10 }, (_, i) => ({
+      docId: `pf-00000000000${i.toString(16)}`.slice(0, 15),
+      renderedAt: null,
+      anchors: {},
+    }))
+    const { html } = renderPlan(v3, { prevSource: v2, prevHistory: dummies })
+    const hist = extractIsland(html, 'pf-history')
+    assert.equal(hist.entries.length, 8, 'exactly 8 entries after the cap')
+    assert.equal(hist.entries[0].docId, renderPlan(v2).docId, 'the real new entry survives at the front')
+  })
+
+  check('identical sources still carry a passed prevHistory (no new entry)', () => {
+    const { html } = renderPlan(v2, { prevSource: v2, prevHistory: hist2.entries })
+    assert.ok(!html.includes('id="pf-changes"'), 'no diff -> no pf-changes island')
+    const hist = extractIsland(html, 'pf-history')
+    assert.ok(hist, 'history island still present')
+    assert.deepEqual(hist.entries, hist2.entries, 'entries pass through unchanged (nothing prepended)')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Replies island (agent replies to reviewer notes) + extractPrevVersion
+// round-trip.
+// ---------------------------------------------------------------------------
+fixture('replies island & extractPrevVersion', (check) => {
+  const v1 =
+    '---\ntitle: T\n---\n\n' +
+    'Alpha paragraph in version one.\n\n' +
+    'Shared closing paragraph stays put.\n'
+  const v2 =
+    '---\ntitle: T\n---\n\n' +
+    'Beta paragraph replaces the alpha one.\n\n' +
+    'Shared closing paragraph stays put.\n'
+
+  check('valid replies are baked into a pf-replies island (note kept)', () => {
+    const replies = [
+      { anchor: 'p:alpha-paragraph-in-version-one', reply: 'Done — reworded it.', note: 'the original note' },
+      { anchor: 'p:shared-closing-paragraph-stays-put', reply: 'Left as is.' },
+    ]
+    const { html, warnings } = renderPlan(v1, { replies })
+    const island = extractIsland(html, 'pf-replies')
+    assert.ok(island, 'pf-replies island present and parseable')
+    assert.equal(island.version, 1)
+    assert.deepEqual(island.replies, replies, 'entries round-trip exactly, note included')
+    assert.equal(warnings.length, 0, 'no warnings for valid replies')
+  })
+
+  check('an entry missing its reply is skipped WITH a warning', () => {
+    const { html, warnings } = renderPlan(v1, {
+      replies: [{ anchor: 'p:alpha-paragraph-in-version-one', reply: 'kept' }, { anchor: 'p:orphan' }],
+    })
+    const island = extractIsland(html, 'pf-replies')
+    assert.equal(island.replies.length, 1, 'only the valid entry survives')
+    assert.equal(island.replies[0].reply, 'kept')
+    assert.ok(
+      warnings.some((w) => /replies/.test(w) && /skipped/.test(w)),
+      `a warning names the skipped entry (got: ${JSON.stringify(warnings)})`,
+    )
+  })
+
+  check('"</" in a reply is emitted as <\\/ — the island cannot self-terminate', () => {
+    const evil = 'watch out for </script> in here'
+    const { html } = renderPlan(v1, {
+      replies: [{ anchor: 'p:alpha-paragraph-in-version-one', reply: evil }],
+    })
+    const m = /id="pf-replies">([\s\S]*?)<\/script>/.exec(html)
+    assert.ok(m, 'island found in the html')
+    assert.ok(!m[1].includes('</'), 'no raw "</" inside the island JSON')
+    // ...and the escaped form still parses back to the original string.
+    assert.equal(extractIsland(html, 'pf-replies').replies[0].reply, evil)
+  })
+
+  check('no replies -> no island; invalid shape -> warning + no island', () => {
+    const none = renderPlan(v1)
+    assert.ok(!none.html.includes('id="pf-replies"'), 'no island when replies omitted')
+    const empty = renderPlan(v1, { replies: [] })
+    assert.ok(!empty.html.includes('id="pf-replies"'), 'no island for an empty array')
+    const bad = renderPlan(v1, { replies: { nope: true } })
+    assert.ok(!bad.html.includes('id="pf-replies"'), 'no island for an invalid top-level shape')
+    assert.ok(
+      bad.warnings.some((w) => /replies/.test(w)),
+      `invalid shape pushes a warning (got: ${JSON.stringify(bad.warnings)})`,
+    )
+  })
+
+  check('extractPrevVersion round-trips source, renderedAt and history', () => {
+    const page2 = renderPlan(v2, { prevSource: v1, prevRenderedAt: '2026-07-10T12:00:00.000Z' })
+    const prev = extractPrevVersion(page2.html)
+    assert.ok(prev, 'extractPrevVersion returns a value for a rendered page')
+    assert.equal(prev.source, v2, 'source is the exact v2 markdown')
+    assert.equal(prev.renderedAt, extractIsland(page2.html, 'pf-anchor-map').renderedAt, "renderedAt matches the page's own anchor map")
+    assert.deepEqual(prev.history, extractIsland(page2.html, 'pf-history').entries, 'history matches the pf-history entries')
+  })
+
+  check('extractPrevVersion defaults history to [] on a history-less page', () => {
+    const page1 = renderPlan(v1)
+    const prev = extractPrevVersion(page1.html)
+    assert.equal(prev.source, v1)
+    assert.deepEqual(prev.history, [], 'no pf-history island -> empty array')
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -153,33 +153,38 @@ function nextTypeIndex(reg, kind) {
   return reg.typeIndex[kind];
 }
 
-// Assign a collision-numbered anchor and record it in the map. `lines` is a
-// 1-based inclusive [start,end] into plan.md, or null when not statically known.
-function registerAnchor(reg, kind, slugSource, label, lines) {
-  const slug = slugify(slugSource || kind);
-  const base = `${kind}:${slug}`;
-  const n = (reg.counts.get(base) || 0) + 1;
-  reg.counts.set(base, n);
-  const anchor = n === 1 ? base : `${base}:${n}`;
-  reg.anchors[anchor] = {
+// Build the map entry shared by all three register functions. `sigText` (the
+// element's raw source text) is optional; when present the entry carries a
+// content signature used by the re-render change detector.
+function anchorEntry(kind, label, lines, sigText) {
+  const entry = {
     kind,
     label: label != null ? String(label) : "",
     lines: Array.isArray(lines) && lines.length === 2 && lines[0] != null
       ? [lines[0], lines[1]] : null,
   };
+  const sig = sigOf(sigText);
+  if (sig) entry.sig = sig;
+  return entry;
+}
+
+// Assign a collision-numbered anchor and record it in the map. `lines` is a
+// 1-based inclusive [start,end] into plan.md, or null when not statically known.
+function registerAnchor(reg, kind, slugSource, label, lines, sigText) {
+  const slug = slugify(slugSource || kind);
+  const base = `${kind}:${slug}`;
+  const n = (reg.counts.get(base) || 0) + 1;
+  reg.counts.set(base, n);
+  const anchor = n === 1 ? base : `${base}:${n}`;
+  reg.anchors[anchor] = anchorEntry(kind, label, lines, sigText);
   reg.order.push(anchor);
   return anchor;
 }
 
 // Diff hunks are pre-numbered (`:h<i>`), so they bypass collision counting but
 // still land in the map for jump-to-line resolution.
-function registerHunkAnchor(reg, anchor, label, lines) {
-  reg.anchors[anchor] = {
-    kind: "hunk",
-    label: label != null ? String(label) : "",
-    lines: Array.isArray(lines) && lines.length === 2 && lines[0] != null
-      ? [lines[0], lines[1]] : null,
-  };
+function registerHunkAnchor(reg, anchor, label, lines, sigText) {
+  reg.anchors[anchor] = anchorEntry("hunk", label, lines, sigText);
   reg.order.push(anchor);
   return anchor;
 }
@@ -188,25 +193,31 @@ function registerHunkAnchor(reg, anchor, label, lines) {
 // with an explicit kind. Mirrors registerHunkAnchor — it bypasses the base
 // collision counter because the parent block anchor already disambiguates blocks
 // — but still guards against an accidental duplicate id by appending `:n`.
-function registerChildAnchor(reg, anchor, kind, label, lines) {
+function registerChildAnchor(reg, anchor, kind, label, lines, sigText) {
   let a = anchor;
   if (reg.anchors[a] !== undefined) {
     let n = 2;
     while (reg.anchors[`${anchor}:${n}`] !== undefined) n++;
     a = `${anchor}:${n}`;
   }
-  reg.anchors[a] = {
-    kind,
-    label: label != null ? String(label) : "",
-    lines: Array.isArray(lines) && lines.length === 2 && lines[0] != null
-      ? [lines[0], lines[1]] : null,
-  };
+  reg.anchors[a] = anchorEntry(kind, label, lines, sigText);
   reg.order.push(a);
   return a;
 }
 
 function computeDocId(source) {
   return "pf-" + createHash("sha256").update(String(source), "utf8").digest("hex").slice(0, 12);
+}
+
+// Content signature for an anchor: 8 hex chars over the whitespace-collapsed
+// source text of the element. Baked into the anchor map (`sig`) so a re-render
+// can tell "same element, edited content" from "same element, untouched" —
+// the basis of the changed-since-last-version highlights. Whitespace-collapsed
+// so a re-wrap or indent change doesn't read as an edit.
+function sigOf(text) {
+  const s = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+  if (!s) return null;
+  return createHash("sha256").update(s, "utf8").digest("hex").slice(0, 8);
 }
 
 // The exact plan.md bytes, base64'd — makes every page self-describing and
@@ -216,18 +227,62 @@ function embeddedSourceScript(source) {
   return `<script type="application/octet-stream" id="pf-source" data-encoding="base64">${b64}</script>`;
 }
 
-// anchor -> {kind,label,lines} map, plus docId/source/title. "</" is escaped as
-// "<\/" (a valid JSON solidus escape) so the JSON can never close the <script>.
-function anchorMapScript(reg, docId) {
+// anchor -> {kind,label,lines,sig?} map, plus docId/source/title/renderedAt.
+// "</" is escaped as "<\/" (a valid JSON solidus escape) so the JSON can never
+// close the <script>.
+function anchorMapScript(reg, docId, renderedAt) {
   const map = {
     version: 1,
     docId,
+    renderedAt,
     source: reg.sourcePath,
     title: reg.title,
     anchors: reg.anchors,
   };
   const json = JSON.stringify(map).replace(/<\//g, "<\\/");
   return `<script type="application/json" id="pf-anchor-map">${json}</script>`;
+}
+
+// Shared island-emitter for the auxiliary JSON payloads (history, replies,
+// changes): same solidus-escaping discipline as the anchor map.
+function jsonIsland(id, value) {
+  const json = JSON.stringify(value).replace(/<\//g, "<\\/");
+  return `<script type="application/json" id="${id}">${json}</script>`;
+}
+
+// A history entry keeps just enough of a prior version's anchor map for the
+// in-page changes navigator to re-diff against it: kind + label + sig. Line
+// ranges are dropped — they only mean anything against that version's source.
+function stripAnchorsForHistory(anchors) {
+  const out = {};
+  for (const a of Object.keys(anchors || {})) {
+    const m = anchors[a];
+    const e = { kind: m.kind, label: m.label };
+    if (m.sig) e.sig = m.sig;
+    out[a] = e;
+  }
+  return out;
+}
+
+// Validate agent-authored replies (--replies file / renderPlan option) down to
+// the shape the page expects: anchor + reply required, note optional.
+function sanitizeReplies(raw, warnings) {
+  const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.replies)) ? raw.replies : null;
+  if (!list) {
+    if (raw != null) warnings.push("replies: expected an array or {replies:[...]} — ignored");
+    return [];
+  }
+  const out = [];
+  for (const r of list) {
+    if (!r || typeof r.anchor !== "string" || !r.anchor || typeof r.reply !== "string" || !r.reply) {
+      warnings.push("replies: entry without string anchor+reply skipped");
+      continue;
+    }
+    const e = { anchor: r.anchor, reply: r.reply };
+    if (typeof r.note === "string" && r.note) e.note = r.note;
+    out.push(e);
+  }
+  return out;
 }
 
 /* ========================================================================== *
@@ -287,6 +342,8 @@ function renderSteps(body, ctx) {
         change: fileM[1],
         path: fileM[2],
         note: (fileM[3] || fileM[4] || "").trim(),
+        idx,
+        raw: line.trim(),
       });
       continue;
     }
@@ -303,13 +360,20 @@ function renderSteps(body, ctx) {
   for (const s of steps) {
     const lines2 = ctx.bodyStartLine != null
       ? [ctx.bodyStartLine + s.startIdx, ctx.bodyStartLine + s.endIdx] : null;
-    const anchor = registerAnchor(ctx.reg, "step", s.title || "step", s.title, lines2);
+    const stepSrc = lines.slice(s.startIdx, s.endIdx + 1).join("\n");
+    const anchor = registerAnchor(ctx.reg, "step", s.title || "step", s.title, lines2, stepSrc);
     out += `<li class="step" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
     out += `<p class="step-title">${esc(s.title)}</p>`;
     if (s.files.length) {
       out += '<ul class="step-files">';
       for (const f of s.files) {
-        out += `<li data-change="${esc(f.change)}">`;
+        // Each file line is its own child anchor so a note can pin one file
+        // decision, not the whole step (kind `file`, same as filetree rows).
+        const fLines = ctx.bodyStartLine != null
+          ? [ctx.bodyStartLine + f.idx, ctx.bodyStartLine + f.idx] : null;
+        const fAnchor = registerChildAnchor(
+          ctx.reg, `${anchor}:${slugify(f.path)}`, "file", `${f.change} ${f.path}`, fLines, f.raw);
+        out += `<li data-change="${esc(f.change)}" data-pf-anchor="${esc(fAnchor)}" id="${esc(fAnchor)}">`;
         out += `<span class="change-tag">${esc(f.change)}</span>`;
         out += `<code class="file-path">${esc(f.path)}</code>`;
         if (f.note) out += `<span class="file-note">${esc(f.note)}</span>`;
@@ -350,7 +414,7 @@ function renderFiletree(body, ctx) {
     const displayFlag = flag === "." ? "" : flag;
     const lines2 = ctx.bodyStartLine != null
       ? [ctx.bodyStartLine + idx, ctx.bodyStartLine + idx] : null;
-    const anchor = registerAnchor(ctx.reg, "file", path, path, lines2);
+    const anchor = registerAnchor(ctx.reg, "file", path, path, lines2, raw.trim());
     out += `<li class="tree-row" data-change="${change}" data-depth="${depth}" data-flag="${esc(displayFlag)}"`;
     out += ` data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}"`;
     out += ` style="padding-left:${10 + depth * 18}px">`;
@@ -493,16 +557,21 @@ function renderDiff(body, attrs, ctx) {
   const idx = nextTypeIndex(reg, "diff");
   const slugSrc = attrs.file || `diff-${idx}`;
   const label = attrs.file || `diff ${idx}`;
-  const figAnchor = registerAnchor(reg, "diff", slugSrc, label, ctx.blockLines);
+  const figAnchor = registerAnchor(reg, "diff", slugSrc, label, ctx.blockLines, body);
   // Number hunks (1-based) and register each `<diffAnchor>:h<i>` with its line.
+  // A hunk's sig spans its slice of the body (header through the line before
+  // the next hunk header) so editing any line inside it reads as a change.
+  const bodyLines = body.split(/\r?\n/);
+  const hunkRows = rows.filter((r) => r.type === "hunk");
   let hi = 0;
-  for (const r of rows) {
-    if (r.type !== "hunk") continue;
+  for (const r of hunkRows) {
     hi++;
     const hAnchor = `${figAnchor}:h${hi}`;
     const hLines = ctx.bodyStartLine != null && r.srcIdx != null
       ? [ctx.bodyStartLine + r.srcIdx, ctx.bodyStartLine + r.srcIdx] : null;
-    registerHunkAnchor(reg, hAnchor, `${label} · hunk ${hi}`, hLines);
+    const next = hunkRows[hi] && hunkRows[hi].srcIdx != null ? hunkRows[hi].srcIdx : bodyLines.length;
+    const hSrc = r.srcIdx != null ? bodyLines.slice(r.srcIdx, next).join("\n") : r.text;
+    registerHunkAnchor(reg, hAnchor, `${label} · hunk ${hi}`, hLines, hSrc);
     r.hunkAnchor = hAnchor;
   }
   let out = `<figure data-block="diff" data-mode="${mode}" data-pf-anchor="${esc(figAnchor)}" id="${esc(figAnchor)}">`;
@@ -575,7 +644,7 @@ function renderCode(body, attrs, ctx) {
   const codeIdx = nextTypeIndex(reg, "code");
   const slugSrc = attrs.file || (lang ? `${lang}-${codeIdx}` : `code-${codeIdx}`);
   const label = attrs.file || (lang ? `${lang} snippet ${codeIdx}` : `code ${codeIdx}`);
-  const anchor = registerAnchor(reg, "code", slugSrc, label, ctx.blockLines);
+  const anchor = registerAnchor(reg, "code", slugSrc, label, ctx.blockLines, body);
   const hl = parseHlRanges(attrs.hl);
   const lines = body.split(/\r?\n/);
   // Strip leading @note line=N: lines from the top of the body.
@@ -637,7 +706,7 @@ function renderDiagram(body, attrs, lean, ctx) {
   const idx = nextTypeIndex(reg, "diagram");
   const slugSrc = attrs.title || `diagram-${idx}`;
   const label = attrs.title || `diagram ${idx}`;
-  const anchor = registerAnchor(reg, "diagram", slugSrc, label, ctx.blockLines);
+  const anchor = registerAnchor(reg, "diagram", slugSrc, label, ctx.blockLines, body);
   let out = `<figure data-block="diagram" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
   if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
   if (lean) {
@@ -662,7 +731,7 @@ function renderWireframe(body, attrs, ctx) {
   const idx = nextTypeIndex(reg, "wireframe");
   const slugSrc = attrs.title || `wireframe-${idx}`;
   const label = attrs.title || `wireframe ${idx}`;
-  const anchor = registerAnchor(reg, "wireframe", slugSrc, label, ctx.blockLines);
+  const anchor = registerAnchor(reg, "wireframe", slugSrc, label, ctx.blockLines, body);
   let out = `<figure data-block="wireframe" data-surface="${surface}" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
   if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
   const sketchClass = sketchy ? " is-sketchy" : "";
@@ -694,7 +763,7 @@ function renderQuestions(body, ctx) {
   for (const q of qs) {
     const lines2 = ctx.bodyStartLine != null
       ? [ctx.bodyStartLine + q.startIdx, ctx.bodyStartLine + q.endIdx] : null;
-    const anchor = registerAnchor(ctx.reg, "q", q.text, q.text, lines2);
+    const anchor = registerAnchor(ctx.reg, "q", q.text, q.text, lines2, q.text + " " + q.def);
     out += `<div class="question" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
     out += `<p class="q-text">${esc(q.text)}</p>`;
     if (q.def) out += `<p class="q-default">${esc(q.def)}</p>`;
@@ -724,7 +793,7 @@ function renderCallout(body, attrs, ctx) {
   const idx = nextTypeIndex(reg, "callout");
   const slugSrc = attrs.title || `${tone}-${idx}`;
   const label = attrs.title || `${tone} callout ${idx}`;
-  const anchor = registerAnchor(reg, "callout", slugSrc, label, ctx.blockLines);
+  const anchor = registerAnchor(reg, "callout", slugSrc, label, ctx.blockLines, (attrs.title || "") + " " + body);
   const inner = neutralizeRemoteRefs(marked.parse(body.replace(/\s+$/, "")));
   let out = `<aside data-block="callout" data-tone="${tone}" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
   if (attrs.title) out += `<p class="callout-title">${escapeHtml(attrs.title)}</p>`;
@@ -790,7 +859,7 @@ function renderDataModel(body, attrs, ctx) {
   const idx = nextTypeIndex(reg, "data-model");
   const slugSrc = attrs.title || `data-model-${idx}`;
   const label = attrs.title || `data model ${idx}`;
-  const blockAnchor = registerAnchor(reg, "data-model", slugSrc, label, ctx.blockLines);
+  const blockAnchor = registerAnchor(reg, "data-model", slugSrc, label, ctx.blockLines, body);
 
   const lines = body.split(/\r?\n/);
   const items = [];      // entity cards + top-level raw lines, in document order
@@ -808,7 +877,7 @@ function renderDataModel(body, attrs, ctx) {
     if (DM_CARD_RE.test(content)) {
       const rm = /^(\S+)\s+([|o{}]{1,2}--[|o{}]{1,2})\s+(\S+)(?:\s*:\s*(.*))?$/.exec(content);
       relations.push(rm
-        ? { lhs: rm[1], card: rm[2], rhs: rm[3], label: (rm[4] || "").trim() }
+        ? { lhs: rm[1], card: rm[2], rhs: rm[3], label: (rm[4] || "").trim(), lineNo, src: content }
         : { raw: true, text: content });
       continue;
     }
@@ -831,7 +900,7 @@ function renderDataModel(body, attrs, ctx) {
         const parsed = parseFieldHead(head);
         const fAnchor = registerChildAnchor(
           reg, `${blockAnchor}:${slugify(cur.name + "." + parsed.name)}`,
-          "field", `${cur.name}.${parsed.name}`, [lineNo, lineNo]);
+          "field", `${cur.name}.${parsed.name}`, [lineNo, lineNo], content);
         cur.fields.push({ change: FLAG_TO_CHANGE[flag] || "unchanged", ...parsed, was, note: plainNote, anchor: fAnchor });
         continue;
       }
@@ -843,7 +912,7 @@ function renderDataModel(body, attrs, ctx) {
       const { head, note } = splitTrailingNote(rest);
       const { was, note: plainNote } = classifyNote(note);
       const eAnchor = registerChildAnchor(
-        reg, `${blockAnchor}:${slugify(head)}`, "entity", head, [lineNo, lineNo]);
+        reg, `${blockAnchor}:${slugify(head)}`, "entity", head, [lineNo, lineNo], content);
       cur = { change: FLAG_TO_CHANGE[flag] || "unchanged", name: head, was, note: plainNote, fields: [], anchor: eAnchor };
       items.push(cur);
       continue;
@@ -882,7 +951,12 @@ function renderDataModel(body, attrs, ctx) {
     out += '<ul class="dm-relations">';
     for (const r of relations) {
       if (r.raw) { out += `<li class="dm-relation dm-raw">${esc(r.text)}</li>`; continue; }
-      out += '<li class="dm-relation">';
+      // Relations are addressable too — a note can pin one relation line.
+      const rAnchor = registerChildAnchor(
+        reg, `${blockAnchor}:rel-${slugify(r.lhs + " " + r.rhs)}`,
+        "relation", `${r.lhs} ${r.card} ${r.rhs}${r.label ? " : " + r.label : ""}`,
+        r.lineNo != null ? [r.lineNo, r.lineNo] : null, r.src);
+      out += `<li class="dm-relation" data-pf-anchor="${esc(rAnchor)}" id="${esc(rAnchor)}">`;
       out += `<span class="dm-rel-entity">${esc(r.lhs)}</span>`;
       out += `<span class="dm-rel-card">${esc(r.card)}</span>`;
       out += `<span class="dm-rel-entity">${esc(r.rhs)}</span>`;
@@ -954,7 +1028,7 @@ function renderApiEndpoint(body, attrs, ctx) {
   const methodUpper = method.toUpperCase();
   const slugSrc = (method && path) ? `${method} ${path}` : (attrs.title || `api-endpoint-${idx}`);
   const label = attrs.title || (method && path ? `${methodUpper} ${path}` : `api endpoint ${idx}`);
-  const blockAnchor = registerAnchor(reg, "api-endpoint", slugSrc, label, ctx.blockLines);
+  const blockAnchor = registerAnchor(reg, "api-endpoint", slugSrc, label, ctx.blockLines, `${methodUpper} ${path} ${body}`);
 
   const lines = body.split(/\r?\n/);
   const params = [];
@@ -1002,11 +1076,18 @@ function renderApiEndpoint(body, attrs, ctx) {
       }
       const pAnchor = registerChildAnchor(
         reg, `${blockAnchor}:${slugify(inKind === "auth" ? "auth" : name)}`,
-        "param", `${inKind} ${inKind === "auth" ? "auth" : name}`, [lineNo, lineNo]);
+        "param", `${inKind} ${inKind === "auth" ? "auth" : name}`, [lineNo, lineNo], trimmed);
       params.push({ change: FLAG_TO_CHANGE[flag] || "unchanged", inKind, name, type, desc, was, note: plainNote, anchor: pAnchor });
     } else {
       params.push({ raw: true, text: trimmed });
     }
+  }
+
+  // Section bodies accumulate after their header line is registered, so the
+  // content signature is stamped onto the map entry once parsing is done.
+  for (const s of sections) {
+    const sig = sigOf((s.kind === "request" ? "request" : "response " + s.code) + " " + s.bodyLines.join("\n"));
+    if (sig) reg.anchors[s.anchor].sig = sig;
   }
 
   let out = `<figure data-block="api-endpoint" data-pf-anchor="${esc(blockAnchor)}" id="${esc(blockAnchor)}">`;
@@ -1296,7 +1377,7 @@ function transformChapters(body, baseOffset, reg) {
     const contentOffset = baseOffset + seg.contentStartIdx; // 0-based source index
     const rangeStart = baseOffset + (seg.markerIdx != null ? seg.markerIdx : seg.contentStartIdx) + 1;
     const rangeEnd = baseOffset + seg.endIdx + 1;
-    const anchor = registerAnchor(reg, "chapter", seg.title, seg.title, [rangeStart, rangeEnd]);
+    const anchor = registerAnchor(reg, "chapter", seg.title, seg.title, [rangeStart, rangeEnd], seg.title + " " + content);
     navLinks.push({ anchor, title: seg.title });
     const inner = makeSegment(content, contentOffset);
     out.push("");
@@ -1383,7 +1464,7 @@ function tagProseAnchors(html, reg) {
     if (holdsToken(inner)) return m;
     const text = decodeEntitiesLite(stripTags(inner)).replace(/\s+/g, " ").trim();
     if (!text) return m;
-    const anchor = registerAnchor(reg, "h", text, text, findHeadingLines(reg, text));
+    const anchor = registerAnchor(reg, "h", text, text, findHeadingLines(reg, text), text);
     return `<h${level}${attrs} data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${inner}</h${level}>`;
   });
   html = html.replace(/<p>([\s\S]*?)<\/p>/g, (m, inner) => {
@@ -1392,9 +1473,11 @@ function tagProseAnchors(html, reg) {
     if (!text) return m;
     const slugSource = text.split(" ").slice(0, 6).join(" ");
     const label = text.length > 80 ? text.slice(0, 79) + "…" : text;
-    const anchor = registerAnchor(reg, "p", slugSource, label, null);
+    const anchor = registerAnchor(reg, "p", slugSource, label, null, text);
     return `<p data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${inner}</p>`;
   });
+  html = tagTableAnchors(html, reg);
+  html = tagCodeFenceAnchors(html, reg);
   // Prose list items (both <ul> and <ol>, nested included). Marked emits bare
   // <li> for prose; custom blocks (steps/filetree/…) are parked as placeholders
   // at this stage, so their internal <li class="step"|"tree-row"…> never appear
@@ -1433,13 +1516,84 @@ function tagProseAnchors(html, reg) {
       // the checklist export wants readable item text, not a truncated slug;
       // mirrors the `p` prose convention (short id slug, longer display label).
       const label = text.length > 80 ? text.slice(0, 79) + "…" : text;
-      const anchor = registerAnchor(reg, "task", slugSource, label, null);
+      const anchor = registerAnchor(reg, "task", slugSource, label, null, text);
       return `<li data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${taggedInner}`;
     }
-    const anchor = registerAnchor(reg, "li", slugSource, slugSource, null);
+    const anchor = registerAnchor(reg, "li", slugSource, slugSource, null, text);
     return `<li data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">${taggedInner}`;
   });
   return html;
+}
+
+// Prose GFM tables. Marked emits attribute-less `<table>` (our own tables —
+// diff/code — always carry a class, so they never match), with inline-only
+// cell content, so the regexes below can't cross element boundaries. Three
+// levels of anchor: the table itself (kind `table`, slug from its header row),
+// each body row (kind `row`, child of the table, slug from its leading cell),
+// and each body cell (kind `cell`, child of its row, slug from its column
+// header) — so a reviewer can pin a note on exactly the value they mean.
+function tagTableAnchors(html, reg) {
+  const holdsToken = (s) => /[\x01\x02]|VPSEG/.test(s);
+  const cellText = (s) => decodeEntitiesLite(stripTags(s)).replace(/\s+/g, " ").trim();
+  return html.replace(/<table>[\s\S]*?<\/table>/g, (tbl) => {
+    if (holdsToken(tbl)) return tbl;
+    const headers = [];
+    const headM = /<thead>([\s\S]*?)<\/thead>/.exec(tbl);
+    if (headM) {
+      for (const th of headM[1].matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)) headers.push(cellText(th[1]));
+    }
+    const headText = headers.join(" ").trim();
+    const slugSource = headText
+      ? headText.split(" ").slice(0, 6).join(" ")
+      : `table-${nextTypeIndex(reg, "table")}`;
+    const label = headers.length ? headers.join(" · ").slice(0, 80) : slugSource;
+    const tableAnchor = registerAnchor(reg, "table", slugSource, label, null, cellText(tbl));
+    let out = tbl.replace("<table>", `<table data-pf-anchor="${esc(tableAnchor)}" id="${esc(tableAnchor)}">`);
+    const ti = out.indexOf("<tbody>");
+    if (ti === -1) return out;
+    const bodyPart = out.slice(ti).replace(/<tr>([\s\S]*?)<\/tr>/g, (rowM, inner) => {
+      const cells = [...inner.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => m[1]);
+      const rowText = cells.map(cellText).join(" ").trim();
+      const rowLead = cells.map(cellText).find((t) => t) || "row";
+      const rowAnchor = registerChildAnchor(
+        reg, `${tableAnchor}:${slugify(rowLead.split(" ").slice(0, 4).join(" "))}`,
+        "row", rowLead.length > 80 ? rowLead.slice(0, 79) + "…" : rowLead, null, rowText);
+      let ci = 0;
+      const newInner = inner.replace(/<td([^>]*)>([\s\S]*?)<\/td>/g, (cM, attrs, c) => {
+        const i = ci++;
+        if (holdsToken(c)) return cM;
+        const head = headers[i] || `col ${i + 1}`;
+        const cText = cellText(c);
+        const cAnchor = registerChildAnchor(
+          reg, `${rowAnchor}:${slugify(headers[i] || "c" + (i + 1))}`,
+          "cell", `${head}: ${cText.slice(0, 60)}`, null, head + " " + cText);
+        return `<td${attrs} data-pf-anchor="${esc(cAnchor)}" id="${esc(cAnchor)}">${c}</td>`;
+      });
+      return `<tr data-pf-anchor="${esc(rowAnchor)}" id="${esc(rowAnchor)}">${newInner}</tr>`;
+    });
+    return out.slice(0, ti) + bodyPart;
+  });
+}
+
+// Plain fenced code blocks (```js and friends — NOT the custom `code` block,
+// which renders as a figure and is anchored in renderCode). Marked emits
+// `<pre><code class="language-<lang>">…</code></pre>` (classless <code> for a
+// bare fence); our own <pre> variants (mermaid, diagram-lean, unknown blocks)
+// all carry attributes on <pre>, so the attribute-less match below can't touch
+// them. Kind `pre`, slugged/labeled from the language + leading code text.
+function tagCodeFenceAnchors(html, reg) {
+  const holdsToken = (s) => /[\x01\x02]|VPSEG/.test(s);
+  return html.replace(/<pre><code( class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g, (m, cls, lang, inner) => {
+    if (holdsToken(inner)) return m;
+    const text = decodeEntitiesLite(stripTags(inner));
+    const lead = text.replace(/\s+/g, " ").trim();
+    if (!lead) return m;
+    const l = lang || "code";
+    const slugSource = `${l} ${lead.split(" ").slice(0, 4).join(" ")}`;
+    const label = (lang ? lang + " · " : "") + (lead.length > 60 ? lead.slice(0, 59) + "…" : lead);
+    const anchor = registerAnchor(reg, "pre", slugSource, label, null, text);
+    return `<pre data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}"><code${cls || ""}>${inner}</code></pre>`;
+  });
 }
 
 // Leading text of a prose list item: drop inline tags and any parked
@@ -1543,7 +1697,62 @@ function loadVirgilFontFace() {
 // controls so their short edges still look sketched rather than melted.
 const SKETCHY_FILTER = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="wf-rough" x="-6%" y="-6%" width="112%" height="112%"><feTurbulence type="fractalNoise" baseFrequency="0.016 0.014" numOctaves="3" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="wf-rough-fine" x="-8%" y="-8%" width="116%" height="116%"><feTurbulence type="fractalNoise" baseFrequency="0.032 0.028" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.7" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>`;
 
-export function renderPlan(markdownSource, { lean = false, sourcePath = null } = {}) {
+/* ---- Changed-since-last-render detection --------------------------------
+   Given the previous plan.md source (extracted from the prior render's
+   embedded `pf-source`, or passed explicitly), re-render it in memory with
+   the SAME renderer and compare anchor maps by content signature:
+   - same anchor id, same sig            -> unchanged
+   - same anchor id, different sig       -> edited
+   - new anchor id, sig seen in old map  -> moved, content intact -> unchanged
+   - new anchor id, sig unseen           -> new
+   - old anchor id gone, sig unseen new  -> removed (listed, nothing to mark)
+   Container anchors (chapter, step, table…) hash their whole content, so an
+   inner edit marks both; the browser layer demotes ancestors of a marked
+   element so only the most specific change is highlighted/navigated. */
+function computeChanges(reg, prevSource) {
+  const prev = renderPlan(prevSource, { lean: true });
+  const oldAnchors = prev.anchors || {};
+  const oldSigs = new Set();
+  const newSigs = new Set();
+  for (const k of Object.keys(oldAnchors)) if (oldAnchors[k].sig) oldSigs.add(oldAnchors[k].sig);
+  for (const a of reg.order) if (reg.anchors[a].sig) newSigs.add(reg.anchors[a].sig);
+
+  const changed = [];
+  for (const a of reg.order) {
+    const n = reg.anchors[a];
+    const o = oldAnchors[a];
+    if (o && o.sig === n.sig) continue;
+    if (n.sig && oldSigs.has(n.sig)) continue;   // moved verbatim — not a change
+    if (!n.sig && o) continue;                    // sig-less anchor that existed before: unknowable, stay quiet
+    changed.push({ anchor: a, type: o ? "edited" : "new" });
+  }
+  const removed = [];
+  for (const a of Object.keys(oldAnchors)) {
+    const o = oldAnchors[a];
+    if (reg.anchors[a] !== undefined) continue;
+    if (o.sig && newSigs.has(o.sig)) continue;    // moved — it lives on under a new id
+    removed.push({ anchor: a, kind: o.kind, label: o.label });
+  }
+  return { changed, removed, prevDocId: prev.docId, prevAnchors: oldAnchors };
+}
+
+function changesScript(changes) {
+  return jsonIsland("pf-changes", {
+    version: 1,
+    prevDocId: changes.prevDocId,
+    changes: changes.changed,
+    removed: changes.removed,
+  });
+}
+
+export function renderPlan(markdownSource, {
+  lean = false,
+  sourcePath = null,
+  prevSource = null,
+  prevRenderedAt = null,   // the previous page's own render timestamp (for its history entry)
+  prevHistory = null,      // the previous page's pf-history entries, carried forward
+  replies = null,          // agent replies to reviewer notes: [{anchor, reply, note?}]
+} = {}) {
   configureMarked();
   const source = String(markdownSource ?? "");
   const { frontmatter, body, bodyOffset } = parseFrontmatter(source);
@@ -1560,9 +1769,36 @@ export function renderPlan(markdownSource, { lean = false, sourcePath = null } =
   const chapters = transformChapters(body, bodyOffset, reg);
 
   const rendered = [];
-  const bodyHtml = renderMarkdownSegment(chapters.html, lean, warnings, rendered, reg, bodyOffset);
+  let bodyHtml = renderMarkdownSegment(chapters.html, lean, warnings, rendered, reg, bodyOffset);
 
-  const plumbing = anchorMapScript(reg, docId) + "\n" + embeddedSourceScript(source);
+  // Changed-since-previous-version marking: stamp `data-pf-changed` onto each
+  // edited/new element (the attribute pair we emit is unique per anchor, so a
+  // plain first-occurrence string replace is exact) and bake the change list
+  // into the page for the browser-side changes navigator. The previous
+  // version's (stripped) anchor map is prepended to the history carried over
+  // from the old page, so the navigator can re-diff against ANY prior version.
+  let changes = null;
+  let history = Array.isArray(prevHistory) ? prevHistory.slice(0, 8) : [];
+  if (prevSource != null && String(prevSource) !== source) {
+    changes = computeChanges(reg, String(prevSource));
+    for (const c of changes.changed) {
+      const marker = `data-pf-anchor="${esc(c.anchor)}" id="${esc(c.anchor)}"`;
+      bodyHtml = bodyHtml.replace(marker, () => `${marker} data-pf-changed="${c.type}"`);
+    }
+    history = [{
+      docId: changes.prevDocId,
+      renderedAt: prevRenderedAt || null,
+      anchors: stripAnchorsForHistory(changes.prevAnchors),
+    }, ...history].slice(0, 8);
+  }
+
+  const cleanReplies = sanitizeReplies(replies, warnings);
+
+  const renderedAt = new Date().toISOString();
+  const plumbing = anchorMapScript(reg, docId, renderedAt) + "\n" + embeddedSourceScript(source) +
+    (changes ? "\n" + changesScript(changes) : "") +
+    (history.length ? "\n" + jsonIsland("pf-history", { version: 1, entries: history }) : "") +
+    (cleanReplies.length ? "\n" + jsonIsland("pf-replies", { version: 1, replies: cleanReplies }) : "");
 
   const usesSketchy = /class="wf-screen[^"]*\bis-sketchy/.test(bodyHtml);
   // NOTE: the `<pre class="mermaid">` now carries a `data-look="…"` attribute, so
@@ -1617,7 +1853,39 @@ export function renderPlan(markdownSource, { lean = false, sourcePath = null } =
     .replace("/* INLINE:interactivity.js */", () => interactivity)
     .replace("/* INLINE:annotate.js */", () => annotateJs);
 
-  return { html, title, slug, warnings, docId };
+  return { html, title, slug, warnings, docId, anchors: reg.anchors, changes };
+}
+
+// Pull the exact previous plan.md bytes back out of a rendered page's embedded
+// `pf-source` script (base64). Returns null when the marker isn't present.
+export function extractEmbeddedSource(html) {
+  const m = /<script type="application\/octet-stream" id="pf-source" data-encoding="base64">([A-Za-z0-9+/=]*)<\/script>/
+    .exec(String(html));
+  return m ? Buffer.from(m[1], "base64").toString("utf8") : null;
+}
+
+// Pull a JSON island (anchor map / history / changes) back out of a rendered
+// page. Returns the parsed value or null. Safe on any input: the islands'
+// JSON never contains a literal "</" (escaped at bake time).
+export function extractIsland(html, id) {
+  const re = new RegExp(`<script type="application/json" id="${id}">([\\s\\S]*?)</script>`);
+  const m = re.exec(String(html));
+  if (!m) return null;
+  try { return JSON.parse(m[1]); } catch { return null; }
+}
+
+// Everything the next render wants to know about the page it replaces:
+// the exact source, its render timestamp, and its accumulated history.
+export function extractPrevVersion(html) {
+  const source = extractEmbeddedSource(html);
+  if (source == null) return null;
+  const map = extractIsland(html, "pf-anchor-map");
+  const hist = extractIsland(html, "pf-history");
+  return {
+    source,
+    renderedAt: map && typeof map.renderedAt === "string" ? map.renderedAt : null,
+    history: hist && Array.isArray(hist.entries) ? hist.entries : [],
+  };
 }
 
 /* ========================================================================== *
@@ -1641,15 +1909,21 @@ function defaultOutPath(slug) {
  * ========================================================================== */
 
 function parseArgs(argv) {
-  const args = { input: null, out: null, lean: false, open: false, noOpen: false, github: false };
+  const args = { input: null, out: null, lean: false, open: false, noOpen: false, github: false, prev: null, fresh: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--lean") args.lean = true;
     else if (a === "--open") args.open = true;
     else if (a === "--no-open") args.noOpen = true;
     else if (a === "--github") args.github = true;
+    else if (a === "--fresh") args.fresh = true;
+    else if (a === "--watch") args.watch = true;
     else if (a === "--out") { args.out = argv[++i]; }
     else if (a.startsWith("--out=")) { args.out = a.slice("--out=".length); }
+    else if (a === "--prev") { args.prev = argv[++i]; }
+    else if (a.startsWith("--prev=")) { args.prev = a.slice("--prev=".length); }
+    else if (a === "--replies") { args.replies = argv[++i]; }
+    else if (a.startsWith("--replies=")) { args.replies = a.slice("--replies=".length); }
     else if (a === "-h" || a === "--help") { args.help = true; }
     else if (!a.startsWith("-") && !args.input) { args.input = a; }
     else { args.unknown = a; }
@@ -1657,7 +1931,7 @@ function parseArgs(argv) {
   return args;
 }
 
-const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open] [--github]
+const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open] [--github] [--prev <path>] [--fresh]
 
   <plan.md>     path to a plan written in the visual-plan format
   --out <path>  output HTML path (default: ./.visual-plans/<slug>/index.html)
@@ -1665,7 +1939,18 @@ const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open]
   --open        open the produced file in the browser
   --no-open     do not open (default)
   --github      also write github.md (GitHub-flavored Markdown for PR comments)
-                next to the output HTML`;
+                next to the output HTML
+  --prev <path> previous version to diff against for change highlights — an
+                older plan.md, or a rendered index.html (its embedded source
+                is used). Default: the page being overwritten at the output
+                path, when one exists.
+  --fresh       no change highlights (skip the previous-version diff)
+  --replies <path>
+                JSON file of agent replies to reviewer notes, shown inline in
+                the page: {"replies":[{"anchor":"…","reply":"…","note":"…"?}]}
+  --watch       re-render on every save of <plan.md> and serve the page at a
+                localhost URL with live reload (the file on disk stays pure);
+                the change-highlight baseline is frozen at watch start`;
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -1685,9 +1970,52 @@ async function main() {
     process.exit(1);
   }
 
+  // Resolve the previous version for change highlights. Explicit --prev wins
+  // (a plan.md, or a rendered page whose embedded source + history we lift);
+  // otherwise the render about to be overwritten at the output path IS the
+  // previous version. --fresh disables the diff entirely.
+  let prev = null;   // { source, renderedAt, history }
+  if (!args.fresh) {
+    if (args.prev) {
+      try {
+        const prevRaw = readFileSync(resolve(args.prev), "utf8");
+        prev = extractPrevVersion(prevRaw) ?? { source: prevRaw, renderedAt: null, history: [] };
+      } catch (e) {
+        console.error(`warning: cannot read --prev ${args.prev}: ${e.message}`);
+      }
+    } else {
+      const { frontmatter } = parseFrontmatter(source);
+      const candidate = args.out
+        ? resolve(args.out)
+        : defaultOutPath(slugify(frontmatter.title || "Untitled plan"));
+      try {
+        prev = extractPrevVersion(readFileSync(candidate, "utf8"));
+      } catch { /* first render at this path — nothing to diff */ }
+    }
+  }
+
+  // Agent replies to reviewer notes (see references/feedback.md §3.6).
+  let replies = null;
+  if (args.replies) {
+    try {
+      replies = JSON.parse(readFileSync(resolve(args.replies), "utf8"));
+    } catch (e) {
+      console.error(`warning: cannot read --replies ${args.replies}: ${e.message}`);
+    }
+  }
+
+  const renderOpts = () => ({
+    lean: args.lean,
+    sourcePath: inputPath,
+    prevSource: prev ? prev.source : null,
+    prevRenderedAt: prev ? prev.renderedAt : null,
+    prevHistory: prev ? prev.history : [],
+    replies,
+  });
+
   let result;
   try {
-    result = renderPlan(source, { lean: args.lean, sourcePath: inputPath });
+    result = renderPlan(source, renderOpts());
   } catch (e) {
     console.error(`error: failed to render plan: ${e.stack || e.message}`);
     process.exit(1);
@@ -1705,6 +2033,12 @@ async function main() {
   for (const w of result.warnings) console.error(`warning: ${w}`);
   console.log(`wrote ${outPath}`);
   console.log(`title: ${result.title}`);
+  if (result.changes) {
+    const c = result.changes;
+    const edited = c.changed.filter((x) => x.type === "edited").length;
+    const added = c.changed.length - edited;
+    console.log(`changes: ${edited} edited, ${added} new, ${c.removed.length} removed (vs previous version — highlighted in the page)`);
+  }
 
   if (args.github) {
     try {
@@ -1717,7 +2051,7 @@ async function main() {
     }
   }
 
-  if (args.open && !args.noOpen) {
+  if (args.open && !args.noOpen && !args.watch) {
     try {
       const { openFile } = await import("./open.mjs");
       const res = await openFile(outPath);
@@ -1733,6 +2067,23 @@ async function main() {
     } catch (e) {
       console.error(`warning: open failed: ${e.message}`);
     }
+  }
+
+  if (args.watch) {
+    // Re-render on save, live-reload via a loopback-only SSE server. The
+    // change-highlight baseline (`prev`) is frozen at watch start, so the
+    // page always shows "everything changed this watch session", not just
+    // the last keystroke. The written file stays offline-pure — the reload
+    // snippet is injected at serve time only.
+    const rebuild = () => {
+      const src = readFileSync(inputPath, "utf8");
+      const r = renderPlan(src, renderOpts());
+      writeFileSync(outPath, r.html, "utf8");
+      for (const w of r.warnings) console.error(`warning: ${w}`);
+      return r;
+    };
+    const { startWatch } = await import("./watch.mjs");
+    await startWatch({ inputPath, outPath, rebuild, open: args.open && !args.noOpen });
   }
 }
 

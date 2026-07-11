@@ -344,20 +344,11 @@
   border: 1px solid currentColor;
   flex-shrink: 0;
 }
-.pf-qstate.pf-untouched { color: var(--fg-faint); }
 .pf-qstate.pf-default { color: var(--tag-new); }
 .pf-qstate.pf-custom { color: var(--tag-edit); }
-
-/* Verdict */
-.pf-verdict { display: flex; flex-direction: column; gap: 8px; }
-.pf-verdict-opt {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
-  cursor: pointer;
-  padding: 4px 0;
-}
+.pf-qstate.pf-chg-edited { color: var(--tag-edit); }
+.pf-qstate.pf-chg-new { color: var(--tag-new); }
+.pf-qstate.pf-chg-removed { color: var(--tag-delete); }
 
 /* Export */
 .pf-export-btns { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -383,6 +374,241 @@
 .pf-viewed:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .tab-btn.pf-tab-viewed { opacity: 0.6; }
 .tab-btn.pf-tab-viewed[aria-selected="true"] { opacity: 1; }
+
+/* ----- Changed-since-last-version highlights + navigator ----------------- */
+/* The renderer stamps data-pf-changed="edited|new" on the most specific
+   changed elements of a re-render ("parent" = a container whose only change
+   is a marked descendant — kept quiet). Accent bar + soft tint, both themes
+   via the styles.css tag tokens. */
+[data-pf-changed="edited"] {
+  box-shadow: inset 3px 0 0 0 var(--tag-edit);
+  background: var(--tag-edit-bg);
+}
+[data-pf-changed="new"] {
+  box-shadow: inset 3px 0 0 0 var(--tag-new);
+  background: var(--tag-new-bg);
+}
+[data-pf-changed="edited"],
+[data-pf-changed="new"] { padding-left: 8px; }
+/* Table rows can't take padding; tint the row, bar the first cell. */
+tr[data-pf-changed] { padding-left: 0; box-shadow: none; }
+tr[data-pf-changed="edited"] > td:first-child { box-shadow: inset 3px 0 0 0 var(--tag-edit); }
+tr[data-pf-changed="new"] > td:first-child { box-shadow: inset 3px 0 0 0 var(--tag-new); }
+tr[data-pf-changed="edited"] > td { background: var(--tag-edit-bg); }
+tr[data-pf-changed="new"] > td { background: var(--tag-new-bg); }
+td[data-pf-changed] { padding-left: 8px; }
+
+.pf-changes-bar {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 0 var(--border-strong);
+}
+.pf-changes-label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tag-edit);
+  padding: 9px 13px;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+.pf-changes-step {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.pf-changes-step:hover { color: var(--fg); background: var(--bg-sunken); }
+.pf-changes-step:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.pf-changes-pos {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  padding: 9px 10px;
+  border-right: 1px solid var(--border);
+  min-width: 44px;
+  text-align: center;
+}
+.pf-changes-bar .pf-x { padding: 8px 10px; }
+
+@media (max-width: 640px) {
+  .pf-changes-bar { left: 8px; bottom: 58px; }
+}
+
+/* ----- Selection notes: chip + quote + highlight ------------------------- */
+.pf-selchip {
+  position: fixed;
+  z-index: 60;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border: 1px solid var(--border-strong);
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pf-selchip:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.pf-sel-quote {
+  margin: 0 0 8px;
+  padding: 5px 9px;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+.pf-sel-mark {
+  background: var(--tag-edit-bg);
+  box-shadow: inset 0 -2px 0 0 var(--tag-edit);
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ----- Agent reply cards ------------------------------------------------- */
+.pf-reply {
+  margin: 8px 0 14px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--tag-reuse);
+  background: var(--bg-elev);
+  padding: 9px 12px;
+}
+.pf-reply-head {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tag-reuse);
+  margin-bottom: 5px;
+}
+.pf-reply-quote {
+  margin: 0 0 6px;
+  padding: 2px 9px;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  border-left: 3px solid var(--border-strong);
+}
+.pf-reply-body { font-size: 0.86rem; white-space: pre-wrap; }
+li > .pf-reply { margin: 6px 0 4px; }
+.pf-reply-item {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pf-reply-item .pf-note-text { margin-top: 3px; }
+
+/* ----- Presenter mode ----------------------------------------------------- */
+.pf-present-rail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  background: var(--bg-elev);
+  border-bottom: 2px solid var(--border-strong);
+}
+.pf-present-segs { display: flex; height: 6px; }
+.pf-present-seg {
+  flex: 1;
+  border: 0;
+  border-right: 1px solid var(--bg-elev);
+  background: var(--bg-sunken);
+  padding: 0;
+  cursor: pointer;
+}
+.pf-present-seg-done { background: var(--accent-soft); }
+.pf-present-seg-cur { background: var(--accent); }
+.pf-present-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+}
+.pf-present-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-present-count {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--fg-muted);
+}
+.pf-present-hint {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--fg-faint);
+  margin-left: auto;
+  white-space: nowrap;
+}
+body.pf-present { padding-top: 56px; }
+body.pf-present .pf-chapter { display: none; }
+body.pf-present .pf-chapter.pf-present-cur { display: block; }
+body.pf-present .pf-sidenav { display: none; }
+
+/* ----- Review-progress meter --------------------------------------------- */
+.pf-pill-btn.pf-pill-progress { color: var(--tag-new); }
+.pf-prog-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.pf-prog-label {
+  flex: 0 0 34%;
+  font-size: 0.76rem;
+  color: var(--fg-muted);
+}
+.pf-prog-bar {
+  flex: 1;
+  height: 7px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.pf-prog-bar i {
+  display: block;
+  height: 100%;
+  background: var(--tag-new);
+}
+.pf-prog-detail {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--fg-faint);
+  min-width: 38px;
+  text-align: right;
+}
+
+/* Version dropdown in the changes bar */
+.pf-changes-vsel {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  background: var(--bg-elev);
+  border: 0;
+  border-right: 1px solid var(--border);
+  padding: 8px 6px;
+  cursor: pointer;
+}
+.pf-changes-vsel:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 
 /* ----- Toast ------------------------------------------------------------ */
 .pf-toast {
@@ -412,9 +638,12 @@
 /* ----- Print: hide ALL annotate UI -------------------------------------- */
 @media print {
   .pf-pill, .pf-overlay, .pf-panel, .pf-composer, .pf-viewer,
-  .pf-permalink, .pf-pin, .pf-toast, .pf-viewed {
+  .pf-permalink, .pf-pin, .pf-toast, .pf-viewed, .pf-changes-bar,
+  .pf-selchip, .pf-present-rail {
     display: none !important;
   }
+  body.pf-present { padding-top: 0; }
+  body.pf-present .pf-chapter { display: block !important; }
   .pf-hover-target { outline: 0 !important; background: transparent !important; }
   .tab-btn.pf-tab-viewed { opacity: 1 !important; }
 }
