@@ -266,6 +266,37 @@ check("no task anchors -> no checklist block (docs without task lists are unaffe
   assert.ok(!out.includes("## checklist"), "richMap has no task-kind anchors; nothing to summarize");
 });
 
+/* ---- 9b. option picks + answer notes ------------------------------------ */
+check("option pick exports as custom: with the option label; answer note adds a note: line", () => {
+  const state = {
+    version: 1, viewed: {}, notes: [],
+    answers: {
+      "q:chunk-uploads": { mode: "option", text: "", opt: "Yes, behind a flag", note: "  flip it after\na week " },
+      "q:token-scope": { mode: "default", text: "", opt: "", note: "org-level matches billing too" }
+    }
+  };
+  const out = buildExportMarkdown(state, richMap, richOrder);
+  assert.ok(out.includes(
+    "## answer — \"Chunk uploads above 5MB?\" [q:chunk-uploads]\n" +
+    "custom: Yes, behind a flag\n" +
+    "note: flip it after a week\n"), "option -> custom: label; note whitespace-collapsed");
+  assert.ok(out.includes(
+    "## answer — \"Per-user or per-org tokens?\" [q:token-scope]\n" +
+    "accepted default: Per-org — matches the existing ownership model.\n" +
+    "note: org-level matches billing too\n"), "explicit default keeps its note");
+});
+check("migrateState: option pick without its label degrades to default; note coerced", () => {
+  const m = migrateState({ answers: {
+    "q:a": { mode: "option", opt: "Keep it" },
+    "q:b": { mode: "option" },
+    "q:c": { mode: "default", note: 42 }
+  }});
+  assert.equal(m.answers["q:a"].mode, "option");
+  assert.equal(m.answers["q:a"].opt, "Keep it");
+  assert.equal(m.answers["q:b"].mode, "default", "label-less option pick can't be restored");
+  assert.equal(m.answers["q:c"].note, "", "non-string note dropped");
+});
+
 /* ---- 10. selection anchors + progress survive migration ----------------- */
 check("migrateState keeps a well-formed sel triple, drops a broken one, clamps depth", () => {
   const m = migrateState({

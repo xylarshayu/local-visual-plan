@@ -191,11 +191,15 @@ with a `<summary>` carrying the label. Interactivity is the inlined
   third-party input in the normal flow.
 
 ### `questions` — open questions
-`# ` starts a question; `default: <text>` gives the recommended default.
+`# ` starts a question; `default: <text>` gives the recommended default;
+optional `option: <label> — <caption>` lines offer concrete alternative
+answers (the ` — caption` is optional and renders as a muted description).
 
 ```questions
 # Chunk uploads above 5MB?
 default: No — single PUT until real >5MB usage appears.
+option: Yes, behind a flag — most control, most plumbing
+option: Yes, always
 # Per-user or per-org tokens?
 default: Per-org — matches the existing ownership model.
 ```
@@ -206,14 +210,25 @@ carries an anchor (`data-pf-anchor` + `id`) and holds `.q-text`, an optional
 
 ```
 <div class="q-form">
-  <label><input type="radio" name="<q-anchor>" value="default" checked> Accept default</label>
+  <label><input type="radio" name="<q-anchor>" value="default"> Accept default</label>
+  <label class="q-opt" data-pf-anchor="<q-anchor>:opt-<slug>" id="…">
+    <input type="radio" name="<q-anchor>" value="option" data-opt="<label>">
+    <span class="q-opt-text"><span class="q-opt-label">…</span><span class="q-opt-caption">…</span></span>
+  </label>
   <label><input type="radio" name="<q-anchor>" value="custom"> Answer differently</label>
   <textarea class="q-custom" placeholder="Your answer…"></textarea>
+  <textarea class="q-note" placeholder="Optional note on your answer…"></textarea>
 </div>
 ```
 
-The textarea is hidden by CSS until the *custom* radio is checked. Without JS the
-form is inert (the answer just isn't captured) — the plan still reads fine.
+**Nothing is pre-selected**: explicitly clicking *Accept default* is a
+deliberate answer (it records and counts toward the review-progress meter),
+while an untouched question still exports its accepted default — the intent
+gesture and the export semantics are decoupled on purpose. Each `option:`
+line is a child anchor (kind `opt`, `<q-anchor>:opt-<label-slug>`). The
+custom textarea is revealed when the *custom* radio is checked; the
+answer-note textarea once any answer is selected. Without JS the form is
+inert (the answer just isn't captured) — the plan still reads fine.
 
 ### `callout` — decision / warning / risk aside
 Info attrs: `tone=info|decision|warning|risk` (default `info`), `title=<text>`

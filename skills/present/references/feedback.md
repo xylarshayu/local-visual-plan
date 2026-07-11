@@ -24,6 +24,7 @@ source: <absolute plan.md path or "unknown">
 
 ## answer — "<question label>" [<anchor>]
 accepted default: <default text>        (or)        custom: <user text>
+note: <optional single-line note the user attached to their answer>
 ```
 
 ### Changes from v1
@@ -83,8 +84,16 @@ accepted default: <default text>        (or)        custom: <user text>
   each `## answer` header. `accepted default:` echoes the plan's own
   `default:` text verbatim (so you don't have to re-open `plan.md` to know
   what was accepted) and covers both an explicit "Accept default" click and a
-  question the reviewer simply left on its pre-selected default; `custom:` is
-  the user's own words.
+  question the reviewer left untouched (the form pre-selects nothing, but an
+  untouched question still means the default stands); `custom:` is the user's
+  own words — or, when the reviewer picked one of the plan's authored
+  `option:` choices, that option's label verbatim (the chosen option IS the
+  decided text; there is no separate grammar for it).
+- **`note: <text>`** — optional, at most one per `## answer`, always a single
+  whitespace-collapsed line. A side-comment the reviewer attached to their
+  answer ("accept default, but revisit after launch"). Treat it as rationale
+  riding along with the decision: fold it into the plan next to the decided
+  text when it changes what to write, otherwise just take it into account.
 - Notes marked **note to self** in the composer never appear in this export —
   the grammar has no field for them. If a paste has zero `## note` blocks but
   the user says they left some, those were all self-notes; there is no hidden

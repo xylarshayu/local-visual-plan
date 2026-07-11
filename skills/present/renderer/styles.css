@@ -863,7 +863,34 @@ div[data-block=questions] .question + .question { margin-top: -1px; }
   border: 1px solid var(--border);
 }
 .q-custom:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; border-color: var(--accent); }
-.q-form:has(input[value="default"]:checked) .q-custom { display: none; }
+/* Nothing is pre-selected, so both textareas hide until the relevant choice
+   exists: custom's on the custom radio, the answer-note on ANY answer. Where
+   :has() is unsupported they stay visible (usable) rather than hidden. */
+.q-form:has(input[type="radio"]:not(:checked)) .q-custom { display: none; }
+.q-form:has(input[value="custom"]:checked) .q-custom { display: block; }
+.q-form:has(input[type="radio"]:not(:checked)) .q-note { display: none; }
+.q-form:has(input[type="radio"]:checked) .q-note { display: block; }
+
+/* Agent-offered options: label + muted caption stacked */
+.q-form label.q-opt { align-items: flex-start; }
+.q-opt-text { display: flex; flex-direction: column; gap: 1px; }
+.q-opt-caption {
+  font-size: 0.76rem;
+  color: var(--fg-faint);
+}
+.q-note {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  margin-top: 2px;
+  padding: 6px 10px;
+  min-height: 2.2em;
+  resize: vertical;
+  color: var(--fg-muted);
+  background: var(--bg-code);
+  border: 1px dashed var(--border);
+}
+.q-note:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; border-color: var(--accent); }
 
 /* ----- callout ---------------------------------------------------------- */
 aside[data-block=callout] {

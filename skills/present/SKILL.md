@@ -50,8 +50,11 @@ page" — is this skill, directly.
   reach for these over a Mermaid `erDiagram` or a prose description whenever
   the shape itself, or a change to it, is the point.
 - **A `questions` block whenever you want the reader's input.** Every entry
-  renders as a real form (Accept default / Answer differently) — don't ask
-  "does this look right?" in chat when you can ask it on the page instead.
+  renders as a real form — Accept default / your authored `option:` choices
+  (with captions) / Answer differently, plus an optional note box on any
+  answer — don't ask "does this look right?" in chat when you can ask it on
+  the page instead. Offer `option:` lines whenever you can name the 2–3
+  realistic alternatives; picking one is less work than typing it.
 
 `references/format.md` is the **authoritative block catalog** — every block's
 authoring syntax and output contract. Don't invent block types or attributes;

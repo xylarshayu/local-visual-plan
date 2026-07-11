@@ -318,13 +318,29 @@ fixture('all-blocks.md', (check) => {
   check('questions render the interactive answer form (contract markup)', () => {
     assert.match(html, /class="q-form"/, '.q-form present')
     assert.match(html, /<textarea class="q-custom"/, '.q-custom textarea present')
-    // Two authored questions -> two radio groups, each with default (checked) + custom.
-    assert.match(html, /<input type="radio" name="q:[^"]+" value="default" checked>/, 'default radio checked')
+    // Two authored questions -> two radio groups; NOTHING is pre-selected —
+    // an explicit "Accept default" click is a deliberate answer, while an
+    // untouched question still exports its accepted default.
+    assert.match(html, /<input type="radio" name="q:[^"]+" value="default">/, 'default radio present')
+    assert.ok(!/value="default" checked/.test(html), 'no radio is pre-checked')
     assert.match(html, /<input type="radio" name="q:[^"]+" value="custom">/, 'custom radio present')
+    assert.match(html, /<textarea class="q-note"/, '.q-note answer-note textarea present')
     // The radio group name matches the question's own anchor.
     const qAnchor = (html.match(/class="question" data-pf-anchor="(q:[^"]+)"/) || [])[1]
     assert.ok(qAnchor, 'question carries a q: anchor')
     assert.ok(count(html, `name="${qAnchor}"`) >= 2, 'both radios share the question anchor as name')
+  })
+
+  check('agent-offered option: lines render as radios with captions + opt anchors', () => {
+    const r = renderPlan(
+      '---\ntitle: T\n---\n\n```questions\n# Ship behind a flag?\ndefault: Yes.\noption: No flag — simplest, but risky rollback\noption: Gradual rollout\n```\n',
+    )
+    assert.match(r.html, /<input type="radio" name="q:ship-behind-a-flag" value="option" data-opt="No flag">/, 'option radio carries its label in data-opt')
+    assert.match(r.html, /<span class="q-opt-label">No flag<\/span><span class="q-opt-caption">simplest, but risky rollback<\/span>/, 'caption rendered')
+    assert.match(r.html, /<span class="q-opt-label">Gradual rollout<\/span>/, 'caption-less option renders label only')
+    const opt = r.anchors['q:ship-behind-a-flag:opt-no-flag']
+    assert.ok(opt && opt.kind === 'opt', 'option registered as child anchor (kind opt)')
+    assert.ok(!/<input[^>]*value="option"[^>]*checked/.test(r.html), 'options are not pre-checked either')
   })
 
   // --- escaping: a <script> in text content must not be live ---

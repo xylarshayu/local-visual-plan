@@ -145,10 +145,15 @@
       Object.keys(raw.answers).forEach(function (k) {
         var a = raw.answers[k];
         if (!a || typeof a !== "object") return;
-        s.answers[k] = {
-          mode: a.mode === "custom" ? "custom" : "default",
-          text: typeof a.text === "string" ? a.text : ""
+        var entry = {
+          mode: a.mode === "custom" ? "custom" : a.mode === "option" ? "option" : "default",
+          text: typeof a.text === "string" ? a.text : "",
+          opt: typeof a.opt === "string" ? a.opt : "",
+          note: typeof a.note === "string" ? a.note : ""
         };
+        /* an option pick without its label can't be restored — treat as default */
+        if (entry.mode === "option" && !entry.opt) entry.mode = "default";
+        s.answers[k] = entry;
       });
     }
     /* v2 dropped the verdict tri-state — a `verdict` key in an older stored
@@ -232,11 +237,12 @@
       );
     });
 
-    /* Every question exports exactly one answer, in doc order. The form
-       pre-selects the default, so a question the user never clicked has the
-       same meaning as an explicit "Accept default" — both export as
-       `accepted default:`. (v1 counted untouched questions as "unreviewed",
-       which misread leaving the default in place as skipping the question.) */
+    /* Every question exports exactly one answer, in doc order. Nothing is
+       pre-selected in the form, but an untouched question still means the
+       default stands — it exports as `accepted default:` same as an explicit
+       accept. An agent-offered option pick exports as `custom:` with the
+       option's label (it IS the decided text — no new grammar needed), and a
+       non-empty answer note adds one whitespace-collapsed `note:` line. */
     var answers = state.answers || {};
     var questionAnchors = order.filter(function (a) { return kindOf(a) === "q"; });
     questionAnchors.forEach(function (a) {
@@ -245,11 +251,17 @@
       var line;
       if (ans && ans.mode === "custom") {
         line = "custom: " + (ans.text == null ? "" : String(ans.text));
+      } else if (ans && ans.mode === "option" && ans.opt) {
+        line = "custom: " + String(ans.opt);
       } else {
         var def = (anchors[a] && anchors[a].default != null) ? String(anchors[a].default) : "";
         line = "accepted default: " + def;
       }
-      blocks.push(head + "\n" + line);
+      var block = head + "\n" + line;
+      if (ans && ans.note != null && normalizeText(ans.note)) {
+        block += "\nnote: " + normalizeText(ans.note);
+      }
+      blocks.push(block);
     });
 
     var body = blocks.join("\n\n");
@@ -878,9 +890,19 @@
     if (host) openViewer(host.getAttribute("data-pf-anchor"), host);
   });
 
-  /* ----- Questions wiring ---------------------------------------------- */
-  function recordAnswer(anchor, mode, text) {
-    state.answers[anchor] = { mode: mode === "custom" ? "custom" : "default", text: mode === "custom" ? (text || "") : "" };
+  /* ----- Questions wiring ------------------------------------------------
+     Nothing is pre-selected: clicking "Accept default" is a real gesture (it
+     records the answer and counts toward progress), while an untouched
+     question still exports its accepted default. Agent-offered options are
+     radios too (value="option", label in data-opt); every answered question
+     reveals an optional note box that rides along in the export. */
+  function recordAnswer(anchor, mode, text, opt, note) {
+    state.answers[anchor] = {
+      mode: mode === "custom" ? "custom" : mode === "option" ? "option" : "default",
+      text: mode === "custom" ? (text || "") : "",
+      opt: mode === "option" ? (opt || "") : "",
+      note: note || ""
+    };
     persist();
     paintProgress();
     if (panelOpen()) renderPanel();
@@ -890,15 +912,32 @@
       var anchor = q.getAttribute("data-pf-anchor");
       var radios = q.querySelectorAll('input[type="radio"]');
       var ta = q.querySelector(".q-custom");
+      var noteTa = q.querySelector(".q-note");
+      function currentMode() {
+        var checked = q.querySelector('input[type="radio"]:checked');
+        return checked ? { mode: checked.value, opt: checked.getAttribute("data-opt") || "" } : null;
+      }
+      function record() {
+        var cur = currentMode();
+        if (!cur) return;
+        recordAnswer(anchor, cur.mode, ta ? ta.value : "", cur.opt, noteTa ? noteTa.value : "");
+      }
       var saved = state.answers[anchor];
       if (saved) {
-        Array.prototype.forEach.call(radios, function (r) { r.checked = (r.value === saved.mode); });
+        Array.prototype.forEach.call(radios, function (r) {
+          if (saved.mode === "option") {
+            r.checked = (r.value === "option" && (r.getAttribute("data-opt") || "") === saved.opt);
+          } else {
+            r.checked = (r.value === saved.mode);
+          }
+        });
         if (ta && saved.mode === "custom") ta.value = saved.text || "";
+        if (noteTa && saved.note) noteTa.value = saved.note;
       }
       Array.prototype.forEach.call(radios, function (r) {
         r.addEventListener("change", function () {
           if (!r.checked) return;
-          recordAnswer(anchor, r.value, ta ? ta.value : "");
+          record();
           if (r.value === "custom" && ta) ta.focus();
         });
       });
@@ -908,7 +947,14 @@
           var custom = q.querySelector('input[value="custom"]');
           if (custom && !custom.checked) custom.checked = true;
           clearTimeout(deb);
-          deb = setTimeout(function () { recordAnswer(anchor, "custom", ta.value); }, 300);
+          deb = setTimeout(record, 300);
+        });
+      }
+      if (noteTa) {
+        var debN;
+        noteTa.addEventListener("input", function () {
+          clearTimeout(debN);
+          debN = setTimeout(record, 300);
         });
       }
     });
@@ -1408,6 +1454,8 @@
         var ans = state.answers[a];
         var st = (ans && ans.mode === "custom")
           ? '<span class="pf-qstate pf-custom">custom answer</span>'
+          : (ans && ans.mode === "option")
+          ? '<span class="pf-qstate pf-custom">option</span>'
           : '<span class="pf-qstate pf-default">default</span>';
         html += '<div class="pf-qitem"><a class="pf-jump" href="#' + escapeHtml(a) + '" data-pf-jump="' + escapeHtml(a) + '">' +
           escapeHtml(labelFor(a)) + '</a>' + st + '</div>';

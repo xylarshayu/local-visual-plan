@@ -754,26 +754,51 @@ function renderQuestions(body, ctx) {
     const raw = lines[idx];
     if (!raw.trim()) continue;
     const qM = /^#\s+(.*)$/.exec(raw.trim());
-    if (qM) { cur = { text: qM[1].trim(), def: "", startIdx: idx, endIdx: idx }; qs.push(cur); continue; }
+    if (qM) { cur = { text: qM[1].trim(), def: "", opts: [], startIdx: idx, endIdx: idx }; qs.push(cur); continue; }
     const dM = /^default:\s?(.*)$/i.exec(raw.trim());
     if (dM && cur) { cur.def = dM[1].trim(); cur.endIdx = idx; continue; }
+    // `option: <label> — <caption>` — an agent-offered alternative answer;
+    // the caption (optional, same ` — ` convention as steps/filetree notes)
+    // renders as a muted description under the label.
+    const oM = /^option:\s?(.*)$/i.exec(raw.trim());
+    if (oM && cur) {
+      const { head, note } = splitTrailingNote(oM[1]);
+      if (head) cur.opts.push({ label: head, caption: note, idx, raw: raw.trim() });
+      cur.endIdx = idx;
+      continue;
+    }
     if (cur) { cur.text += " " + raw.trim(); cur.endIdx = idx; }
   }
   let out = '<div data-block="questions">';
   for (const q of qs) {
     const lines2 = ctx.bodyStartLine != null
       ? [ctx.bodyStartLine + q.startIdx, ctx.bodyStartLine + q.endIdx] : null;
-    const anchor = registerAnchor(ctx.reg, "q", q.text, q.text, lines2, q.text + " " + q.def);
+    const optsSig = q.opts.map((o) => o.raw).join(" ");
+    const anchor = registerAnchor(ctx.reg, "q", q.text, q.text, lines2, q.text + " " + q.def + " " + optsSig);
     out += `<div class="question" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
     out += `<p class="q-text">${esc(q.text)}</p>`;
     if (q.def) out += `<p class="q-default">${esc(q.def)}</p>`;
-    // Interactive answer form: default is pre-selected; the custom textarea is
-    // hidden by CSS until the "custom" radio is checked. The annotate script
-    // reads these to build the export; without JS the form is simply inert.
+    // Interactive answer form. NOTHING is pre-selected: explicitly clicking
+    // "Accept default" is a deliberate answer (and counts as touched), while
+    // an untouched question still exports its accepted default — the intent
+    // gesture and the export semantics are decoupled on purpose. The custom
+    // textarea and the per-answer note box are revealed by CSS/JS once the
+    // relevant choice exists. Without JS the form is simply inert.
     out += '<div class="q-form">';
-    out += `<label><input type="radio" name="${esc(anchor)}" value="default" checked> Accept default</label>`;
+    out += `<label><input type="radio" name="${esc(anchor)}" value="default"> Accept default</label>`;
+    for (const o of q.opts) {
+      const oLines = ctx.bodyStartLine != null ? [ctx.bodyStartLine + o.idx, ctx.bodyStartLine + o.idx] : null;
+      const oAnchor = registerChildAnchor(
+        ctx.reg, `${anchor}:opt-${slugify(o.label)}`, "opt", o.label, oLines, o.raw);
+      out += `<label class="q-opt" data-pf-anchor="${esc(oAnchor)}" id="${esc(oAnchor)}">`;
+      out += `<input type="radio" name="${esc(anchor)}" value="option" data-opt="${esc(o.label)}">`;
+      out += `<span class="q-opt-text"><span class="q-opt-label">${esc(o.label)}</span>`;
+      if (o.caption) out += `<span class="q-opt-caption">${esc(o.caption)}</span>`;
+      out += "</span></label>";
+    }
     out += `<label><input type="radio" name="${esc(anchor)}" value="custom"> Answer differently</label>`;
     out += '<textarea class="q-custom" placeholder="Your answer…"></textarea>';
+    out += '<textarea class="q-note" placeholder="Optional note on your answer…"></textarea>';
     out += "</div>";
     out += "</div>";
   }
