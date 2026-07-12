@@ -312,6 +312,62 @@ textarea.field-input {
   margin-right: 6px;
   color: var(--fg-faint);
 }
+/* ── archive zone (drag-to-archive) ────────────────────────────── */
+.archive-zone {
+  position: fixed; bottom: 20px; right: 20px; z-index: 50;
+  width: 48px; height: 48px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; color: var(--fg-faint);
+  transition: all 0.25s ease;
+  background: var(--bg);
+  cursor: default;
+  user-select: none;
+  pointer-events: none;
+}
+.archive-zone .zone-label {
+  opacity: 0;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+.archive-zone .zone-icon {
+  font-size: 18px; line-height: 1;
+}
+.archive-zone.drag-active {
+  width: auto; height: auto;
+  padding: 12px 20px;
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 20px var(--ring);
+}
+.archive-zone.drag-active .zone-label {
+  opacity: 1;
+}
+.archive-zone.drag-hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: 0 0 30px var(--ring);
+  transform: scale(1.05);
+}
+.archive-zone.drag-hover .zone-label {
+  color: var(--accent-fg);
+}
+
+/* drag ghost */
+.drag-ghost {
+  position: fixed; z-index: 500;
+  pointer-events: none;
+  opacity: 0.92;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  transition: transform 0.05s ease-out;
+}
+.card.dragging {
+  opacity: 0.3;
+}
 /* ── responsive ─────────────────────────────────────────────────── */
 @media (max-width: 720px) {
   .sidebar { display: none; }
@@ -363,6 +419,12 @@ textarea.field-input {
   <div class="overlay-panel" style="width:380px;text-align:center" id="confirm-panel"></div>
 </div>
 
+<!-- archive drop zone -->
+<div class="archive-zone" id="archive-zone">
+  <span class="zone-icon">&#x1F4E4;</span>
+  <span class="zone-label">Drop to archive</span>
+</div>
+
 <script>
 /* ── state ──────────────────────────────────────────────────────── */
 let plans = [];
@@ -380,8 +442,12 @@ document.getElementById('theme-btn').addEventListener('click', () => {
 });
 (function () {
   try {
-    const t = localStorage.getItem('pb-theme');
-    if (t) document.documentElement.dataset.theme = t;
+    let t = localStorage.getItem('pb-theme');
+    if (!t) {
+      t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      localStorage.setItem('pb-theme', t);
+    }
+    document.documentElement.dataset.theme = t;
   } catch {}
 })();
 
@@ -672,8 +738,82 @@ async function doUnarchive() {
   document.getElementById('confirm-overlay').classList.remove('open');
 }
 
+/* ── drag-to-archive ────────────────────────────────────────────── */
+let dragState = null;
+let dragSuppressClick = false;
+
+document.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  const card = e.target.closest('[data-plan-id]');
+  if (!card || e.target.closest('a') || e.target.closest('button')) return;
+  const rect = card.getBoundingClientRect();
+  dragState = {
+    card,
+    ghost: null,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    startX: rect.left,
+    startY: rect.top,
+    w: rect.width,
+    h: rect.height,
+    moved: false,
+  };
+});
+
+document.addEventListener('mousemove', e => {
+  if (!dragState) return;
+  const dx = e.clientX - dragState.startX;
+  const dy = e.clientY - dragState.startY;
+  if (!dragState.moved) {
+    if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    dragState.moved = true;
+    dragState.card.classList.add('dragging');
+    const clone = dragState.card.cloneNode(true);
+    clone.className = 'card drag-ghost';
+    clone.style.left = dragState.startX + 'px';
+    clone.style.top = dragState.startY + 'px';
+    clone.style.width = dragState.w + 'px';
+    clone.style.height = dragState.h + 'px';
+    document.body.appendChild(clone);
+    dragState.ghost = clone;
+    document.getElementById('archive-zone').classList.add('drag-active');
+  }
+  const ghost = dragState.ghost;
+  ghost.style.left = (e.clientX - dragState.offsetX) + 'px';
+  ghost.style.top = (e.clientY - dragState.offsetY) + 'px';
+  const tilt = Math.max(-12, Math.min(12, dx * 0.12));
+  ghost.style.transform = `rotate(${tilt}deg)`;
+  const zone = document.getElementById('archive-zone');
+  const zr = zone.getBoundingClientRect();
+  if (e.clientX >= zr.left && e.clientX <= zr.right && e.clientY >= zr.top && e.clientY <= zr.bottom) {
+    zone.classList.add('drag-hover');
+  } else {
+    zone.classList.remove('drag-hover');
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (!dragState) return;
+  const { card, ghost, moved } = dragState;
+  dragState = null;
+  card.classList.remove('dragging');
+  const zone = document.getElementById('archive-zone');
+  zone.classList.remove('drag-active');
+  const wasOver = zone.classList.contains('drag-hover');
+  zone.classList.remove('drag-hover');
+  if (ghost) ghost.remove();
+  if (!moved) return;
+  dragSuppressClick = true;
+  setTimeout(() => { dragSuppressClick = false; }, 50);
+  if (wasOver && card.dataset.planId) {
+    confirmArchive(card.dataset.planId);
+  }
+});
+
 /* ── event delegation (no inline onclick) ──────────────────────── */
 document.addEventListener('click', e => {
+  /* suppress click after drag */
+  if (dragSuppressClick) { dragSuppressClick = false; return; }
   /* ── confirm modal (check first — most specific) ── */
   if (e.target.closest('[data-confirm="archive"]')) return doArchive();
   if (e.target.closest('[data-confirm="unarchive"]')) return doUnarchive();
