@@ -622,7 +622,7 @@ function render() {
     const missing = p._missing ? '<span style="color:var(--accent);font-size:11px;margin-left:8px">MISSING</span>' : '';
 
     return '<div class="card" data-plan-id="' + esc(p.id) + '">'
-      + '<a class="card-title" href="' + esc(p.html) + '" target="_blank" style="text-decoration:none;color:inherit;display:block">' + esc(p.title) + missing + '</a>'
+      + '<a class="card-title" href="' + esc(pathUrl(p.html)) + '" target="_blank" style="text-decoration:none;color:inherit;display:block">' + esc(p.title) + missing + '</a>'
       + '<div class="card-meta">'
       + (status ? '<span class="status-badge" data-status="' + esc(status) + '">' + esc(status) + '</span>' : '')
       + '<span>' + date + '</span>'
@@ -631,7 +631,7 @@ function render() {
       + (tags ? '<div class="card-tags">' + tags + '</div>' : '')
       + notes
       + '<div class="card-actions">'
-      + '<a class="btn" href="' + esc(p.html) + '" target="_blank">Open</a>'
+      + '<a class="btn" href="' + esc(pathUrl(p.html)) + '" target="_blank">Open</a>'
       + '<button class="btn" data-plan-edit="' + esc(p.id) + '">Edit</button>'
       + (showArchived
         ? '<button class="btn" data-plan-unarchive="' + esc(p.id) + '">Unarchive</button>'
@@ -669,7 +669,7 @@ function openOverlay(id) {
     + '</label>'
     + '<div class="overlay-actions">'
     + '<button class="btn" data-overlay="cancel">Cancel</button>'
-    + '<a class="btn" href="' + esc(p.html) + '" target="_blank">Open in new tab</a>'
+    + '<a class="btn" href="' + esc(pathUrl(p.html)) + '" target="_blank">Open in new tab</a>'
     + '<button class="btn btn-accent" data-overlay="save">Save</button>'
     + '</div>';
 
@@ -752,8 +752,10 @@ document.addEventListener('mousedown', e => {
     ghost: null,
     offsetX: e.clientX - rect.left,
     offsetY: e.clientY - rect.top,
-    startX: rect.left,
-    startY: rect.top,
+    startX: e.clientX,
+    startY: e.clientY,
+    cardX: rect.left,
+    cardY: rect.top,
     w: rect.width,
     h: rect.height,
     moved: false,
@@ -770,8 +772,8 @@ document.addEventListener('mousemove', e => {
     dragState.card.classList.add('dragging');
     const clone = dragState.card.cloneNode(true);
     clone.className = 'card drag-ghost';
-    clone.style.left = dragState.startX + 'px';
-    clone.style.top = dragState.startY + 'px';
+    clone.style.left = dragState.cardX + 'px';
+    clone.style.top = dragState.cardY + 'px';
     clone.style.width = dragState.w + 'px';
     clone.style.height = dragState.h + 'px';
     document.body.appendChild(clone);
@@ -870,6 +872,10 @@ function esc(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function pathUrl(path) {
+  return String(path || '').split('/').map(encodeURIComponent).join('/');
 }
 
 function safeTimeAgo(iso) {

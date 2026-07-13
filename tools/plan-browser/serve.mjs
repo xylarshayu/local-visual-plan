@@ -6,6 +6,7 @@
  * Usage:
  *   node serve.mjs                              # defaults: port 3847, scan .visual-plans from CWD
  *   node serve.mjs --port 8080                  # custom port
+ *   node serve.mjs --host 127.0.0.1             # custom bind host (loopback by default)
  *   node serve.mjs --dirs "dir1,dir2"           # comma-separated scan dirs
  *   node serve.mjs --db ./my-db.json            # custom db location
  *   node serve.mjs /path/to/plans /other/path   # positional = scan dirs too
@@ -29,10 +30,13 @@ const args = process.argv.slice(2);
 const scanDirs = [];
 let dbPath = null;
 let port = parseInt(process.env.PLANS_PORT || '3847', 10);
+let host = process.env.PLANS_HOST || '127.0.0.1';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--port' && i + 1 < args.length) {
     port = parseInt(args[++i], 10);
+  } else if (args[i] === '--host' && i + 1 < args.length) {
+    host = args[++i];
   } else if (args[i] === '--dirs' && i + 1 < args.length) {
     for (const d of args[++i].split(',')) {
       const t = d.trim();
@@ -128,11 +132,6 @@ async function handleRequest(req, res) {
   const url = new URL(req.url, `http://localhost:${port}`);
   const method = req.method.toUpperCase();
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-
   // API routes
   if (url.pathname === '/api/db' && method === 'GET') {
     return json(res, 200, loadDb());
@@ -177,17 +176,20 @@ async function handleRequest(req, res) {
   }
 
   // Static files: try tool dir first, then absolute path under scan dirs
-  if (url.pathname.startsWith('..')) return json(res, 400, { error: 'bad path' });
+  let pathname;
+  try { pathname = decodeURIComponent(url.pathname); }
+  catch { return json(res, 400, { error: 'bad path encoding' }); }
+  if (pathname.startsWith('..')) return json(res, 400, { error: 'bad path' });
 
-  let filePath = join(TOOL_DIR, url.pathname);
+  let filePath = join(TOOL_DIR, pathname);
 
   if (!existsSync(filePath)) {
-    const abs = normalize(url.pathname);
+    const abs = normalize(pathname);
     // only serve absolute paths that are under a scan directory
     if (isUnderScanDir(abs) && existsSync(abs)) {
       filePath = abs;
     } else {
-      filePath = join(TOOL_DIR, url.pathname);
+      filePath = join(TOOL_DIR, pathname);
     }
   }
 
@@ -199,8 +201,9 @@ async function handleRequest(req, res) {
 scan({ dbPath, dirs: scanDirs }).catch(() => {});
 
 const server = createServer(handleRequest);
-server.listen(port, () => {
-  console.log(`plan browser → http://localhost:${port}`);
+server.listen(port, host, () => {
+  const displayHost = host === '127.0.0.1' ? 'localhost' : host;
+  console.log(`plan browser → http://${displayHost}:${port}`);
   console.log(`  scanning: ${scanDirs.join(', ')}`);
   console.log(`  db:       ${dbPath}`);
 });
