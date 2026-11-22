@@ -25,7 +25,7 @@ parts: e-claim workers
 key: Workers pull jobs; nothing pushes work at them.
 changed: The job is claimed.
 
-A free worker takes the oldest job. The stacked outline says this box is more than one thing.
+A free worker takes the oldest job. The stacked outline says this box is more than one thing, and its link leads to the exploded view below.
 
 # Inside the workers
 parts: w-images w-email w-search
@@ -40,4 +40,20 @@ key: The store write is the commit point.
 changed: The result is saved.
 
 The worker writes the result and marks the job done.
+```
+
+```stepper figure=figures/workers-exploded.svg title="Inside the workers"
+# Images
+parts: w-images
+key: Uploads are resized into three sizes.
+
+The images pool is the busiest, so it has the most workers.
+
+# Email
+parts: w-email
+key: One message per job, retried on a bounce.
+
+# Search
+parts: w-search
+key: A changed record is reindexed.
 ```

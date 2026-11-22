@@ -31,7 +31,10 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
   carries `data-pf-theme="mono|manual"`.
 - `repo` is the URL that a stepper's `code:` paths are appended to, to make
   them links (a file URL base such as `.../blob/main`). It must be http(s), or
-  it warns and the paths stay plain text.
+  it warns and the paths stay plain text. A page that cites more than one repo
+  repeats the key with a short name first, `repo: Backend https://...`, one
+  line per repo. The first is the page's own repo; the name is what the
+  caption shows, so keep it short.
 - Everything outside a recognized custom block is rendered as GitHub-flavored
   Markdown via vendored `marked`.
 
@@ -385,9 +388,18 @@ The file contract is linted at render time. Each breach is a render warning.
   part is current in a stepper. Draw each line from source to target. It
   does nothing in a plain `figure`, under reduced motion, in print, or
   without script.
+- `data-lift` on a part (a layer of an isometric stack) makes it rise 20
+  units while it is current in a stepper, and ghosts the `data-lift` layers
+  drawn after it (the ones over it), so the stack shows which layer the step
+  is about. Draw the stack bottom layer first. It does nothing in a plain
+  `figure` or in print.
 - Not allowed, and removed with a warning: `<script>`, `on*` attributes,
   `<foreignObject>`, `<style>` (it would restyle the whole page), and any
   `href` that is not `#id`.
+- `<a href="#anchor">` around a `<text>` is a link to another place on the
+  page (a heading's `h:...` id or a block's anchor, such as
+  `stepper:inside-the-workers`). It is drawn in accent and underlined. A target
+  that is not on the page warns.
 - Text is `<text>` at 12 to 14 user units and inherits the page font.
 
 **Output:** `<figure data-block="figure">` with an optional `<figcaption>` and a
@@ -441,7 +453,9 @@ Lines before the first `#` set up the stepper:
 - `code: part path` points a part at its representative file or directory,
   relative to the repo root. Repeat the line for more paths. Each step lists the
   paths of its own parts under "In the code", in the narration rail (never
-  inside the figure), linked when the frontmatter sets `repo:`.
+  inside the figure), linked when the frontmatter sets `repo:`. With named
+  repos, `code: part Name path` cites a path in that repo; a path with no name
+  is in the first repo. Each item then shows its repo name before the path.
 
 Each `# title` starts a step. Its setting lines come first, in any order;
 everything after them is the narration, in Markdown.
@@ -471,9 +485,10 @@ the figure does not have; a `set:` name that is not a counter; a step with no
 `key:`; `needs: switch` or `held` with no switch in the header; a switch with
 no held step, or a held step with no `needs: switch` step; more than three counters, one switch, one held step, or ten
 steps; a `code:` line without a path, for a part the figure does not have, or
-with an absolute or `..` path (dropped); and, when the page sits in a git repo,
-a `code:` path that does not exist from the repo root (kept, so a stale page
-says so on its next render).
+with an absolute or `..` path (dropped); more than one `repo:` without names;
+and, when the page sits in a git repo, a `code:` path in the first repo that
+does not exist from the repo root (kept, so a stale page says so on its next
+render). Paths in other repos are not checked.
 
 **Behaviour.** Without script, and in print, every step is laid out in order
 under the figure, which shows all parts in ink. With script, the stepper shows

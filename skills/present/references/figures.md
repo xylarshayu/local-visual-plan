@@ -88,7 +88,9 @@ emphasis, never the only copy of a fact.
   Connections are parts too (`e-gateway`), so a step can light the path, not
   only the boxes. Put `data-flow` on the line (drawn source to target) and a
   stepper shows movement along it while that step is current. That is the
-  one motion a page has: one speed, one bead, accent only.
+  one moving thing a page has: one speed, one bead, accent only. In an
+  exploded or isometric stack, `data-lift` on each layer makes the current
+  one rise out of the stack as the stepper walks it.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
   colour.
 - A part that is really several things (a pool of workers, a set of services)
@@ -96,8 +98,11 @@ emphasis, never the only copy of a fact.
   6 units up and right, back one first, all inside the part's group. When the
   story needs the members, draw them inside the box as their own parts with
   `data-future="hidden"`, and the step that names them opens the box. When the
-  members are a topic of their own, give them an exploded figure in their own
-  chapter. Sample: `renderer/test/fixtures/composite.md`.
+  members are a topic of their own, give them an exploded figure elsewhere on
+  the page and put a small "See inside" link in the card's corner
+  (`<a href="#stepper:title-slug"><text>See inside ↓</text></a>`, or `#figure:` for a plain figure), so the
+  overview stays simple and the reader can still drill down. Sample:
+  `renderer/test/fixtures/composite.md`.
 - Run the render: every contract breach is a warning naming the file and the
   value.
 

@@ -8,6 +8,7 @@
     <rect class="box" x="338" y="94" width="224" height="152" rx="4"/>
     <rect class="box" x="332" y="100" width="224" height="152" rx="4"/>
     <text x="444" y="128" text-anchor="middle">Workers</text>
+    <a href="#stepper:inside-the-workers"><text x="548" y="240" text-anchor="end" font-size="12">See inside ↓</text></a>
   </g>
   <g data-part="e-claim"><path data-flow="" d="M288 180H332"/><path d="M325 176L332 180L325 184"/></g>
   <g data-part="w-images" data-future="hidden"><rect class="box" x="344" y="152" width="60" height="56" rx="4"/><text x="374" y="185" text-anchor="middle" font-size="12">Images</text></g>

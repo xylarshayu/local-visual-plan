@@ -293,6 +293,59 @@ await check('flow pulses are off under reduced motion, in print and without scri
   await nj.ctx.close()
 })
 
+const compositeSrc = join(here, 'fixtures', 'composite.md'), composite = join(out, 'composite.html')
+writeFileSync(composite, renderPlan(readFileSync(compositeSrc, 'utf8'), { sourcePath: compositeSrc }).html)
+
+await check('code captions: a bulleted list at the small size', async () => {
+  const { p, ctx, errors } = await open({}, composite)
+  const st = await p.evaluate(() => {
+    const ul = document.querySelector('.stepper-step.is-current .stepper-code ul')
+    const code = ul.querySelector('code'), cs = (e) => getComputedStyle(e)
+    return { list: cs(ul.firstElementChild).display + ' ' + cs(ul).listStyleType, code: cs(code).fontSize, label: cs(document.querySelector('.stepper-step.is-current .stepper-code .stepper-label')).fontSize, rows: ul.children.length, height: ul.firstElementChild.getBoundingClientRect().height }
+  })
+  assert.equal(st.list, 'list-item disc')
+  assert.equal(st.code, '12px', 'the path is at --fs-xs, not the 16px a list item gives inline code')
+  assert.equal(st.label, '12px')
+  assert.equal(st.rows, 2)
+  assert.ok(st.height < 24, `one line per path: ${st.height}px`)
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
+await check('a composite card\'s link is accent, underlined, and jumps to its exploded figure', async () => {
+  const { p, ctx, errors } = await open({}, composite)
+  const link = p.locator('.stepper-stage [data-part=workers] a')
+  const st = await link.evaluate((a) => ({ fill: getComputedStyle(a.querySelector('text')).fill, deco: getComputedStyle(a).textDecorationLine }))
+  assert.deepEqual(st.fill.match(/\d+/g).slice(0, 3).map(Number), await token(p, '--accent'))
+  assert.equal(st.deco, 'underline')
+  await link.click()
+  assert.equal(await p.evaluate(() => location.hash), '#stepper:inside-the-workers')
+  const inView = () => { const t = document.getElementById('stepper:inside-the-workers').getBoundingClientRect().top; return scrollY > 0 && t >= 0 && t < innerHeight / 2 }
+  await p.waitForFunction(inView, null, { timeout: 3000 }).catch(() => {})
+  assert.ok(await p.evaluate(inView), `the exploded figure's top is in the upper half of the view: ${await p.evaluate(() => [scrollY, document.getElementById('stepper:inside-the-workers').getBoundingClientRect().top])}`)
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
+await check('a data-lift layer rises only while current, the layers over it are ghosted, and print is flat', async () => {
+  const { p, ctx, errors } = await open({}, composite)
+  const fig = p.locator('#stepper\\:inside-the-workers')
+  const lifts = () => fig.evaluate((f) => Object.fromEntries([...f.querySelectorAll('[data-lift]')].map((g) => [g.dataset.part, getComputedStyle(g).transform])))
+  const ghosts = () => fig.evaluate((f) => [...f.querySelectorAll('[data-lift]')].map((g) => getComputedStyle(g).opacity))
+  await p.waitForFunction(() => getComputedStyle(document.querySelector('#stepper\\:inside-the-workers [data-part=w-images]')).transform !== 'none')
+  await fig.evaluate((f) => Promise.all(f.getAnimations({ subtree: true }).map((a) => a.finished)))
+  assert.deepEqual(await lifts(), { 'w-search': 'none', 'w-email': 'none', 'w-images': 'matrix(1, 0, 0, 1, 0, -20)' })
+  await fig.locator('.stepper-next').click()
+  await fig.evaluate((f) => Promise.all(f.getAnimations({ subtree: true }).map((a) => a.finished)))
+  assert.deepEqual(await lifts(), { 'w-search': 'none', 'w-email': 'matrix(1, 0, 0, 1, 0, -20)', 'w-images': 'none' })
+  assert.deepEqual(await ghosts(), ['0.32', '1', '0.16'], 'search is future (faint), images is drawn over email so it is ghosted')
+  await p.emulateMedia({ media: 'print' })
+  assert.deepEqual(Object.values(await lifts()), ['none', 'none', 'none'])
+  assert.deepEqual(await ghosts(), ['1', '1', '1'])
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
 console.log('\n# theme toggle')
 
 await check('theme: follows the system until clicked, stores only a click, icon only', async () => {

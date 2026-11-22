@@ -41,7 +41,7 @@ const esc = escapeHtml;
  * ========================================================================== */
 
 function parseFrontmatter(src) {
-  const fm = { title: "", objective: "", status: "", theme: "", repo: "" };
+  const fm = { title: "", objective: "", status: "", theme: "", repos: [] };
   let body = src;
   // bodyOffset: 0-based index, in the ORIGINAL source's line array, of the first
   // line of `body`. Custom-block / chapter line ranges are computed relative to
@@ -61,7 +61,8 @@ function parseFrontmatter(src) {
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
         val = val.slice(1, -1);
       }
-      if (key in fm) fm[key] = val;
+      if (key === "repo") fm.repos.push(val);
+      else if (typeof fm[key] === "string") fm[key] = val;
     }
     body = src.slice(m[0].length);
     bodyOffset = (m[0].match(/\n/g) || []).length;
@@ -1213,6 +1214,8 @@ function loadFigure(src, prefix, title, desc, reg, warnings) {
   const accents = (text.match(/\sdata-accent\b/g) || []).length;
 
   const ids = new Set([...text.matchAll(/\sid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]));
+  const links = [...text.matchAll(/\s(?:xlink:)?href\s*=\s*["']#([^"']+)/g)].map((m) => m[1]).filter((id) => !ids.has(id));
+  for (const id of links) reg.pageLinks.set(`${where}: link "#${id}"`, id);
   text = text
     .replace(/(\sid\s*=\s*["'])([^"']+)/g, (m, a, id) => a + prefix + id)
     .replace(/url\(#([\w.-]+)\)/g, (m, id) => (ids.has(id) ? `url(#${prefix}${id})` : m))
@@ -1225,7 +1228,8 @@ function loadFigure(src, prefix, title, desc, reg, warnings) {
   const width = vb ? parseFloat(vb[1].trim().split(/[\s,]+/)[2]) || 0 : 0;
   attrs = attrs.replace(/\s(width|height|style|role|aria-[\w-]+)\s*=\s*("[^"]*"|'[^']*')/gi, "");
   const size = width ? ` style="min-width:${Math.round(width * 0.8)}px;max-width:${Math.round(width)}px"` : "";
-  const open = `<svg${attrs} role="img" aria-labelledby="${prefix}title" aria-describedby="${prefix}desc"${size}>`
+  // A page link inside role="img" would be hidden from screen readers.
+  const open = `<svg${attrs} role="${links.length ? "group" : "img"}" aria-labelledby="${prefix}title" aria-describedby="${prefix}desc"${size}>`
     + `<title id="${prefix}title">${esc(title || "Figure")}</title><desc id="${prefix}desc">${esc(desc)}</desc>`;
   return { svg: open + text.slice(rootM[0].length), parts: seen, accents };
 }
@@ -1391,15 +1395,25 @@ function renderStepper(body, attrs, ctx, warnings) {
     for (const n of Object.keys(s.set)) if (!names.has(n)) warnings.push(`${where}: step "${s.title}" sets unknown counter "${n}"`);
     if (fig) for (const p of s.parts) if (!fig.parts.has(p)) warnings.push(`${where}: step "${s.title}" names part "${p}", which the figure does not have`);
   }
-  const code = allCode.filter((c) => {
-    if (fig && !fig.parts.has(c.part)) { warnings.push(`${where}: code: unknown part "${c.part}"`); return false; }
-    if (isAbsolute(c.path) || c.path.split("/").includes("..")) { warnings.push(`${where}: code path "${c.path}" must be relative to the repo root`); return false; }
-    if (reg.gitRoot && !existsSync(join(reg.gitRoot, c.path))) warnings.push(`${where}: code path "${c.path}" is not in the repo (${reg.gitRoot})`);
-    return true;
-  });
-  const codeLink = (path) => reg.repo
-    ? `<a href="${esc(reg.repo + "/" + path.split("/").map(encodeURIComponent).join("/"))}"><code>${esc(path)}</code></a>`
-    : `<code>${esc(path)}</code>`;
+  // The first repo: is the page's own; only its paths can be checked on disk.
+  const home = reg.repos[0];
+  const code = [];
+  for (const c of allCode) {
+    if (fig && !fig.parts.has(c.part)) { warnings.push(`${where}: code: unknown part "${c.part}"`); continue; }
+    const named = /^(\S+)\s+(\S.*)$/.exec(c.path);
+    const hit = named && reg.repos.find((r) => r.name && r.name === named[1]);
+    const repo = hit || home, path = hit ? named[2] : c.path;
+    if (isAbsolute(path) || path.split("/").includes("..")) { warnings.push(`${where}: code path "${path}" must be relative to the repo root`); continue; }
+    if (repo === home && reg.gitRoot && !existsSync(join(reg.gitRoot, path))) warnings.push(`${where}: code path "${path}" is not in the repo (${reg.gitRoot})`);
+    code.push({ part: c.part, repo, path });
+  }
+  const codeItem = ({ repo, path }) => {
+    const word = repo && repo.name ? `<span class="stepper-repo" title="${esc(repo.url)}">${esc(repo.name)}</span> ` : "";
+    const link = repo
+      ? `<a href="${esc(repo.url + "/" + path.split("/").map(encodeURIComponent).join("/"))}"><code>${esc(path)}</code></a>`
+      : `<code>${esc(path)}</code>`;
+    return `<li>${word}${link}</li>`;
+  };
 
   // Counter values per step, carried forward; the held step starts from the
   // values just before the first step that needs the switch.
@@ -1422,8 +1436,8 @@ function renderStepper(body, attrs, ctx, warnings) {
     if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
     if (s.key) out += `<div class="stepper-key"><p class="stepper-label">Key idea</p><p>${inlineMd(s.key)}</p></div>`;
     if (s.changed.length) out += `<div class="stepper-changed"><p class="stepper-label">What changed</p><ul>${s.changed.map((c) => `<li>${inlineMd(c)}</li>`).join("")}</ul></div>`;
-    const paths = [...new Set(code.filter((c) => s.parts.includes(c.part)).map((c) => c.path))];
-    if (paths.length) out += `<div class="stepper-code"><p class="stepper-label">In the code</p><ul>${paths.map((p) => `<li>${codeLink(p)}</li>`).join("")}</ul></div>`;
+    const items = [...new Set(code.filter((c) => s.parts.includes(c.part)).map(codeItem))];
+    if (items.length) out += `<div class="stepper-code"><p class="stepper-label">In the code</p><ul>${items.join("")}</ul></div>`;
     return out + `</${tag}>`;
   };
 
@@ -2099,8 +2113,16 @@ export function renderPlan(markdownSource, {
   reg.theme = resolveTheme(themeOpt || frontmatter.theme, warnings);
   reg.baseDir = sourcePath ? dirname(resolve(sourcePath)) : process.cwd();
   reg.gitRoot = findGitRoot(reg.baseDir);
-  if (frontmatter.repo && !/^https?:\/\//i.test(frontmatter.repo)) warnings.push(`repo: must be an http(s) URL, not "${frontmatter.repo}"`);
-  else if (frontmatter.repo) reg.repo = frontmatter.repo.replace(/\/+$/, "");
+  reg.repos = [];
+  reg.pageLinks = new Map();
+  for (const line of frontmatter.repos) {
+    const m = /^(?:(\S+)\s+)?(https?:\/\/\S+)$/i.exec(line);
+    if (m) reg.repos.push({ name: m[1] || "", url: m[2].replace(/\/+$/, "") });
+    else warnings.push(`repo: must be an http(s) URL, optionally after a short name, not "${line}"`);
+  }
+  if (reg.repos.length > 1 && reg.repos.some((r) => !r.name)) warnings.push("repo: with more than one repo, give each a short name (repo: Name URL)");
+  const names = reg.repos.map((r) => r.name).filter(Boolean);
+  for (const n of new Set(names.filter((n, i) => names.indexOf(n) !== i))) warnings.push(`repo: the name "${n}" is used more than once`);
   const docId = computeDocId(source);
 
   // Chapters are a top-level directive resolved BEFORE block extraction, so each
@@ -2109,6 +2131,7 @@ export function renderPlan(markdownSource, {
 
   const rendered = [];
   let bodyHtml = renderMarkdownSegment(chapters.html, lean, warnings, rendered, reg, bodyOffset);
+  for (const [msg, id] of reg.pageLinks) if (!bodyHtml.includes(` id="${esc(id)}"`)) warnings.push(`${msg} has no target on this page`);
 
   // Changed-since-previous-version marking: stamp `data-pf-changed` onto each
   // edited/new element (the attribute pair we emit is unique per anchor, so a

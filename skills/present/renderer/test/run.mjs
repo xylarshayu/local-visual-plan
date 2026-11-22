@@ -1740,7 +1740,8 @@ fixture('embed.md', (check) => {
 
 fixture('composite.md', (check) => {
   const r = renderPlan(read('composite.md'), { sourcePath: join(FIXTURES, 'composite.md') })
-  const steps = [...r.html.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
+  const first = /<figure data-block="stepper"[\s\S]*?<\/figure>/.exec(r.html)[0]
+  const steps = [...first.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
   const paths = (st) => [...st.matchAll(/<code>([^<]+)<\/code><\/a>/g)].map((m) => m[1])
 
   check('inside this git worktree, every cited path is checked and reported missing, nothing else warns', () => {
@@ -1757,6 +1758,18 @@ fixture('composite.md', (check) => {
   check('each step lists the code of its own parts, linked under repo:', () => {
     assert.deepEqual(steps.map(paths), [['src/api/jobs.ts', 'src/queue/'], ['src/workers/'], ['src/workers/images.ts', 'src/workers/email.ts', 'src/workers/search.ts'], ['src/store/']])
     assert.match(steps[0], /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts">/)
+  })
+
+  check('the workers card links to the exploded figure, which is on the page', () => {
+    const workers = /<g data-part="workers">[\s\S]*?<\/g>/.exec(r.html)[0]
+    assert.match(workers, /<a href="#stepper:inside-the-workers"><text[^>]*>See inside ↓<\/text><\/a>/)
+    assert.match(r.html, /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers" id="stepper:inside-the-workers"/)
+  })
+
+  check('the exploded pools are lift layers, one per step', () => {
+    const inside = /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers"[\s\S]*?<\/figure>/.exec(r.html)[0]
+    assert.deepEqual([...inside.matchAll(/<g data-lift="" data-part="([^"]+)"/g)].map((m) => m[1]), ['w-search', 'w-email', 'w-images'])
+    assert.deepEqual([...inside.matchAll(/data-parts="([^"]+)"/g)].map((m) => m[1]), ['w-images', 'w-email', 'w-search'])
   })
 })
 
@@ -1839,6 +1852,39 @@ fixture('<figure + stepper lint>', (check) => {
     assert.deepEqual(renderPlan(md('', 'code: a src/not-here.ts'), { sourcePath: join(loose, 'p.md') }).warnings, [], 'outside a git repo, paths are not checked')
   })
 
+  check('stepper code: named repos show their word and link base; only the home repo is checked on disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-code-'))
+    for (const d of ['.git', 'src/api']) mkdirSync(join(dir, d), { recursive: true })
+    writeFileSync(join(dir, 'src/api/jobs.ts'), '')
+    writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"><rect class="box" x="0" y="0" width="20" height="20"/></g><g data-part="b"><rect class="box" x="40" y="0" width="20" height="20"/></g></svg>')
+    const page = (fm, code) => `---\ntitle: T\n${fm}---\n\n\`\`\`stepper figure=f.svg\n${code}\n# One\nparts: a\nkey: k\n\n# Two\nparts: b\nkey: k\n\`\`\`\n`
+    const steps = (r) => [...r.html.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
+    const fm = 'repo: App https://git.example.com/app/blob/main\nrepo: Libs https://git.example.com/libs/blob/main/\n'
+
+    const r = renderPlan(page(fm, 'code: a src/api/jobs.ts\ncode: a App src/api/jobs.ts\ncode: b Libs ledger/only-there.ts'), { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(r.warnings, [], 'a Libs path is not checked against this checkout')
+    const [one, two] = steps(r)
+    assert.match(one, /<ul><li><span class="stepper-repo" title="https:\/\/git\.example\.com\/app\/blob\/main">App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/jobs\.ts"><code>src\/api\/jobs\.ts<\/code><\/a><\/li><\/ul>/, 'the bare path and the App path are one item')
+    assert.match(two, /<li><span class="stepper-repo" title="https:\/\/git\.example\.com\/libs\/blob\/main">Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/ledger\/only-there\.ts"><code>ledger\/only-there\.ts<\/code><\/a><\/li>/)
+
+    const bad = renderPlan(page(fm, 'code: a App src/gone.ts\ncode: b Libs ../x.ts\ncode: b Lib ledger/x.ts'), { sourcePath: join(dir, 'p.md') })
+    has(bad, /code path "src\/gone\.ts" is not in the repo/)
+    has(bad, /code path "\.\.\/x\.ts" must be relative to the repo root/)
+    has(bad, /code path "Lib ledger\/x\.ts" is not in the repo/)
+    has(renderPlan(page('repo: https://a.example.com\nrepo: Libs https://b.example.com\n', 'code: a src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') }), /with more than one repo, give each a short name/)
+    has(renderPlan(page('repo: App git@example.com:app\n', 'code: a src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') }), /repo: must be an http\(s\) URL/)
+    has(renderPlan(page(fm + 'repo: Libs https://other.example.com\n', 'code: a src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') }), /repo: the name "Libs" is used more than once/)
+
+    writeFileSync(join(dir, 'src/api/my file.ts'), '')
+    const spaced = renderPlan(page(fm, 'code: a src/api/my file.ts'), { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(spaced.warnings, [], 'a home path with a space is still a path when its first word is not a repo name')
+    assert.match(spaced.html, /<span class="stepper-repo"[^>]*>App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/my%20file\.ts">/)
+
+    const odd = renderPlan(page('repo: <b>"x https://git.example.com/a"onmouseover="y\n', 'code: a <b>"x src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') })
+    assert.doesNotMatch(odd.html, /<b>"x|"onmouseover=/, 'repo names and URLs are escaped')
+    assert.match(odd.html, /<span class="stepper-repo" title="https:\/\/git\.example\.com\/a&quot;onmouseover=&quot;y">&lt;b&gt;&quot;x<\/span>/)
+  })
+
   check('embed lint: URL src, missing poster, remote refs, size and count', () => {
     const dir = mkdtempSync(join(tmpdir(), 'pf-embed-'))
     writeFileSync(join(dir, 'e.html'), '<script src="https://cdn.example.com/x.js"></script>')
@@ -1857,6 +1903,23 @@ fixture('<figure + stepper lint>', (check) => {
     has(at(e('src=e.html poster=p.gif')), /poster must be/)
     has(at(e('src=e.html poster=p.png', '')), /body \(what to try and what it shows\) is empty/)
     has(at(e('src=e.html poster=p.png').repeat(3)), /more than 2 embeds/)
+  })
+
+  check('a link in a figure must land on this page: an in-figure id, a heading or a block', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-link-'))
+    const svg = (href) => `<svg viewBox="0 0 100 40"><defs><path id="p" d="M0 0H10"/></defs><g data-part="a"><a href="${href}"><text x="0" y="20">go</text></a></g></svg>`
+    writeFileSync(join(dir, 'own.svg'), svg('#p'))
+    writeFileSync(join(dir, 'head.svg'), svg('#h:pools'))
+    writeFileSync(join(dir, 'none.svg'), svg('#h:nowhere'))
+    const at = (f) => renderPlan(`# T\n\n## Pools\n\n\`\`\`figure src=${f}\nx\n\`\`\`\n`, { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(at('own.svg').warnings, [])
+    assert.deepEqual(at('head.svg').warnings, [])
+    assert.match(at('head.svg').html, /<a href="#h:pools">/)
+    has(at('none.svg'), /figure none\.svg: link "#h:nowhere" has no target on this page/)
+    const twice = renderPlan(`# T\n\n<span data-id="h:nowhere"></span>\n\n\`\`\`figure src=none.svg\nx\n\`\`\`\n\n\`\`\`figure src=none.svg\ny\n\`\`\`\n`, { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(twice.warnings, ['figure none.svg: link "#h:nowhere" has no target on this page'], 'one warning per figure file, and data-id is not an id')
+    assert.match(at('head.svg').html, /<svg[^>]* role="group"/, 'a figure with a link is not role=img, so the link is announced')
+    assert.match(at('own.svg').html, /<svg[^>]* role="img"/)
   })
 
   check('a missing file warns and keeps the description as text', () => {

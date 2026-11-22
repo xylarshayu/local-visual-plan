@@ -655,6 +655,8 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 :is(.figure-stage, .stepper-stage) svg .box { fill: var(--bg); }
 :is(.figure-stage, .stepper-stage) svg .solid { fill: currentColor; }
 :is(.figure-stage, .stepper-stage) svg .muted { color: var(--fg-muted); }
+:is(.figure-stage, .stepper-stage) svg a { color: var(--accent); text-decoration: underline; }
+:is(.figure-stage, .stepper-stage) svg a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(.figure-stage, .stepper-stage) svg [data-accent],
 .stepper-stage svg [data-state=current] { color: var(--accent); }
 :is(.figure-stage, .stepper-stage) svg :is([data-accent], [data-state=current]) .box { fill: var(--accent-soft); }
@@ -662,7 +664,10 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 :is(.figure-stage, .stepper-stage) svg [data-change=del] { color: var(--del-fg); stroke-dasharray: 3 5; }
 .stepper-stage svg [data-state=future] { opacity: 0.32; }
 .stepper-stage svg [data-state=future][data-future=hidden] { visibility: hidden; }
-.stepper-stage svg [data-part] { transition: opacity var(--dur-2) var(--ease), color var(--dur-1) var(--ease); }
+.stepper-stage svg [data-part] { transition: opacity var(--dur-2) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-2) var(--ease); }
+/* A data-lift part (a layer of an isometric stack) rises while it is current; the layers drawn over it are ghosted. */
+.stepper-stage svg [data-lift][data-state=current] { transform: translateY(-20px); }
+.stepper-stage svg [data-lift][data-state=current] ~ [data-lift] { opacity: 0.16; }
 /* A 14-unit bead runs along each data-flow line of a current part, start to end, at one speed. */
 .stepper-stage svg .flow-pulse { display: none; }
 .stepper-stage svg [data-state=current] .flow-pulse {
@@ -710,8 +715,10 @@ figure[data-block=stepper] { container-type: inline-size; }
 .stepper-key, .stepper-changed { background: var(--bg-sunken); border-radius: var(--radius); padding: 12px 16px; margin: 0 0 12px; font-size: var(--fs-sm); }
 .stepper-key p, .stepper-changed p, .stepper-changed ul { margin: 0; }
 .stepper-changed ul { padding-left: 16px; list-style: disc; }
-.stepper-code ul { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 0; list-style: none; }
-.stepper-code code { font-size: var(--fs-xs); }
+.stepper-code ul { margin: 0; padding-left: 16px; list-style: disc; font-size: var(--fs-xs); }
+.stepper-code li + li { margin-top: 4px; }
+.stepper-code code { overflow-wrap: anywhere; }
+.stepper-repo { font-weight: 600; color: var(--fg-muted); }
 .stepper-label { font-size: var(--fs-xs); font-weight: 600; color: var(--fg-muted); margin-bottom: 4px !important; }
 /* Without script every step is laid out; live, only the current one shows. */
 figure[data-block=stepper]:not(.is-live) :is(.stepper-counters, .stepper-controls) { display: none; }
@@ -1385,6 +1392,7 @@ pre[data-block=unknown]::before {
   .stepper-stage svg [data-state][data-future] { visibility: visible; }
   .stepper-stage svg [data-state] .flow-pulse { display: none; }
   .stepper-stage svg [data-state] .box { fill: var(--bg); }
+  .stepper-stage svg [data-state][data-lift] { transform: none; opacity: 1 !important; }
   .embed-stage iframe, .embed-run { display: none !important; }
   .embed-stage.is-running .embed-poster { display: block !important; }
   body, body[data-has-chapters] { background: #fff; font-size: 10.5pt; padding: 0; }
