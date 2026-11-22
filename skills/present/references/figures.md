@@ -81,7 +81,10 @@ emphasis, never the only copy of a fact.
 - Start from a house figure (below) or a blank `viewBox`. Draw at the size it
   should appear: one user unit is one pixel, a figure never grows past its
   viewBox width (a stepper's past 1.25x), and 720 units is a comfortable
-  width. Names at 14 and labels at 12 units read well.
+  width. Names at 13 and labels at 12 units: at a stepper's 1.25x that is
+  about body size, and no figure text should read larger than the prose.
+- Do not reach for size to get clarity or emphasis. Try spacing, weight and
+  removal first.
 - One ink. Hierarchy is opacity (`data-role`), meaning is dash pattern, colour
   is only accent (look here) and add/del (this changed). The opacity roles are
   adapted from Plotter (Pasquale Vitiello, MIT).
@@ -95,8 +98,17 @@ emphasis, never the only copy of a fact.
   one rise out of the stack as the stepper walks it.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
   colour.
-- An edge label may be the real thing it carries, a route or a message
-  (`POST /v1/jobs`). Give its `<text>` `class="mono"`.
+- An edge label is a plain word for what it carries (`sync`, `enqueue`); the
+  exact route belongs in the code caption. When the literal string is the
+  point, give its `<text>` `class="mono"`.
+- A technology mark (the logo of a database, a queue, a framework) is a faint
+  watermark tucked inside a box's top-right corner, never above it. Put the
+  glyph in `<defs>` as `<symbol id="m-name" class="mark" viewBox="0 0 24 24">`
+  (filled paths, no colour of its own), and place it with
+  `<use href="#m-name" class="mark" x=".." y=".." width="14" height="14"/>`
+  inside the part's group, 4 units in from the corner. It draws in ink at 0.3
+  opacity, accent at 0.55 while its part is current; text over it wins. A CC0
+  set such as Simple Icons works; take only the paths, never brand colours.
 - When a step changes what the figure looks like (a part moves, a lid opens),
   declare a `state:` in the stepper and draw each look once in a group with
   `data-show="name=value"`. The stepper fades between them. Keep it to the

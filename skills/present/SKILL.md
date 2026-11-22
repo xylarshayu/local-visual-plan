@@ -41,6 +41,8 @@ page" — is this skill, directly.
   in-page navigation; skip it for a short page. Chapters also power **presenter
   mode** — a *Present* button in the page walks the reader one chapter at a
   time, with keyboard navigation and a clickable progress rail.
+- **Clarity is not size.** Reach for spacing, weight and removal before
+  making anything bigger.
 - **The lowest rung that teaches it.** Bullets, then a table, then one drawn
   diagram, then a `stepper`, then an exploded figure. Most topics stop at a
   table; a page usually has at most one stepper, for its central idea.

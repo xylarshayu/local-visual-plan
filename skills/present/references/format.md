@@ -374,7 +374,9 @@ The file contract is linted at render time. Each breach is a render warning.
   `inherit`, `var(--...)` or `url(#...)`. The defaults are ink strokes and ink
   text with no fill. Class `box` fills a shape with the page background so it
   hides lines behind it, class `solid` fills it with ink, class `muted` uses
-  the muted ink. `data-role="guide"` is a faint rule (lane lines),
+  the muted ink, class `mono` sets text in the mono font. A `<symbol
+  class="mark">` draws filled, and a `<use class="mark">` of it is a faint
+  watermark (0.3 opacity; 0.55 and accent while its part is current). `data-role="guide"` is a faint rule (lane lines),
   `data-role="hidden"` a faint dashed line (boundaries, what is not seen).
   Change is `data-change="add|del"` (added in the positive colour, removed in
   the negative colour, dashed).
@@ -515,7 +517,7 @@ arrow keys move between steps while focus is inside the stepper. The narration
 rail is `aria-live="polite"`. Part changes use the motion tokens; with
 `prefers-reduced-motion` they are instant. On a wide screen a stepper leaves
 the 1000px prose column: it grows as far as its figure at 1.25x plus a rail of
-up to 360px need, within a 1640px page with 24px sides and clear of the side
+up to 360px need, within a 1440px page with 24px sides and clear of the side
 nav. The figure column is sticky and its drawing is capped so it and the
 controls fit in the window. Print keeps the stepper in the column. On a wide
 stage the rail sits right of the figure; on a narrow one it sits below, and the stage (same minimum

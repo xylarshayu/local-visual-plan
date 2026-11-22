@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 280" width="720" height="280">
+  <defs><symbol id="m-queue" class="mark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol></defs>
   <g data-part="api">
     <path d="M80 112V152"/><path d="M76 145L80 152L84 145"/>
     <text class="mono" x="80" y="100" text-anchor="middle" font-size="12">POST /v1/jobs</text>
@@ -8,6 +9,7 @@
   <g data-part="e-enqueue"><path data-flow="" d="M136 180H176"/><path d="M169 176L176 180L169 184"/></g>
   <g data-part="queue">
     <rect class="box" x="176" y="152" width="112" height="56" rx="4"/><text x="232" y="176" text-anchor="middle">Queue</text>
+    <use href="#m-queue" class="mark" x="270" y="156" width="14" height="14"/>
     <text data-show="queue=empty" class="muted" x="232" y="196" text-anchor="middle" font-size="12">empty</text>
     <text data-show="queue=one" class="muted" x="232" y="196" text-anchor="middle" font-size="12">1 waiting</text>
   </g>

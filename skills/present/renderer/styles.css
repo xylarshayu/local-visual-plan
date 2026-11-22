@@ -659,6 +659,11 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 :is(.figure-stage, .stepper-stage) svg .solid { fill: currentColor; }
 :is(.figure-stage, .stepper-stage) svg .muted { color: var(--fg-muted); }
 :is(.figure-stage, .stepper-stage) svg .mono { font-family: var(--mono); }
+/* A technology mark: a filled <symbol class="mark"> placed by <use class="mark">, faint so text over it wins. */
+/* The mark's colour comes from the <use>. Chromium's clone already inherits it; this guards engines that style the clone like the original in <defs> (unverified here: no Firefox build). */
+:is(.figure-stage, .stepper-stage) svg symbol.mark :is(path, rect, circle, ellipse, polygon) { fill: inherit; stroke: none; }
+:is(.figure-stage, .stepper-stage) svg use.mark { fill: currentColor; opacity: 0.3; }
+.stepper-stage svg [data-state=current] use.mark { opacity: 0.55; }
 :is(.figure-stage, .stepper-stage) svg a { color: var(--accent); text-decoration: underline; }
 :is(.figure-stage, .stepper-stage) svg a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(.figure-stage, .stepper-stage) svg [data-accent],
@@ -685,11 +690,11 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 @keyframes pf-flow { from { stroke-dashoffset: 14; } to { stroke-dashoffset: calc(var(--len) * -1px); } }
 .figure-fallback { color: var(--fg-muted); }
 
-/* A stepper breaks out of the prose column as far as its figure (at 1.25x) and rail need: at most a 1640px page with 24px sides, clear of the side nav. */
+/* A stepper breaks out of the prose column as far as its figure (at 1.25x) and rail need: at most a 1440px page with 24px sides, clear of the side nav. */
 body { --nav-w: 0px; }
 figure[data-block=stepper] {
   container-type: inline-size;
-  --wide: max(100%, min(1592px, 100vw - var(--nav-w) - 48px, var(--fig-w) * 1.25 + 392px));
+  --wide: max(100%, min(1392px, 100vw - var(--nav-w) - 48px, var(--fig-w) * 1.25 + 392px));
   width: var(--wide); margin-inline: calc((100% - var(--wide)) / 2);
 }
 .stepper-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
