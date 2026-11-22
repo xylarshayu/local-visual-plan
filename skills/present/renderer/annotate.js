@@ -1368,7 +1368,11 @@
     '<button type="button" class="pf-pill-btn pf-pill-progress" data-pf-progress aria-label="Review progress — open panel" title="Review progress">0%</button>' +
     '<button type="button" class="pf-pill-btn" data-pf-present aria-label="Presenter mode" hidden>Present</button>' +
     '<button type="button" class="pf-pill-btn" data-pf-export aria-label="Open export">Export</button>';
-  document.body.appendChild(pill);
+  // On a wide screen the bar sits in the top bar, where it covers nothing.
+  var wideMq = window.matchMedia("(min-width: 900px)"), topbar = document.querySelector(".topbar-inner");
+  function placePill() { (wideMq.matches && topbar ? topbar : document.body).appendChild(pill); }
+  placePill();
+  wideMq.addEventListener("change", placePill);
   var addBtn = pill.querySelector("[data-pf-add]");
   var countEl = pill.querySelector("[data-pf-count]");
 

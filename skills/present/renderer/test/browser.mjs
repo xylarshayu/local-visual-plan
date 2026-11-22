@@ -118,26 +118,70 @@ await check('next and the step bar move the state; earlier parts become past', a
   await ctx.close()
 })
 
-await check('a stepper control focused under the review pill scrolls clear of it', async () => {
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
-    const { p, ctx } = await open({ viewport })
-    const r = await p.evaluate(async () => {
-      document.documentElement.style.scrollBehavior = 'auto'
-      const pill = document.querySelector('.pf-pill').getBoundingClientRect()
-      const out = {}
-      for (const q of ['.stepper-bar button', '.stepper-switch']) {
-        const el = document.querySelector(q)
-        scrollBy(0, el.getBoundingClientRect().bottom - innerHeight + 10)
-        const under = el.getBoundingClientRect().bottom > pill.top
-        el.focus()
-        await new Promise((r) => setTimeout(r, 50))
-        out[q] = [under, el.getBoundingClientRect().bottom <= pill.top]
-      }
-      return out
+await check('wide screens: the review pill sits in the top bar, quiet; presenting, it returns to the corner', async () => {
+  const { p, ctx } = await open({ viewport: { width: 1440, height: 900 } })
+  const r = await p.evaluate(() => {
+    const pill = document.querySelector('.pf-pill'), bar = document.querySelector('.plan-topbar').getBoundingClientRect(), pr = pill.getBoundingClientRect()
+    const btn = getComputedStyle(pill.querySelector('.pf-pill-btn'))
+    return { inBar: !!pill.closest('.plan-topbar'), within: pr.top >= bar.top && pr.bottom <= bar.bottom, weight: btn.fontWeight }
+  })
+  assert.deepEqual(r, { inBar: true, within: true, weight: '400' })
+  await ctx.close()
+  const dir = mkdtempSync(join(tmpdir(), 'pf-present-'))
+  writeFileSync(join(dir, 'c.html'), renderPlan('# T\n\n<!-- chapter: One -->\n\nA.\n\n<!-- chapter: Two -->\n\nB.\n', { sourcePath: join(dir, 'p.md') }).html)
+  const c2 = await browser.newContext({ viewport: { width: 1440, height: 900 } }), p2 = await c2.newPage()
+  await p2.goto('file://' + join(dir, 'c.html'))
+  await p2.click('.pf-pill [data-pf-present]')
+  const q = await p2.evaluate(() => {
+    const pr = document.querySelector('.pf-pill').getBoundingClientRect(), rail = document.querySelector('.pf-present-rail').getBoundingClientRect()
+    return { corner: innerWidth - pr.right < 40 && innerHeight - pr.bottom < 40, clearOfRail: pr.top >= rail.bottom }
+  })
+  assert.deepEqual(q, { corner: true, clearOfRail: true }, 'presenting')
+  await c2.close()
+})
+
+await check('phone: a stepper control focused under the review pill scrolls clear of it', async () => {
+  const { p, ctx } = await open({ viewport: { width: 390, height: 844 } })
+  const r = await p.evaluate(async () => {
+    document.documentElement.style.scrollBehavior = 'auto'
+    const pill = document.querySelector('.pf-pill').getBoundingClientRect()
+    const out = {}
+    for (const q of ['.stepper-bar button', '.stepper-switch']) {
+      const el = document.querySelector(q)
+      scrollBy(0, el.getBoundingClientRect().bottom - innerHeight + 10)
+      const under = el.getBoundingClientRect().bottom > pill.top
+      el.focus()
+      await new Promise((r) => setTimeout(r, 50))
+      out[q] = [under, el.getBoundingClientRect().bottom <= pill.top]
+    }
+    return out
+  })
+  assert.deepEqual(r, { '.stepper-bar button': [true, true], '.stepper-switch': [true, true] })
+  await ctx.close()
+})
+
+await check('a page that opens with a stepper: title, lead and figure share a left edge and the first view fits the window, down to 0.8x', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pf-lead-'))
+  writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 720 480"><g data-part="a"><rect class="box" x="0" y="0" width="720" height="480"/></g></svg>')
+  writeFileSync(join(dir, 'l.html'), renderPlan('# Lead page\n\nOne line of lead.\n\n```stepper figure=f.svg\nswitch: Net\n\n# One\nparts: a\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') }).html)
+  const look = async (viewport) => {
+    const { p, ctx } = await open({ viewport }, join(dir, 'l.html'))
+    const r = await p.evaluate(() => {
+      const x = (q) => Math.round(document.querySelector(q).getBoundingClientRect().left)
+      const svg = document.querySelector('.stepper-stage svg').getBoundingClientRect()
+      return { lefts: [x('.plan-masthead h1'), x('.plan-masthead + p'), x('.stepper-stage svg')], w: Math.round(svg.width), h: Math.round(svg.height),
+        controls: Math.round(document.querySelector('.stepper-switch').getBoundingClientRect().bottom), vh: innerHeight }
     })
-    assert.deepEqual(r, { '.stepper-bar button': [true, true], '.stepper-switch': [true, true] }, JSON.stringify(viewport))
     await ctx.close()
+    return r
   }
+  let r = await look({ width: 1536, height: 864 })
+  assert.ok(r.lefts.every((v) => Math.abs(v - r.lefts[0]) <= 1), `one left edge: ${JSON.stringify(r)}`)
+  assert.ok(r.controls <= r.vh && r.w < 720 * 1.25 && Math.abs(r.h - r.w / 1.5) <= 1, `fits the window, not letterboxed: ${JSON.stringify(r)}`)
+  r = await look({ width: 1536, height: 560 })
+  assert.ok(r.w === 576 && r.h === 384 && Math.abs(r.lefts[2] - r.lefts[0]) <= 1, `stops at 0.8x and runs below the fold: ${JSON.stringify(r)}`)
+  r = await look({ width: 1536, height: 1400 })
+  assert.equal(r.w, 720 * 1.25, 'a tall window keeps the 1.25x figure')
 })
 
 await check('switch off shows the held step in place of a step that needs it', async () => {

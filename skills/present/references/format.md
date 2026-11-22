@@ -388,7 +388,8 @@ The file contract is linted at render time. Each breach is a render warning.
   stage sizes it: up to 1.25x the viewBox width when the column has room
   (draw at the size it should appear) and never narrower than 0.8 of it.
   A narrower screen scrolls the stage sideways instead of shrinking the text.
-  The `<figure>` carries the drawn width as `style="--fig-w:720px"`.
+  The `<figure>` carries the drawn width and shape as
+  `style="--fig-w:720px;--fig-ar:3.6"`.
 - Colour comes from tokens only. A paint value (`fill`, `stroke`, `stop-color`,
   or the same inside `style`) is `none`, `currentColor`, `transparent`,
   `inherit`, `var(--...)` or `url(#...)`. The defaults are ink strokes and ink
@@ -560,7 +561,11 @@ rail is `aria-live="polite"`. Part changes use the motion tokens; with
 the 1000px prose column: it grows as far as its figure at 1.25x plus a rail of
 up to 360px need, within a 1440px page with 24px sides and clear of the side
 nav. The figure column is sticky and its drawing is capped so it and the
-controls fit in the window. Print keeps the stepper in the column. On a wide
+controls fit in the window. A page that opens with a stepper (after at most
+one paragraph) starts its title and lead at the stepper's left edge and fits
+title, lead, figure and controls in the first window, shrinking the figure to
+no less than 0.8 of its viewBox size; a shorter window runs below the fold.
+Print keeps the stepper in the column. On a wide
 stage the rail sits right of the figure; on a narrow one it sits below, and the stage (same minimum
 width as `figure`) scrolls from the figure's start only as far as the current parts need. While the switch is off, steps that need it are dashed
 in the step bar. Every part some step names gets `data-goto`: clicking it

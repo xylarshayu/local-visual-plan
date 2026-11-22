@@ -34,6 +34,10 @@
   transition: color 0.12s, background 0.12s;
 }
 .pf-pill-btn:last-child { border-right: 0; }
+/* In the top bar (wide screens) it is quiet; presenting, it returns to the corner, clear of the rail. */
+body:not(.pf-present) .topbar-inner .pf-pill { position: static; }
+.topbar-inner .pf-pill { border-color: var(--border); }
+.topbar-inner .pf-pill-btn { font-weight: 400; padding: 4px 10px; }
 .pf-pill-btn:hover { color: var(--fg); background: var(--bg-sunken); }
 .pf-pill-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .pf-pill-btn[aria-pressed="true"] { color: var(--accent-fg); background: var(--accent); }

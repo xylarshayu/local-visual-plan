@@ -1684,8 +1684,8 @@ fixture('stepper.md', (check) => {
 
   check('figure inlines the SVG with title, description and size bounds from the viewBox', () => {
     assert.match(fig, /<div class="figure-stage"><svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 720 200" role="img" aria-labelledby="fig1-title" aria-describedby="fig1-desc">/)
-    assert.match(fig, /^<figure data-block="figure"[^>]* style="--fig-w:720px">/)
-    assert.match(stp, /^<figure data-block="stepper"[^>]* style="--fig-w:\d+px">/)
+    assert.match(fig, /^<figure data-block="figure"[^>]* style="--fig-w:720px;--fig-ar:3.6">/)
+    assert.match(stp, /^<figure data-block="stepper"[^>]* style="--fig-w:\d+px;--fig-ar:[\d.]+">/)
     assert.match(fig, /<title id="fig1-title">Request path<\/title><desc id="fig1-desc">A browser request crosses the gateway/)
     assert.doesNotMatch(fig, /width="720"|<\?xml/, 'root width/height and the XML prolog are dropped')
     assert.equal((fig.match(/data-part="/g) || []).length, 7)
@@ -2099,6 +2099,16 @@ fixture('<figure + stepper lint>', (check) => {
     has(stepper('switch: Net', head + '# X\noff: One\nkey: k\n# Y\noff: One\nkey: k'), /more than one off: step for "One"/)
     has(stepper('', head + '# X\noff: One\nkey: k'), /"off: One" without a switch in the header/)
     has(stepper('switch: Net', head + '# X\noff: One\nkey: k\nset: a=1'), /step "X" sets unknown counter or state "a"/)
+  })
+
+  check('a page that opens with a stepper, after at most one paragraph, marks its main with the figure size', () => {
+    const stp = '```stepper figure=figures/request-path.svg\n# One\nkey: k\n```\n'
+    const main = (md) => /<main [^>]*>/.exec(one(md).html)[0]
+    assert.equal(main('# T\n\n<!-- a note -->\n\nLead **text**.\n\n' + stp), '<main id="plan-main" class="plan-main" data-leads="stepper" style="--fig-w:720px;--fig-ar:3.6">')
+    assert.equal(main('# T\n\n' + stp), '<main id="plan-main" class="plan-main" data-leads="stepper" style="--fig-w:720px;--fig-ar:3.6">')
+    assert.equal(main('# T\n\nOne.\n\nTwo.\n\n' + stp), '<main id="plan-main" class="plan-main">', 'two paragraphs first')
+    assert.equal(main('# T\n\n## Part\n\n' + stp), '<main id="plan-main" class="plan-main">', 'a heading first')
+    assert.equal(main('# T\n\nLead.\n\n```figure src=figures/request-path.svg title=F\nA figure.\n```\n\n' + stp), '<main id="plan-main" class="plan-main">', 'a plain figure first')
   })
 
   check('a missing stepper figure warns and still lays out the steps', () => {

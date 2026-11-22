@@ -1232,12 +1232,12 @@ function loadFigure(src, prefix, title, desc, reg, warnings) {
   let attrs = rootM[1];
   const vb = /\sviewBox\s*=\s*["']([^"']+)["']/i.exec(attrs);
   if (!vb) warnings.push(`${where}: the root <svg> has no viewBox`);
-  const width = vb ? parseFloat(vb[1].trim().split(/[\s,]+/)[2]) || 0 : 0;
+  const [, , width = 0, height = 0] = vb ? vb[1].trim().split(/[\s,]+/).map((n) => parseFloat(n) || 0) : [];
   attrs = attrs.replace(/\s(width|height|style|role|aria-[\w-]+)\s*=\s*("[^"]*"|'[^']*')/gi, "");
   // A page link inside role="img" would be hidden from screen readers.
   const open = `<svg${attrs} role="${links.length ? "group" : "img"}" aria-labelledby="${prefix}title" aria-describedby="${prefix}desc">`
     + `<title id="${prefix}title">${esc(title || "Figure")}</title><desc id="${prefix}desc">${esc(desc)}</desc>`;
-  return { svg: open + text.slice(rootM[0].length), parts: seen, accents, size: width ? ` style="--fig-w:${Math.round(width)}px"` : "" };
+  return { svg: open + text.slice(rootM[0].length), parts: seen, accents, size: width ? ` style="--fig-w:${Math.round(width)}px${height ? `;--fig-ar:${+(width / height).toFixed(4)}` : ""}"` : "" };
 }
 
 function renderFigure(body, attrs, ctx, warnings) {
@@ -2259,10 +2259,14 @@ export function renderPlan(markdownSource, {
   // whole document body. Function replacements treat the value as a literal.
   const bodyValue = sketchyDefs + "\n" + bodyHtml;
   const bodyAttr = chapters.hasChapters ? ' data-has-chapters="true"' : "";
+  // A page that opens with a stepper (after at most one paragraph) lines its title up with it (styles.css).
+  const leads = /^(?:\s|<!--[\s\S]*?-->)*(?:<p\b[^>]*>(?:(?!<\/?p\b)[\s\S])*<\/p>(?:\s|<!--[\s\S]*?-->)*)?<figure data-block="stepper"[^>]*? style="([^"]*)"/.exec(bodyHtml);
+  const mainAttr = leads ? ` data-leads="stepper" style="${leads[1]}"` : "";
   let html = template
     .replace("<!-- TITLE -->", () => escapeHtml(title))
     .replace("<!-- THEME -->", () => reg.theme)
     .replace("<!-- BODYATTR -->", () => bodyAttr)
+    .replace("<!-- MAINATTR -->", () => mainAttr)
     .replace("<!-- STATUS -->", () => statusHtml)
     .replaceAll("<!-- HEADING -->", () => escapeHtml(title))
     .replace("<!-- OBJECTIVE -->", () => objectiveHtml)
