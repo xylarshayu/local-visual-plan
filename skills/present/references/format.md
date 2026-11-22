@@ -563,8 +563,10 @@ up to 360px need, within a 1440px page with 24px sides and clear of the side
 nav. The figure column is sticky and its drawing is capped so it and the
 controls fit in the window. A page that opens with a stepper (after at most
 one paragraph) starts its title and lead at the stepper's left edge and fits
-title, lead, figure and controls in the first window, shrinking the figure to
-no less than 0.8 of its viewBox size; a shorter window runs below the fold.
+title, lead, caption, figure, counters and controls in the first window (for a
+one-line title and a two-line lead). The figure, and the stepper with it,
+shrinks to no less than 0.8 of its viewBox size; a shorter window runs below
+the fold.
 Print keeps the stepper in the column. On a wide
 stage the rail sits right of the figure; on a narrow one it sits below, and the stage (same minimum
 width as `figure`) scrolls from the figure's start only as far as the current parts need. While the switch is off, steps that need it are dashed

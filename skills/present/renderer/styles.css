@@ -697,12 +697,18 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 @keyframes pf-flow { from { stroke-dashoffset: 14; } to { stroke-dashoffset: calc(var(--len) * -1px); } }
 .figure-fallback { color: var(--fg-muted); }
 
-/* A stepper breaks out of the prose column as far as its figure (at 1.25x) and rail need: at most a 1440px page with 24px sides, clear of the side nav. */
+/* A stepper breaks out of the prose column as far as its figure (--fig-max, 1.25x) and rail need: at most a 1440px page with 24px sides, clear of the side nav. */
 body { --nav-w: 0px; }
-:is(figure[data-block=stepper], .plan-main[data-leads=stepper]) { --wide: max(100%, min(1392px, 100vw - var(--nav-w) - 48px, var(--fig-w) * 1.25 + 392px)); }
+figure[data-block=stepper] { --fig-max: calc(var(--fig-w) * 1.25); }
+:is(figure[data-block=stepper], .plan-main[data-leads=stepper]) { --wide: max(100%, min(1392px, 100vw - var(--nav-w) - 48px, var(--fig-max) + 392px)); }
 figure[data-block=stepper] { container-type: inline-size; width: var(--wide); margin-inline: calc((100% - var(--wide)) / 2); }
-/* A page that opens with a stepper: title and lead start at its left edge, close above it. */
+/* A page that opens with a stepper: title and lead start at its left edge, close above it, and the figure is
+   as large as lets title, lead, caption, figure, counters and controls fit the window, down to 0.8x. */
 @media (min-width: 900px) {
+  .plan-main[data-leads=stepper] { --fig-max: clamp(calc(var(--fig-w) * 0.8), (100vh - 251px - var(--cap, 0px) - var(--counters, 0px)) * var(--fig-ar), calc(var(--fig-w) * 1.25)); }
+  .plan-main[data-leads=stepper]:has(> :is(.plan-masthead, .plan-masthead + p) + figure > figcaption) { --cap: 30px; }
+  .plan-main[data-leads=stepper]:has(> :is(.plan-masthead, .plan-masthead + p) + figure .stepper-counters) { --counters: 40px; }
+  .plan-main[data-leads=stepper] > :is(.plan-masthead, .plan-masthead + p) + figure { --fig-max: inherit; }
   .plan-main[data-leads=stepper] > :is(.plan-masthead, .plan-masthead + p) { margin-left: calc((100% - var(--wide)) / 2); }
   .plan-main[data-leads=stepper] > .plan-masthead { padding: 16px 0 8px; }
   .plan-main[data-leads=stepper] > .plan-masthead + p { margin-top: 0; margin-bottom: 0; }
@@ -710,15 +716,14 @@ figure[data-block=stepper] { container-type: inline-size; width: var(--wide); ma
 }
 .stepper-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
 @container (min-width: 820px) {
-  /* The rail takes what the figure at 1.25x leaves, so a narrow figure still gets the full 360px. */
-  .stepper-grid { grid-template-columns: minmax(0, 1fr) clamp(280px, max(28cqw, 100cqw - 32px - var(--fig-w, 100cqw) * 1.25), 360px); gap: 32px; align-items: start; }
+  /* The rail takes what the figure at its largest leaves, so a narrow figure still gets the full 360px. */
+  .stepper-grid { grid-template-columns: minmax(0, 1fr) clamp(280px, max(28cqw, 100cqw - 32px - var(--fig-max, 100cqw)), 360px); gap: 32px; align-items: start; }
   .stepper-main { position: sticky; top: 64px; }
   /* Sticky, so the figure and its controls fit in the window. */
   .stepper-stage > svg { max-height: calc(100vh - 200px); }
-  /* ...and on such a page the whole first view (one-line title, two-line lead) fits the window: the figure
-     narrows to fit, down to 0.8 of its size (min-width), then the page runs below the fold. */
-  .plan-main[data-leads=stepper] > :is(.plan-masthead, .plan-masthead + p) + figure .stepper-stage > svg {
-    max-height: none; max-width: min(calc(var(--fig-w) * 1.25), calc((100vh - 281px) * var(--fig-ar)));
+  /* ...or, opening a page, the first view (one-line title, two-line lead) does: --fig-max above. */
+  @media (min-width: 900px) {
+    .plan-main[data-leads=stepper] > :is(.plan-masthead, .plan-masthead + p) + figure .stepper-stage > svg { max-height: none; max-width: var(--fig-max); }
   }
 }
 .stepper-counters { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 8px 0 0; }

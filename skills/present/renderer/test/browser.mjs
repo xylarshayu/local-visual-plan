@@ -160,27 +160,34 @@ await check('phone: a stepper control focused under the review pill scrolls clea
   await ctx.close()
 })
 
-await check('a page that opens with a stepper: title, lead and figure share a left edge and the first view fits the window, down to 0.8x', async () => {
+await check('a page that opens with a stepper: one left edge, the rail beside the figure, and the first view fits the window (with or without caption and counters), down to 0.8x', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'pf-lead-'))
   writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 720 480"><g data-part="a"><rect class="box" x="0" y="0" width="720" height="480"/></g></svg>')
-  writeFileSync(join(dir, 'l.html'), renderPlan('# Lead page\n\nOne line of lead.\n\n```stepper figure=f.svg\nswitch: Net\n\n# One\nparts: a\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') }).html)
-  const look = async (viewport) => {
-    const { p, ctx } = await open({ viewport }, join(dir, 'l.html'))
+  const lead = 'A lead long enough to wrap onto a second line in the column, the way a real explainer opens its first page with a sentence or two.'
+  const page = (name, head, body = '') => writeFileSync(join(dir, name + '.html'), renderPlan(`# Lead page\n\n${lead}\n\n\`\`\`stepper figure=f.svg${head}\nswitch: Net\n${body}\n# One\nparts: a\nkey: k\n\`\`\`\n`, { sourcePath: join(dir, 'p.md') }).html)
+  page('cap', ' title="A caption"'); page('counters', '', 'counter: n | Done\n'); page('both', ' title="A caption"', 'counter: n | Done\n')
+  const look = async (name, viewport) => {
+    const { p, ctx } = await open({ viewport }, join(dir, name + '.html'))
     const r = await p.evaluate(() => {
-      const x = (q) => Math.round(document.querySelector(q).getBoundingClientRect().left)
-      const svg = document.querySelector('.stepper-stage svg').getBoundingClientRect()
-      return { lefts: [x('.plan-masthead h1'), x('.plan-masthead + p'), x('.stepper-stage svg')], w: Math.round(svg.width), h: Math.round(svg.height),
-        controls: Math.round(document.querySelector('.stepper-switch').getBoundingClientRect().bottom), vh: innerHeight }
+      const box = (q) => document.querySelector(q).getBoundingClientRect(), svg = box('.stepper-stage svg')
+      return { lefts: ['.plan-masthead h1', '.plan-masthead + p', '.stepper-stage svg'].map((q) => Math.round(box(q).left)), lead: Math.round(box('.plan-masthead + p').height),
+        w: Math.round(svg.width), h: Math.round(svg.height), gap: Math.round(box('.stepper-steps').left - svg.right), controls: Math.round(box('.stepper-switch').bottom), vh: innerHeight }
     })
     await ctx.close()
     return r
   }
-  let r = await look({ width: 1536, height: 864 })
-  assert.ok(r.lefts.every((v) => Math.abs(v - r.lefts[0]) <= 1), `one left edge: ${JSON.stringify(r)}`)
-  assert.ok(r.controls <= r.vh && r.w < 720 * 1.25 && Math.abs(r.h - r.w / 1.5) <= 1, `fits the window, not letterboxed: ${JSON.stringify(r)}`)
-  r = await look({ width: 1536, height: 560 })
-  assert.ok(r.w === 576 && r.h === 384 && Math.abs(r.lefts[2] - r.lefts[0]) <= 1, `stops at 0.8x and runs below the fold: ${JSON.stringify(r)}`)
-  r = await look({ width: 1536, height: 1400 })
+  for (const name of ['cap', 'counters', 'both']) {
+    const r = await look(name, { width: 1536, height: 730 })
+    assert.ok(r.lead > 40 && r.lead < 60 && r.lefts.every((v) => v === r.lefts[0]) && r.gap === 32, `${name}: two-line lead, one left edge, rail beside the figure: ${JSON.stringify(r)}`)
+    assert.ok(r.w > 576 && r.w < 900 && Math.abs(r.h - r.w / 1.5) <= 1 && r.controls <= r.vh && r.controls >= r.vh - 12, `${name}: capped, not letterboxed, fits with little to spare: ${JSON.stringify(r)}`)
+  }
+  let r = await look('both', { width: 1536, height: 560 })
+  assert.ok(r.w === 576 && r.h === 384 && r.lefts[2] === r.lefts[0] && r.gap === 32, `stops at 0.8x, still beside the rail, and runs below the fold: ${JSON.stringify(r)}`)
+  writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 400 300"><g data-part="a"><rect class="box" x="0" y="0" width="400" height="300"/></g></svg>')
+  page('small', ' title="A caption"')
+  r = await look('small', { width: 1536, height: 560 })
+  assert.ok(r.w === 372 && r.controls <= r.vh, `a small figure in a column wider than it and the rail is capped too: ${JSON.stringify(r)}`)
+  r = await look('cap', { width: 1536, height: 1400 })
   assert.equal(r.w, 720 * 1.25, 'a tall window keeps the 1.25x figure')
 })
 
