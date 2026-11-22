@@ -211,18 +211,38 @@
           sw.setAttribute("aria-checked", on ? "true" : "false");
           sw.querySelector(".stepper-switch-state").textContent = on ? "on" : "off";
         }
-        // A narrow stage scrolls; keep the current parts in view.
+        // A narrow stage scrolls. From the figure's start, pan only as far as the current parts need;
+        // if they cannot all fit, keep the first one named whole, then as many others as fit. Empty parts are skipped.
         if (stage && stage.scrollWidth > stage.clientWidth) {
-          var box = null;
-          parts.forEach(function (p) {
-            if (!cur[p.getAttribute("data-part")]) return;
-            var r = p.getBoundingClientRect();
-            if (!r.width && !r.height) return;
-            box = box ? { l: Math.min(box.l, r.left), r: Math.max(box.r, r.right) } : { l: r.left, r: r.right };
-          });
-          if (box) {
-            var s0 = stage.getBoundingClientRect();
-            stage.scrollLeft += (box.l + box.r) / 2 - (s0.left + s0.width / 2);
+          var spans = words(view).map(function (w) {
+            var b = null;
+            parts.forEach(function (p) {
+              if (p.getAttribute("data-part") !== w) return;
+              var r = p.getBoundingClientRect();
+              if (!r.width && !r.height) return;
+              b = b ? { l: Math.min(b.l, r.left), r: Math.max(b.r, r.right) } : { l: r.left, r: r.right };
+            });
+            return b;
+          }).filter(Boolean);
+          if (spans.length) {
+            var x0 = stage.getBoundingClientRect().left + stage.clientLeft - stage.scrollLeft, m = 12;
+            var W = stage.clientWidth, end = stage.scrollWidth - W;
+            spans = spans.map(function (b) { return { l: b.l - x0, r: b.r - x0 }; });
+            var left = Math.min.apply(null, spans.map(function (b) { return b.l; }));
+            var right = Math.max.apply(null, spans.map(function (b) { return b.r; }));
+            if (right - left <= W) stage.scrollLeft = Math.min(right + m - W, left);
+            else {
+              // Candidate views line a part up with either edge; ties go to the one nearest the start.
+              var f = spans[0], lo = Math.min(f.r + m - W, f.l - m), hi = f.l - m, best = null;
+              spans.forEach(function (s) {
+                [s.l - m, s.r + m - W].forEach(function (o) {
+                  o = Math.max(0, Math.min(end, Math.min(hi, Math.max(lo, o))));
+                  var n = spans.filter(function (t) { return t.l >= o && t.r <= o + W; }).length;
+                  if (!best || n > best.n || (n === best.n && o < best.o)) best = { n: n, o: o };
+                });
+              });
+              stage.scrollLeft = best.o;
+            }
           }
         }
       }

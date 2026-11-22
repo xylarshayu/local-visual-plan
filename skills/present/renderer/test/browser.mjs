@@ -219,6 +219,30 @@ await check('phone: no page overflow; the stage scrolls to keep the current part
     return r.left >= s.left && r.right <= s.right
   }), 'an empty anchor part does not pull the pan to x=0')
   await pan.ctx.close()
+  // Viewbox 720 draws 576 wide; the stage is 358. a: 32..112, b: 464..560, c: 160..288, d: 336..382 (drawn px).
+  writeFileSync(join(dir, 'g.svg'), '<svg viewBox="0 0 720 60"><g data-part="a"><rect class="box" x="40" y="8" width="100" height="40"/></g><g data-part="b"><rect class="box" x="580" y="8" width="120" height="40"/></g><g data-part="c"><rect class="box" x="200" y="8" width="160" height="40"/></g><g data-part="d"><rect class="box" x="420" y="8" width="57.5" height="40"/></g></svg>')
+  const left = async (order) => {
+    writeFileSync(join(dir, 'w.html'), renderPlan(`# T\n\n\`\`\`stepper figure=g.svg\n# One\nparts: ${order}\nkey: k\n\`\`\`\n`, { sourcePath: join(dir, 'p.md') }).html)
+    const o = await open({ viewport: { width: 390, height: 844 } }, join(dir, 'w.html'))
+    const r = await o.p.evaluate(() => {
+      const s = document.querySelector('.stepper-stage'), sr = s.getBoundingClientRect()
+      const whole = (n) => { const b = document.querySelector(`[data-part=${n}]`).getBoundingClientRect(); return b.left >= sr.left && b.right <= sr.right }
+      return { left: s.scrollLeft, a: whole('a'), b: whole('b'), c: whole('c'), d: whole('d') }
+    })
+    await o.ctx.close()
+    return r
+  }
+  const fits = await left('a c')
+  assert.ok(fits.left === 0 && fits.a && fits.c, 'parts that fit from the start leave the view at the start: ' + JSON.stringify(fits))
+  const snug = await left('d a')
+  assert.ok(snug.a && snug.d, 'parts that fit only without the margin are still all whole: ' + JSON.stringify(snug))
+  const ab = await left('a b'), ba = await left('b a')
+  assert.ok(ab.a && !ab.b, 'too wide: the first part named stays whole (a): ' + JSON.stringify(ab))
+  assert.ok(ba.b && !ba.a, 'too wide: the first part named stays whole (b): ' + JSON.stringify(ba))
+  const cab = await left('c a b')
+  assert.ok(cab.c && cab.a, 'too wide: with the first part whole, as many of the rest as fit (a, left of it): ' + JSON.stringify(cab))
+  const cb = await left('c b')
+  assert.ok(cb.c && cb.left === 0, 'too wide: among equal views, the one nearest the start: ' + JSON.stringify(cb))
 })
 
 await check('phone: a wide prose table scrolls in its own box and a wide image fits, so the page does not scroll sideways', async () => {

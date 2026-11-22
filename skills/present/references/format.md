@@ -504,7 +504,9 @@ Lines before the first `#` set up the stepper:
 Each `# title` starts a step. Its setting lines come first, in any order;
 everything after them is the narration, in Markdown.
 
-- `parts:` the `data-part` names this step is about, separated by spaces.
+- `parts:` the `data-part` names this step is about, separated by spaces. Name
+  first the one a phone must show whole when the step's parts are too wide for it;
+  the rest are fitted around it.
 - `key:` the key idea, one sentence. Required.
 - `changed:` one item of "what changed"; repeat the line for more.
 - `set: name=value, name=value` new counter or state values (commas or spaces between them). Counter values are
@@ -560,7 +562,7 @@ up to 360px need, within a 1440px page with 24px sides and clear of the side
 nav. The figure column is sticky and its drawing is capped so it and the
 controls fit in the window. Print keeps the stepper in the column. On a wide
 stage the rail sits right of the figure; on a narrow one it sits below, and the stage (same minimum
-width as `figure`) scrolls to keep the current parts in view. While the switch is off, steps that need it are dashed
+width as `figure`) scrolls from the figure's start only as far as the current parts need. While the switch is off, steps that need it are dashed
 in the step bar. Every part some step names gets `data-goto`: clicking it
 (outside a link) goes to the first step that names it, unless the current
 step names it too; hovering tints it toward the accent, and a `data-rise`
