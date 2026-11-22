@@ -1571,14 +1571,13 @@
   }
 
   /* ----- Initial hash reveal ------------------------------------------- */
+  // A plain "#chapters" from another page lands on the heading "h:chapters".
   function handleInitialHash() {
     var h = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+    if (h && !elForAnchor(h) && elForAnchor("h:" + h)) h = "h:" + h;
     if (h && elForAnchor(h)) jumpTo(h);
   }
-  window.addEventListener("hashchange", function () {
-    var h = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
-    if (h && elForAnchor(h)) jumpTo(h);
-  });
+  window.addEventListener("hashchange", handleInitialHash);
 
   /* ----- Boot ----------------------------------------------------------- */
   function boot() {

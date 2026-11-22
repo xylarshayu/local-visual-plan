@@ -210,6 +210,24 @@ await check('phone: no page overflow; the stage scrolls to keep the current part
   assert.equal(m.svgW, 576, 'never narrower than 0.8 of the viewBox')
   assert.ok(m.inView, 'the current service box is visible')
   await ctx.close()
+  const dir = mkdtempSync(join(tmpdir(), 'pf-pan-'))
+  writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 720 60"><g data-part="a"><rect class="box" x="560" y="8" width="140" height="40"/></g><g data-part="anchor"/></svg>')
+  writeFileSync(join(dir, 'pan.html'), renderPlan('# T\n\n```stepper figure=f.svg\n# One\nparts: a anchor\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') }).html)
+  const pan = await open({ viewport: { width: 390, height: 844 } }, join(dir, 'pan.html'))
+  assert.ok(await pan.p.evaluate(() => {
+    const s = document.querySelector('.stepper-stage').getBoundingClientRect(), r = document.querySelector('[data-part=a]').getBoundingClientRect()
+    return r.left >= s.left && r.right <= s.right
+  }), 'an empty anchor part does not pull the pan to x=0')
+  await pan.ctx.close()
+})
+
+await check('a plain #heading link from another page lands on the h: heading', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pf-hash-'))
+  writeFileSync(join(dir, 'far.html'), renderPlan('# T\n\n' + 'Filler.\n\n'.repeat(150) + '## Far down\n\nHere.\n', { sourcePath: join(dir, 'p.md') }).html)
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } }), p = await ctx.newPage()
+  await p.goto('file://' + join(dir, 'far.html') + '#far-down')
+  await p.waitForFunction(() => { const r = document.getElementById('h:far-down').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight }, null, { timeout: 3000 })
+  await ctx.close()
 })
 
 await check('reduced motion: part transitions are off (and on by default)', async () => {
@@ -746,7 +764,9 @@ await check('check.mjs reports labels that spill or overlap and text drawn too s
     + '<g data-part="bare"><rect class="box" style="stroke:none" x="250" y="60" width="40" height="40"/><text x="251" y="84">Bare</text></g>'
     + '<text x="200" y="24">Left</text><text x="210" y="24">Right</text></svg>')
   writeFileSync(join(dir, 'figures', 'show.svg'), '<svg viewBox="0 0 360 60"><g data-part="a"><rect class="box" x="0" y="0" width="160" height="40"/><text x="12" y="24">Shown</text></g>'
-    + '<g data-show="switch=off"><text x="20" y="24">Hidden over it</text></g></svg>')
+    + '<g data-show="switch=off"><text x="20" y="24">Hidden over it</text></g>'
+    + '<g data-part="chip"><g data-show="switch=on"><rect class="box" x="200" y="0" width="150" height="40"/><text x="212" y="24">Wide chip label</text></g>'
+    + '<g data-show="switch=off"><rect class="box" x="200" y="0" width="40" height="40"/></g></g></svg>')
   writeFileSync(join(dir, 'figures', 'wide.svg'), '<svg viewBox="0 0 2400 60"><g data-part="a"><rect class="box" x="0" y="0" width="160" height="40"/><text x="12" y="24">Tiny</text></g></svg>')
   const file = join(dir, 'layout.html')
   writeFileSync(file, renderPlan('# Layout\n\n```figure src=figures/layout.svg title="Layout"\nBoxes.\n```\n\n```figure src=figures/wide.svg title="Wide"\nWide.\n```\n\n'

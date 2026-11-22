@@ -206,7 +206,7 @@ function measureFigures() {
     const px = Math.min(...texts.map((x) => parseFloat(getComputedStyle(x.t).fontSize) * scale));
     if (px < 11) out.push(`${name}: text shows at ${px.toFixed(1)}px; draw the figure narrower (720 units) at 12-unit text`);
     const shapes = [...svg.querySelectorAll("rect, ellipse, circle, polygon, path")]
-      .filter((el) => !el.closest("defs, symbol, marker") && getComputedStyle(el).fill !== "none" && box(el.getBoundingClientRect()));
+      .filter((el) => !el.closest("defs, symbol, marker") && getComputedStyle(el).fill !== "none" && getComputedStyle(el).visibility !== "hidden" && box(el.getBoundingClientRect()));
     for (const x of texts) {
       const part = x.t.closest("[data-part]") || svg;
       const cy = x.r.top + x.r.height / 2;

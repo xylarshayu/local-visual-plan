@@ -217,6 +217,7 @@
           parts.forEach(function (p) {
             if (!cur[p.getAttribute("data-part")]) return;
             var r = p.getBoundingClientRect();
+            if (!r.width && !r.height) return;
             box = box ? { l: Math.min(box.l, r.left), r: Math.max(box.r, r.right) } : { l: r.left, r: r.right };
           });
           if (box) {
