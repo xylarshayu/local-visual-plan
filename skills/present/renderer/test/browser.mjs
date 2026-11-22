@@ -221,6 +221,25 @@ await check('phone: no page overflow; the stage scrolls to keep the current part
   await pan.ctx.close()
 })
 
+await check('phone: a wide prose table scrolls in its own box and a wide image fits, so the page does not scroll sideways', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pf-wide-'))
+  writeFileSync(join(dir, 'wide.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="90"><rect width="900" height="90" fill="#888"/></svg>')
+  const cols = Array.from({ length: 8 }, (_, k) => 'column_heading_' + k)
+  const md = `# T\n\n![wide](wide.svg)\n\n| ${cols.join(' | ')} |\n|${cols.map(() => '---').join('|')}|\n| ${cols.join(' | ')} |\n`
+  writeFileSync(join(dir, 'wide.html'), renderPlan(md, { sourcePath: join(dir, 'p.md') }).html)
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const p = await ctx.newPage()
+  await p.goto('file://' + join(dir, 'wide.html')); await p.waitForFunction(() => document.querySelector('img').complete)
+  const m = await p.evaluate(() => {
+    const box = document.querySelector('.table-scroll'), img = document.querySelector('.plan-main img')
+    return { page: document.documentElement.scrollWidth, scrolls: box.scrollWidth > box.clientWidth, img: img.getBoundingClientRect().width, natural: img.naturalWidth }
+  })
+  assert.equal(m.page, 390, JSON.stringify(m))
+  assert.ok(m.scrolls, 'the table is wider than the page and scrolls in its box')
+  assert.ok(m.natural === 900 && m.img <= 358, JSON.stringify(m))
+  await ctx.close()
+})
+
 await check('a count drawn in the figure (a number state value) that just came on turns accent; a word value does not', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'pf-count-'))
   writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 200 40"><g data-part="a"><rect class="box" x="0" y="0" width="40" height="40"/></g>'

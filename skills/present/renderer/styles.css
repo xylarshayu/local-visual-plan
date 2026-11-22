@@ -343,6 +343,9 @@ div[data-block=questions] {
   font-size: var(--fs-sm);
   margin: var(--block-gap) 0;
 }
+.table-scroll { margin: var(--block-gap) 0; }
+.plan-main .table-scroll > table { margin: 0; }
+.plan-main img { max-width: 100%; height: auto; }
 .plan-main th, .plan-main td {
   border-bottom: 1px solid var(--border);
   padding: 8px 12px 8px 0;
@@ -1407,6 +1410,7 @@ pre[data-block=unknown]::before {
   .diff-split .diff-pane + .diff-pane { border-left: 0; border-top: 1px solid var(--border); }
   .plan-masthead { padding-top: 32px; }
   .pf-chapter + .pf-chapter { margin-top: 64px; }
+  .table-scroll { overflow-x: auto; }
 }
 
 /* ----- print ------------------------------------------------------------- */

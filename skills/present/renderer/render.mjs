@@ -1930,7 +1930,9 @@ function tagProseAnchors(html, reg) {
 function tagTableAnchors(html, reg) {
   const holdsToken = (s) => /[\x01\x02]|VPSEG/.test(s);
   const cellText = (s) => decodeEntitiesLite(stripTags(s)).replace(/\s+/g, " ").trim();
-  return html.replace(/<table>[\s\S]*?<\/table>/g, (tbl) => {
+  // Each prose table gets its own box, which scrolls sideways on a phone instead of the page.
+  return html.replace(/<table>[\s\S]*?<\/table>/g, (tbl) => `<div class="table-scroll">${tagTable(tbl)}</div>`);
+  function tagTable(tbl) {
     if (holdsToken(tbl)) return tbl;
     const headers = [];
     const headM = /<thead>([\s\S]*?)<\/thead>/.exec(tbl);
@@ -1967,7 +1969,7 @@ function tagTableAnchors(html, reg) {
       return `<tr data-pf-anchor="${esc(rowAnchor)}" id="${esc(rowAnchor)}">${newInner}</tr>`;
     });
     return out.slice(0, ti) + bodyPart;
-  });
+  }
 }
 
 // Plain fenced code blocks (```js and friends — NOT the custom `code` block,
