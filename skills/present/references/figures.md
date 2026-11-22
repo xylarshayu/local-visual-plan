@@ -98,23 +98,52 @@ emphasis, never the only copy of a fact.
   stepper shows movement along it while that step is current. That is the
   one moving thing a page has: one speed, one bead, accent only, three runs
   and then rest.
+- Draw what a part is, not a box. A stack of identical slabs, or a row of
+  plain rectangles, is the weak form: it is dull and nobody remembers it.
+  Each layer or part shows on its surface what it holds: a window for an
+  interface, a grid of units for services, a channel of tiles for a queue, a
+  gate across a lane for a limit, cylinders for storage, a rack for an
+  outside server. A detail or two per shape, one ink, no shading or colour.
 - In an exploded or isometric stack, `data-lift` on each layer makes the
   current one rise 20 units out of the stack as the stepper walks it, and
   ghosts the layers drawn over it. A layer carries its labels up with it, so
   keep the labels of layers on one level at least 36 units apart, or spread
-  them with leaders.
+  them with leaders. When one level holds parts of its own (tiles side by
+  side), put `data-lift` on a group around them instead: the group rises
+  while any part in it is current, and its parts never ghost each other.
 - An axonometric plan (`plan.svg`) shows parts that sit side by side and
   connect, not stacked: buildings on one platform, lanes between them. Put
   `data-rise` on each building; the current one rises 12 units and nothing is
   ghosted. Keep each label inside its building's group so it rises too.
-- In a plan, give each kind of part its own simple shape, still one ink: a
-  channel of tiles for a queue, ridged units for workers, a gate across a lane
-  for a limit, stacked disks for a store. A detail or two per shape, never
-  shading or colour.
-- Plan labels are plain text on clear ground (a `class="box"` backing with
-  `style="stroke:none"` keeps lines from crossing them), not bordered tags.
-  A label with no clear ground on its part sits beside it with a short leader.
-  Leave arrowheads clear of the shapes in front of them.
+- An outside party (users, a partner system) is a satellite: a small platform
+  of its own with one object on it, joined to the main platform by a lane,
+  with a dot where the lane meets each platform. It is an object, not a text
+  label at the end of a line.
+- In a plan, run the flow up the screen (toward the upper right). An arrow
+  that travels up lands on a face the reader sees; one that travels down the
+  screen ends behind its target.
+- Platforms and slabs have rounded corners, a thin lower edge, and an inset
+  line just inside the top edge. A plan rectangle with corner radius r
+  projects (2:1 isometric, screen = (x - y, (x + y)/2 - z)) to elliptical arcs
+  with rx = r·√2 and ry = r·√2/2, axis-aligned, sweep 1 around the top face.
+  The lower edge runs from the leftmost to the rightmost silhouette point
+  along the front, then back along the same arcs moved down by the
+  thickness. Fill the edge with `style="fill:var(--bg-sunken)"` and the top
+  with `class="box"`.
+- To draw flat on a surface at height z, draw in plan units inside
+  `<g transform="matrix(1 0.5 -1 0.5 OX OY-z)">` (OX, OY is the plan origin
+  on screen). A wall facing lower left at plan y = Y is
+  `matrix(1 0.5 0 -1 OX-Y OY+Y/2)`, one facing lower right at plan x = X is
+  `matrix(-1 0.5 0 -1 OX+X OY+X/2)`; inside, x runs along the wall and y is
+  height. Strokes keep their weight under the transform.
+- Labels sit beside the drawing, joined to their part by a leader: a small
+  dot (`class="solid"`) where it touches the part, a thin line, then the name
+  in weight 600 and a sub-line in `class="mono muted"` 18 units below. Line
+  the labels up in a column at the side, or set one above its part on a
+  vertical leader; a leader never crosses another shape. A label that must sit on the drawing goes on clear ground (a
+  `class="box"` backing with `style="stroke:none"` keeps lines from crossing
+  it), not in a bordered tag. Leave arrowheads clear of the shapes in front
+  of them.
 - Any part a step names is a shortcut: clicking it goes to the first step
   that names it, and hovering gives it a hint of accent (a `data-rise`
   building also lifts a little). Nothing to declare.
@@ -162,8 +191,9 @@ labels, delete what you do not need.
 |---|---|---|
 | `layer-stack.svg` | Layers, each with what it catches or owns; an optional "gets through" row | Control catalog, compensating layers |
 | `architecture.svg` | Components inside nested trust boundaries, one gate per boundary. For a before/after, mark added parts `data-change="add"` and removed ones `data-change="del"`, and put the change ledger in a table under it | Secure paved road |
-| `exploded.svg` | Layers lifted apart in isometric, each with a label and what it is for; a stepper can light one layer at a time | Control catalog, traceable decomposition |
-| `plan.svg` | Parts that sit side by side on one platform and connect: an intake, three services, a guard across one lane, a store; each kind its own shape, lanes carry the flow | Fan-in queue, traceable decomposition |
+| `exploded.svg` | Rounded layers lifted apart in isometric, each showing on its surface what it holds (stores, a grid of services, an API gate with tokens, a window), with leader labels; a stepper can light one layer at a time | Control catalog, traceable decomposition |
+| `plan.svg` | Parts that sit side by side on one rounded platform and connect: an intake, a guard across the lane, three services, a store, with users and a partner as satellite platforms joined by lanes; each kind its own shape, lanes carry the flow | Fan-in queue, traceable decomposition |
+| `erd.svg` | A representative data model: a few tables as cards with their key columns, PK/FK chips, crow's-foot ends, solid for a declared foreign key and dashed for a join done only in code | Reading a system from its data |
 | `click-path.svg` | A request through a cache to an app and its database, with a bypass drawn only while a stepper's switch is off | The worked switch below |
 | `swimlane.svg` | Owners as lanes, work moving between them; an optional line of visibility splits what the user sees from what the system does | Stage framework, service blueprint |
 
@@ -175,7 +205,11 @@ not from colour. Shade a side face with `style="fill:var(--bg-sunken)"`.
 
 Mermaid stays the right tool for sequence, state, flowchart, ER, timeline and
 dependency graphs. Do not redraw those as figures, unless a stepper walks
-through it: a stepper needs a figure.
+through it: a stepper needs a figure. A data model the page is built around
+is the other exception: many readers understand a system from its tables
+first, so draw it from `erd.svg` (representative tables and key columns,
+not the whole schema), where the line style can say which joins the
+database enforces.
 
 ## Writing a stepper
 

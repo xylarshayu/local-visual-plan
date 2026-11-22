@@ -1838,7 +1838,7 @@ fixture('<figure + stepper lint>', (check) => {
   check('every house figure renders clean, and a stepper can walk all its parts', () => {
     const dir = join(__dirname, '..', '..', 'figures')
     const files = readdirSync(dir).filter((f) => f.endsWith('.svg'))
-    assert.deepEqual(files.sort(), ['architecture.svg', 'click-path.svg', 'exploded.svg', 'layer-stack.svg', 'plan.svg', 'swimlane.svg'])
+    assert.deepEqual(files.sort(), ['architecture.svg', 'click-path.svg', 'erd.svg', 'exploded.svg', 'layer-stack.svg', 'plan.svg', 'swimlane.svg'])
     // click-path.svg needs a switch; the worked-switch test walks it
     for (const f of files.filter((f) => f !== 'click-path.svg')) {
       const svg = readFileSync(join(dir, f), 'utf8')
