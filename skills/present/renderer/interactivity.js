@@ -232,7 +232,9 @@
             var right = Math.max.apply(null, spans.map(function (b) { return b.r; }));
             if (right - left <= W) stage.scrollLeft = Math.min(right + m - W, left);
             else {
-              // Candidate views line a part up with either edge; ties go to the one nearest the start.
+              // No margin here: it would cut a part that only just fits. Candidate views line a part up
+              // with either edge; ties go to the one nearest the start.
+              m = 0;
               var f = spans[0], lo = Math.min(f.r + m - W, f.l - m), hi = f.l - m, best = null;
               spans.forEach(function (s) {
                 [s.l - m, s.r + m - W].forEach(function (o) {

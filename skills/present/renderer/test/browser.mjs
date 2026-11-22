@@ -241,6 +241,8 @@ await check('phone: no page overflow; the stage scrolls to keep the current part
   assert.ok(ba.b && !ba.a, 'too wide: the first part named stays whole (b): ' + JSON.stringify(ba))
   const cab = await left('c a b')
   assert.ok(cab.c && cab.a, 'too wide: with the first part whole, as many of the rest as fit (a, left of it): ' + JSON.stringify(cab))
+  const adb = await left('a d b')
+  assert.ok(adb.a && adb.d, 'too wide: no margin, so a part that only just fits beside the first stays whole (d): ' + JSON.stringify(adb))
   const cb = await left('c b')
   assert.ok(cb.c && cb.left === 0, 'too wide: among equal views, the one nearest the start: ' + JSON.stringify(cb))
 })
