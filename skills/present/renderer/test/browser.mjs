@@ -233,8 +233,9 @@ await check('figure: text renders at its drawn size and the dark theme repaints 
 
 console.log('\n# flow pulses')
 
-// Freeze the e-gateway pulse at a point of its 1.6s cycle and read the device pixel (at 2x)
-// just above the line at x=178 (37.5% along M160 100H208, clear of the boundary at x=184). The pulse is wider than the
+// The e-gateway line (M160 100H208) is 48 long, so its cycle is (48 + 14) * 12 = 744ms and the
+// 14-unit bead's centre is 62t/744 - 7 along it. Freeze it and read the device pixel (at 2x)
+// just above the line at x=178, clear of the boundary at x=184. The pulse is wider than the
 // line, so that pixel is accent only while the pulse passes it.
 const pulsePixel = async (p, ms) => {
   const pt = await p.evaluate(async (ms) => {
@@ -258,14 +259,14 @@ await check('only data-flow lines of current parts pulse, in drawing direction, 
   assert.deepEqual(await pulses(), { 'e-gateway': true, 'e-service': false })
   const offsets = await p.evaluate(() => {
     const c = document.querySelector('[data-part=e-gateway] .flow-pulse')
-    return [200, 800, 1400].map((ms) => {
+    return [100, 300, 500].map((ms) => {
       c.getAnimations().forEach((a) => { a.pause(); a.currentTime = ms })
       return parseFloat(getComputedStyle(c).strokeDashoffset)
     })
   })
   assert.ok(offsets[0] > offsets[1] && offsets[1] > offsets[2], `offset falls, so the dash runs start to end: ${offsets}`)
   const bg = await token(p, '--bg'), accent = await token(p, '--accent')
-  const on = await pulsePixel(p, 664), off = await pulsePixel(p, 200)
+  const on = await pulsePixel(p, 300), off = await pulsePixel(p, 564)
   assert.ok(near(on, accent, 40), `pulse passing x=178 paints accent: ${on} vs ${accent}`)
   assert.ok(near(off, bg), `pulse elsewhere leaves the background: ${off} vs ${bg}`)
   await p.click('.stepper-next')

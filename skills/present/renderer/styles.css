@@ -663,13 +663,14 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 .stepper-stage svg [data-state=future] { opacity: 0.32; }
 .stepper-stage svg [data-state=future][data-future=hidden] { visibility: hidden; }
 .stepper-stage svg [data-part] { transition: opacity var(--dur-2) var(--ease), color var(--dur-1) var(--ease); }
-/* A bead runs along each data-flow line of a current part, in the line's drawing direction. */
+/* A 14-unit bead runs along each data-flow line of a current part, start to end, at one speed. */
 .stepper-stage svg .flow-pulse { display: none; }
 .stepper-stage svg [data-state=current] .flow-pulse {
-  display: inline; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
-  stroke-dasharray: 8 92; vector-effect: none; animation: pf-flow 1.6s linear infinite;
+  display: inline; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; vector-effect: none;
+  stroke-dasharray: 14 calc(var(--len) * 1px);
+  animation: pf-flow calc((var(--len) + 14) * 12ms) linear infinite;
 }
-@keyframes pf-flow { from { stroke-dashoffset: 8; } to { stroke-dashoffset: -92; } }
+@keyframes pf-flow { from { stroke-dashoffset: 14; } to { stroke-dashoffset: calc(var(--len) * -1px); } }
 .figure-fallback { color: var(--fg-muted); }
 
 figure[data-block=stepper] { container-type: inline-size; }

@@ -154,7 +154,7 @@
         var pulse = line.cloneNode(false);
         ["data-flow", "id"].forEach(function (a) { pulse.removeAttribute(a); });
         pulse.setAttribute("class", "flow-pulse");
-        pulse.setAttribute("pathLength", "100");
+        pulse.style.setProperty("--len", line.getTotalLength());
         pulse.setAttribute("aria-hidden", "true");
         line.after(pulse);
       });
