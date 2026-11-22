@@ -291,7 +291,7 @@ function sanitizeReplies(raw, warnings) {
 
 const KNOWN_BLOCKS = new Set([
   "steps", "filetree", "diff", "code", "diagram", "wireframe", "questions", "callout",
-  "data-model", "api-endpoint",
+  "data-model", "api-endpoint", "figure", "stepper",
 ]);
 
 // Parse `type key=value key="quoted value"` into { type, attrs }.
@@ -1151,6 +1151,226 @@ function renderApiEndpoint(body, attrs, ctx) {
   return out;
 }
 
+/* ========================================================================== *
+ *  figure + stepper — an authored SVG, inlined and linted (format.md)
+ * ========================================================================== */
+
+const PAINT_PROPS = "fill|stroke|stop-color|color|flood-color|lighting-color";
+const PAINT_ATTR_RE = new RegExp(`\\s(${PAINT_PROPS})\\s*=\\s*["']([^"']*)["']`, "gi");
+const PAINT_PROP_RE = new RegExp(`^(${PAINT_PROPS})$`, "i");
+const SAFE_PAINT = /^(none|currentcolor|transparent|inherit|var\(--[\w-]+\)|url\(#[\w.-]+\))$/i;
+
+// Read, lint and inline one figure SVG. `prefix` namespaces its ids so two
+// figures on a page can share `id="arrow"`. Returns null when it can't be used.
+function loadFigure(src, prefix, title, desc, reg, warnings) {
+  const where = `figure ${src || "(no src)"}`;
+  if (!src) { warnings.push(`${where}: missing src`); return null; }
+  let text;
+  try { text = readFileSync(resolve(reg.baseDir, src), "utf8"); }
+  catch { warnings.push(`${where}: cannot read file`); return null; }
+  text = text.replace(/<\?xml[\s\S]*?\?>|<!DOCTYPE[^>]*>|<!--[\s\S]*?-->/gi, "");
+  const start = text.search(/<svg\b/i), end = text.lastIndexOf("</svg>");
+  if (start < 0 || end < start) { warnings.push(`${where}: no <svg> root`); return null; }
+  text = text.slice(start, end + 6);
+
+  if (/<script\b/i.test(text)) {
+    warnings.push(`${where}: <script> removed`);
+    text = text.replace(/<script\b[^>]*\/>|<script\b[\s\S]*?<\/script\s*>/gi, "");
+  }
+  if (/\son[a-z]+\s*=/i.test(text)) {
+    warnings.push(`${where}: event handler attributes removed`);
+    text = text.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, "");
+  }
+  for (const tag of ["foreignObject", "style"]) {
+    const re = new RegExp(`<${tag}\\b[^>]*\\/>|<${tag}\\b[\\s\\S]*?<\\/${tag}\\s*>`, "gi");
+    if (re.test(text)) {
+      warnings.push(`${where}: <${tag}> removed`);
+      text = text.replace(re, "");
+    }
+  }
+  text = text.replace(/\s(?:xlink:)?href\s*=\s*["']([^"']*)["']/gi, (m, url) => {
+    if (url.startsWith("#")) return m;
+    warnings.push(`${where}: href "${url}" removed (only #id)`);
+    return "";
+  });
+  const paint = (prop, value) => {
+    if (!SAFE_PAINT.test(value.trim())) warnings.push(`${where}: ${prop}="${value.trim()}" is not a token colour`);
+  };
+  for (const m of text.matchAll(PAINT_ATTR_RE)) paint(m[1], m[2]);
+  for (const m of text.matchAll(/\sstyle\s*=\s*["']([^"']*)["']/gi)) {
+    for (const decl of m[1].split(";")) {
+      const i = decl.indexOf(":");
+      if (i > 0 && PAINT_PROP_RE.test(decl.slice(0, i).trim())) paint(decl.slice(0, i).trim(), decl.slice(i + 1));
+    }
+  }
+
+  const parts = [...text.matchAll(/\sdata-part\s*=\s*["']([^"']*)["']/g)].map((m) => m[1]);
+  const seen = new Set();
+  for (const p of parts) {
+    if (seen.has(p)) warnings.push(`${where}: data-part "${p}" is used more than once`);
+    seen.add(p);
+  }
+  const accents = (text.match(/\sdata-accent\b/g) || []).length;
+
+  const ids = new Set([...text.matchAll(/\sid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]));
+  text = text
+    .replace(/(\sid\s*=\s*["'])([^"']+)/g, (m, a, id) => a + prefix + id)
+    .replace(/url\(#([\w.-]+)\)/g, (m, id) => (ids.has(id) ? `url(#${prefix}${id})` : m))
+    .replace(/(\s(?:xlink:)?href\s*=\s*["']#)([^"']+)/g, (m, a, id) => (ids.has(id) ? a + prefix + id : m));
+
+  const rootM = /^<svg\b([^>]*)>/i.exec(text);
+  let attrs = rootM[1];
+  const vb = /\sviewBox\s*=\s*["']([^"']+)["']/i.exec(attrs);
+  if (!vb) warnings.push(`${where}: the root <svg> has no viewBox`);
+  const width = vb ? parseFloat(vb[1].trim().split(/[\s,]+/)[2]) || 0 : 0;
+  attrs = attrs.replace(/\s(width|height|style|role|aria-[\w-]+)\s*=\s*("[^"]*"|'[^']*')/gi, "");
+  const size = width ? ` style="min-width:${Math.round(width * 0.8)}px;max-width:${Math.round(width)}px"` : "";
+  const open = `<svg${attrs} role="img" aria-labelledby="${prefix}title" aria-describedby="${prefix}desc"${size}>`
+    + `<title id="${prefix}title">${esc(title || "Figure")}</title><desc id="${prefix}desc">${esc(desc)}</desc>`;
+  return { svg: open + text.slice(rootM[0].length), parts: seen, accents };
+}
+
+function renderFigure(body, attrs, ctx, warnings) {
+  const reg = ctx.reg;
+  const idx = nextTypeIndex(reg, "figure");
+  const label = attrs.title || `figure ${idx}`;
+  const anchor = registerAnchor(reg, "figure", attrs.title || attrs.src || `figure-${idx}`, label, ctx.blockLines, body);
+  const desc = body.trim().replace(/\s+/g, " ");
+  if (!desc) warnings.push(`figure ${attrs.src || "(no src)"}: the body (what the figure shows) is empty`);
+  const fig = loadFigure(attrs.src, `fig${idx}-`, attrs.title, desc, reg, warnings);
+  if (fig && fig.accents > 2) warnings.push(`figure ${attrs.src}: ${fig.accents} data-accent elements (at most 2)`);
+  let out = `<figure data-block="figure" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
+  if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
+  out += fig ? `<div class="figure-stage">${fig.svg}</div>` : `<p class="figure-fallback">${esc(desc)}</p>`;
+  return out + "</figure>";
+}
+
+const inlineMd = (s) => neutralizeRemoteRefs(marked.parseInline(s));
+
+const STEPPER_LIMITS = { counters: 3, steps: 10 };
+
+// Parse the stepper body: header lines (counter:, switch:), then `# title` steps
+// whose setting lines come first and whose remaining lines are narration.
+function parseStepper(body, where, warnings) {
+  const counters = [];
+  let switchLabel = null;
+  const steps = [];
+  let cur = null;
+  body.split(/\r?\n/).forEach((raw, idx) => {
+    const line = raw.trim();
+    const h = /^#\s+(.*)$/.exec(line);
+    if (h) {
+      cur = { title: h[1].trim(), parts: [], key: "", changed: [], set: {}, needs: false, held: false,
+        narration: [], inBody: false, startIdx: idx, endIdx: idx };
+      steps.push(cur);
+      return;
+    }
+    let m;
+    if (!cur) {
+      if ((m = /^counter:\s*([\w-]+)\s*\|\s*(.+)$/.exec(line))) counters.push({ name: m[1], label: m[2].trim() });
+      else if ((m = /^switch:\s*(.+)$/.exec(line))) {
+        if (switchLabel) warnings.push(`${where}: more than one switch (at most 1)`);
+        else switchLabel = m[1].trim();
+      } else if (line) warnings.push(`${where}: unrecognised line before the first step: "${line}"`);
+      return;
+    }
+    if (line) cur.endIdx = idx;
+    if (!cur.inBody) {
+      if (!line) return;
+      if ((m = /^parts:\s*(.*)$/.exec(line))) { cur.parts.push(...m[1].split(/\s+/).filter(Boolean)); return; }
+      if ((m = /^key:\s*(.*)$/.exec(line))) { cur.key = m[1]; return; }
+      if ((m = /^changed:\s*(.*)$/.exec(line))) { cur.changed.push(m[1]); return; }
+      if ((m = /^set:\s*(.*)$/.exec(line))) {
+        for (const kv of m[1].split(",")) {
+          const i = kv.indexOf("=");
+          if (i > 0) cur.set[kv.slice(0, i).trim()] = kv.slice(i + 1).trim();
+          else if (kv.trim()) warnings.push(`${where}: "set: ${kv.trim()}" needs name=value`);
+        }
+        return;
+      }
+      if (line === "needs: switch") { cur.needs = true; return; }
+      if (line === "held") { cur.held = true; return; }
+      cur.inBody = true;
+    }
+    cur.narration.push(raw);
+  });
+  return { counters, switchLabel, steps };
+}
+
+function renderStepper(body, attrs, ctx, warnings) {
+  const reg = ctx.reg;
+  const idx = nextTypeIndex(reg, "stepper");
+  const where = `stepper ${attrs.title || attrs.figure || idx}`;
+  const label = attrs.title || `stepper ${idx}`;
+  const anchor = registerAnchor(reg, "stepper", attrs.title || `stepper-${idx}`, label, ctx.blockLines, body);
+  const { counters: allCounters, switchLabel, steps } = parseStepper(body, where, warnings);
+
+  if (allCounters.length > STEPPER_LIMITS.counters) warnings.push(`${where}: ${allCounters.length} counters (at most ${STEPPER_LIMITS.counters})`);
+  const counters = allCounters.slice(0, STEPPER_LIMITS.counters);
+  const helds = steps.filter((s) => s.held);
+  if (helds.length > 1) warnings.push(`${where}: more than one held step (at most 1)`);
+  const held = helds[0] || null;
+  const seq = steps.filter((s) => s !== held);
+  if (!seq.length) warnings.push(`${where}: no steps`);
+  if (seq.length > STEPPER_LIMITS.steps) warnings.push(`${where}: ${seq.length} steps (at most ${STEPPER_LIMITS.steps})`);
+  const firstNeed = seq.findIndex((s) => s.needs);
+  if (!switchLabel && (held || firstNeed >= 0)) warnings.push(`${where}: "needs: switch" or "held" without a switch in the header`);
+  if (switchLabel && !held) warnings.push(`${where}: a switch with no held step`);
+  if (held && firstNeed < 0) warnings.push(`${where}: a held step but no step has "needs: switch"`);
+
+  const desc = seq.map((s, i) => `${i + 1}. ${s.title}`).join(" ");
+  const fig = loadFigure(attrs.figure, `stp${idx}-`, attrs.title, desc, reg, warnings);
+  const names = new Set(counters.map((c) => c.name));
+  for (const s of steps) {
+    if (!s.key) warnings.push(`${where}: step "${s.title}" has no key:`);
+    for (const n of Object.keys(s.set)) if (!names.has(n)) warnings.push(`${where}: step "${s.title}" sets unknown counter "${n}"`);
+    if (fig) for (const p of s.parts) if (!fig.parts.has(p)) warnings.push(`${where}: step "${s.title}" names part "${p}", which the figure does not have`);
+  }
+
+  // Counter values per step, carried forward; the held step starts from the
+  // values just before the first step that needs the switch.
+  const pick = (set) => Object.fromEntries(Object.entries(set).filter(([k]) => names.has(k)));
+  const vals = Object.fromEntries(counters.map((c) => [c.name, "0"]));
+  let heldBase = null;
+  seq.forEach((s, i) => {
+    if (i === firstNeed) heldBase = { ...vals };
+    Object.assign(vals, pick(s.set));
+    s.values = { ...vals };
+  });
+  if (held) held.values = { ...(heldBase || vals), ...pick(held.set) };
+
+  const stepHtml = (s, tag, whereText) => {
+    const lines = ctx.bodyStartLine != null ? [ctx.bodyStartLine + s.startIdx, ctx.bodyStartLine + s.endIdx] : null;
+    const a = registerChildAnchor(reg, `${anchor}:${slugify(s.title || "step")}`, "stepper-step", s.title, lines, s.title + " " + s.key + " " + s.narration.join(" "));
+    let out = `<${tag} class="stepper-step" data-pf-anchor="${esc(a)}" id="${esc(a)}" data-parts="${esc(s.parts.join(" "))}" data-counters="${esc(JSON.stringify(s.values))}"${s.needs ? " data-needs" : ""}>`;
+    out += `<p class="stepper-where">${esc(whereText)}</p><h3>${esc(s.title)}</h3>`;
+    const narration = s.narration.join("\n").trim();
+    if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
+    if (s.key) out += `<div class="stepper-key"><p class="stepper-label">Key idea</p><p>${inlineMd(s.key)}</p></div>`;
+    if (s.changed.length) out += `<div class="stepper-changed"><p class="stepper-label">What changed</p><ul>${s.changed.map((c) => `<li>${inlineMd(c)}</li>`).join("")}</ul></div>`;
+    return out + `</${tag}>`;
+  };
+
+  let out = `<figure data-block="stepper" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
+  if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
+  out += `<div class="stepper-grid"><div class="stepper-main">`;
+  out += fig ? `<div class="stepper-stage">${fig.svg}</div>` : "";
+  if (counters.length) {
+    const first = seq[0] ? seq[0].values : vals;
+    out += `<div class="stepper-counters">${counters.map((c) => `<p class="stepper-counter" data-counter="${esc(c.name)}"><b>${esc(first[c.name])}</b> ${esc(c.label)}</p>`).join("")}</div>`;
+  }
+  out += `<div class="stepper-controls">`;
+  out += `<button type="button" class="stepper-prev" aria-label="Previous step">&larr;</button><ol class="stepper-bar">`;
+  out += seq.map((s, i) => `<li><button type="button" data-step="${i}" aria-label="Step ${i + 1}: ${esc(s.title)}" title="${esc(s.title)}">${i + 1}</button></li>`).join("");
+  out += `</ol><button type="button" class="stepper-next" aria-label="Next step">&rarr;</button>`;
+  if (switchLabel) out += `<button type="button" class="stepper-switch" role="switch" aria-checked="true"><span class="stepper-track" aria-hidden="true"></span>${esc(switchLabel)} <span class="stepper-switch-state">on</span></button>`;
+  out += `</div></div><div class="stepper-rail" aria-live="polite"><ol class="stepper-steps">`;
+  out += seq.map((s, i) => stepHtml(s, "li", `Step ${i + 1} of ${seq.length}`)).join("");
+  out += `</ol>`;
+  if (held) out += stepHtml(held, "aside", `${switchLabel || "Switch"} off`).replace("<aside class=\"stepper-step\"", "<aside class=\"stepper-step stepper-held\"");
+  return out + `</div></div></figure>`;
+}
+
 function renderUnknown(type, body) {
   return `<pre data-block="unknown" data-type="${esc(type)}">${esc(body.replace(/\s+$/, ""))}</pre>`;
 }
@@ -1167,6 +1387,8 @@ function renderBlock(type, attrs, body, lean, warnings, ctx) {
     case "callout": return renderCallout(body, attrs, ctx);
     case "data-model": return renderDataModel(body, attrs, ctx);
     case "api-endpoint": return renderApiEndpoint(body, attrs, ctx);
+    case "figure": return renderFigure(body, attrs, ctx, warnings);
+    case "stepper": return renderStepper(body, attrs, ctx, warnings);
     default:
       warnings.push(`unknown block type: ${type}`);
       return renderUnknown(type, body);
@@ -1798,6 +2020,7 @@ export function renderPlan(markdownSource, {
   // Shared anchor registry + doc identity (the feedback plumbing).
   const reg = createRegistry(source, sourcePath, title);
   reg.theme = resolveTheme(themeOpt || frontmatter.theme, warnings);
+  reg.baseDir = sourcePath ? dirname(resolve(sourcePath)) : process.cwd();
   const docId = computeDocId(source);
 
   // Chapters are a top-level directive resolved BEFORE block extraction, so each

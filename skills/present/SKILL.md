@@ -41,9 +41,18 @@ page" — is this skill, directly.
   in-page navigation; skip it for a short page. Chapters also power **presenter
   mode** — a *Present* button in the page walks the reader one chapter at a
   time, with keyboard navigation and a clickable progress rail.
+- **The lowest rung that teaches it.** Bullets, then a table, then one drawn
+  diagram, then a `stepper`, then a section figure. Most topics stop at a
+  table; a page usually has at most one stepper, for its central idea.
 - **Diagrams and wireframes where they beat prose.** A `diagram` (Mermaid) for
   flows, sequences, state, or relationships; a `wireframe` for UI. Use prose
   for everything a picture wouldn't clarify.
+- **`figure` and `stepper` when Mermaid can't draw it.** A `figure` inlines an
+  SVG file you draw (layer stacks, trust boundaries, swimlanes, physical
+  sections); a `stepper` walks the reader through a figure a step at a time,
+  with a key idea, "what changed" and live counters per step. Facts stay in the
+  markdown; the SVG holds only geometry. `references/figures.md` says which
+  pattern and starter figure to use and how to draw one that passes the lint.
 - **Callouts for decisions and warnings.** A `callout tone=decision|warning|risk`
   keeps a load-bearing aside from getting lost in paragraph text.
 - **`data-model` / `api-endpoint` for schema and API shapes** (see below) —
@@ -59,8 +68,9 @@ page" — is this skill, directly.
 `references/format.md` is the **authoritative block catalog** — every block's
 authoring syntax and output contract. Don't invent block types or attributes;
 if it's not in `format.md`, it doesn't exist. `references/wireframe.md` (the
-`.wf-*` class catalog for wireframes) and `references/diagrams.md` (which
-Mermaid diagram type for which job) are loaded on demand — they don't cost
+`.wf-*` class catalog for wireframes), `references/diagrams.md` (which
+Mermaid diagram type for which job) and `references/figures.md` (figures and
+steppers: when, which pattern, how to draw) are loaded on demand — they don't cost
 always-on context. Unknown blocks degrade to a labeled `<pre>`, so the `.md`
 stays readable anywhere, even without this renderer.
 

@@ -335,6 +335,148 @@ response 413:
 `[data-section="response"][data-code="…"]` per section, each with an `.api-code`
 badge and a `.json-tree` (or the `<pre class="api-raw">` fallback).
 
+### `figure`: a drawn SVG
+
+A figure is geometry drawn once in an SVG file; the facts about it stay in the
+markdown. Use one when Mermaid cannot lay the picture out (see
+`references/figures.md` for when, and for the house figures to start from).
+
+````
+```figure src=figures/request-path.svg title="Request path"
+A request crosses the gateway to the orders service, which writes one database.
+```
+````
+
+- `src` (required): an `.svg` file, relative to `plan.md` (to the working
+  directory when the source has no path). It is inlined, so the page stays one
+  file.
+- `title` (optional): the caption and the figure's accessible name.
+- Body (required): one or two sentences saying what the figure shows. It
+  becomes the SVG's accessible description. Anything the reader must know also
+  goes in prose.
+
+The file contract is linted at render time. Each breach is a render warning.
+
+- The root is `<svg>` with a `viewBox`; its `width`/`height` are dropped and the
+  stage sizes it: at most the viewBox width (draw at the size it should
+  appear) and never narrower than 0.8 of it. A narrower screen scrolls the
+  stage sideways instead of shrinking the text.
+- Colour comes from tokens only. A paint value (`fill`, `stroke`, `stop-color`,
+  or the same inside `style`) is `none`, `currentColor`, `transparent`,
+  `inherit`, `var(--...)` or `url(#...)`. The defaults are ink strokes and ink
+  text with no fill. Class `box` fills a shape with the page background so it
+  hides lines behind it, class `solid` fills it with ink, class `muted` uses
+  the muted ink. Hierarchy is opacity, set with `data-role` (`primary`,
+  `secondary`, `hatch`, `guide`, `grid`, `hidden`, `proposed`, `transfer`).
+  Change is `data-change="add|del"` (added in the positive colour, removed in
+  the negative colour, dashed).
+- `data-accent` marks the focal element, at most two per figure. Inside a
+  `stepper` the stepper sets the accent instead.
+- `data-part="name"` names a group that a stepper or the prose refers to.
+  Names are unique within the file.
+- Not allowed, and removed with a warning: `<script>`, `on*` attributes,
+  `<foreignObject>`, `<style>` (it would restyle the whole page), and any
+  `href` that is not `#id`.
+- Text is `<text>` at 12 to 14 user units and inherits the page font.
+
+**Output:** `<figure data-block="figure">` with an optional `<figcaption>` and a
+`.figure-stage` holding the inlined `<svg role="img">`, whose `<title>` and
+`<desc>` carry the title and body. Every `id` in the SVG (and each `#id`
+reference) is prefixed with the block anchor, so two figures may both use
+`id="arrow"`.
+
+### `stepper`: a guided walk through a figure
+
+A stepper walks the reader through one figure a step at a time. It is for ideas
+that are temporal or causal: what happens in order, and what is true after each
+step. The figure is the stage; each step lights the parts it is about and says
+in words what the idea is and what changed.
+
+````
+```stepper figure=figures/request-path.svg title="One request, end to end"
+counter: sent | Requests sent
+counter: stored | Rows written
+switch: Network
+
+# The browser sends the request
+parts: browser e-gateway gateway
+needs: switch
+set: sent=1
+key: Nothing leaves the browser until the user submits.
+changed: One request is in flight.
+
+The browser serialises the form and sends it to the gateway.
+
+# The service writes the row
+parts: gateway e-service service e-db db
+needs: switch
+set: stored=1
+key: The database write is the commit point.
+changed: One row exists.
+changed: The request is answered.
+
+# The network is down
+held
+parts: browser
+key: The form keeps its input and retries; the user loses nothing.
+changed: Requests sent stays at 0.
+```
+````
+
+Lines before the first `#` set up the stepper:
+
+- `counter: name | Label`, at most three. Every counter starts at `0`.
+- `switch: Label`, at most one. It starts on. Only the header declares it.
+
+Each `# title` starts a step. Its setting lines come first, in any order;
+everything after them is the narration, in Markdown.
+
+- `parts:` the `data-part` names this step is about, separated by spaces.
+- `key:` the key idea, one sentence. Required.
+- `changed:` one item of "what changed"; repeat the line for more.
+- `set: name=value, name=value` new counter values. Values are text, shown as
+  written. A counter not set keeps its value from the step before.
+- `needs: switch` marks a step that only happens with the switch on.
+- `held`, alone on a line, marks the held step: it is shown in place of any
+  `needs: switch` step while the switch is off. At most one; it is not in the
+  step bar.
+
+Part states follow from the steps: a part named by the current step is
+**current** (accent), a part named by an earlier step is **past** (ink), and a
+part not yet named is **future** (faint: lower opacity, same line style, so
+dash keeps its meaning). A part no step ever names
+is always ink, as context.
+
+The held step behaves as if it sat just before the first `needs: switch` step:
+its past parts are those named by the steps before that one, and its counters
+start from their values there, then apply its own `set:`.
+
+Lint warnings: the figure is missing (the steps still render); a `parts:` name
+the figure does not have; a `set:` name that is not a counter; a step with no
+`key:`; `needs: switch` or `held` with no switch in the header; a switch with
+no held step, or a held step with no `needs: switch` step; more than three counters, one switch, one held step, or ten
+steps.
+
+**Behaviour.** Without script, and in print, every step is laid out in order
+under the figure, which shows all parts in ink. With script, the stepper shows
+one step at a time with a step bar (one button per step, numbered), previous
+and next buttons, the counters under the figure, and the switch. The
+arrow keys move between steps while focus is inside the stepper. The narration
+rail is `aria-live="polite"`. Part changes use the motion tokens; with
+`prefers-reduced-motion` they are instant. On a wide stage the rail sits right
+of the figure; on a narrow one it sits below, and the stage (same minimum
+width as `figure`) scrolls to keep the current parts in view. While the switch is off, steps that need it are dashed
+in the step bar.
+
+**Output:** `<figure data-block="stepper">` with an optional `<figcaption>`, a
+`.stepper-stage` holding the inlined SVG (same contract as `figure`), a
+`.stepper-counters` row of `[data-counter]` items, a `.stepper-controls` bar
+(hidden until script runs), and an `<ol class="stepper-steps">` of
+`<li data-parts data-counters data-needs>` steps, each with an `<h3>`, the
+narration, a `.stepper-key` and a `ul.stepper-changed`; the held step is an
+`<aside class="stepper-held">` with the same shape. Each step is its own
+feedback anchor.
+
 ## Chapters (side-nav sections)
 
 An opt-in top-level directive that splits the document into navigable sections

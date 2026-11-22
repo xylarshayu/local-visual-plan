@@ -34,6 +34,12 @@ MIT License: Copyright (c) 2025 coss.com and Origin UI; Copyright (c) 2026
 Pasquale Vitiello. Only those values are adapted; no Plotter drawings, fonts or
 scripts are included.
 
+The semantic-pattern routing table and per-pattern guidance in
+`skills/present/references/figures.md` are condensed and reworded from
+diagram-design's `semantic-patterns.md`
+([`cathrynlavery/diagram-design`](https://github.com/cathrynlavery/diagram-design)).
+MIT License: Copyright (c) 2025 Cathryn Lavery. No diagram-design templates,
+scripts or assets are included.
 
 The planning discipline documented in the skills is adapted from BuilderIO's
 MIT-licensed [`BuilderIO/skills`](https://github.com/BuilderIO/skills)

@@ -1,0 +1,116 @@
+# Figures and steppers: when and how
+
+Loaded on demand. The syntax and output contract for `figure` and `stepper`
+live in `format.md`; this file is about choosing between them and
+drawing well.
+
+## Facts in markdown, geometry in the figure
+
+A figure file holds shapes, positions and short labels. Everything a reader must
+know, and everything that goes stale when the code changes, stays in the
+markdown: prose, tables, the stepper's `key:` and `changed:` lines, the
+figure's body. An agent keeping the page current edits markdown; it should
+rarely need to open the SVG.
+
+## The triage ladder
+
+Give each topic the lowest rung that teaches it. Most topics stop at the second
+rung.
+
+1. **Bullets.** A short list of facts with no structure between them.
+2. **Table.** The same few questions asked of several things (who owns what,
+   what refuses what).
+3. **Drawn diagram.** One picture of how parts relate: a Mermaid `diagram`
+   when Mermaid lays it out well (sequence, state, flowchart, ER), a `figure`
+   when it does not (see the house figures below).
+4. **Stepper.** The idea is temporal or causal: what happens in order and what
+   is true after each step. One per page is normal; it carries the page's
+   central idea.
+5. **Section or exploded figure.** A physical object whose inside matters.
+   Flat section first; exploded only when the stacking order is the point.
+
+## Pick the behaviour before the layout
+
+Adapted from diagram-design's semantic patterns (Cathryn Lavery, MIT; see
+`THIRD_PARTY_NOTICES.md`). When behaviour, enforcement or risk is the point,
+name the pattern first and use its layout. One primary pattern per figure; if
+two need full treatment, draw an overview and a detail.
+
+| The reader must understand | Pattern | Layout |
+|---|---|---|
+| Many arrivals competing for one limited service | Fan-in queue | Data flow |
+| The same questions asked at every stage | Stage framework | Process (stages x slots) |
+| Loose input becoming a durable structured record | Unstructured to structured | Data flow |
+| Where two policy decisions first diverge | Paired traces | Flowchart, two lanes |
+| Which routes cross a trust boundary and which are blocked | Secure paved road | Architecture |
+| Which controls apply at each enforcement point | Control catalog | Layer stack |
+| How defences reduce risk and what risk remains | Compensating layers | Layer stack |
+| What a system decomposes into, each part traceable to code | Traceable decomposition | Tree |
+| How one thing moves through phases, waits and ends | Lifecycle phase map | State machine |
+
+What each pattern must show, in one line:
+
+- **Fan-in queue:** distinct sources, an ordered queue with a count, the
+  capacity with units, one service point, admitted and deferred outcomes.
+- **Stage framework:** the same slots in the same order in every stage; empty
+  slots say "none".
+- **Unstructured to structured:** a short source excerpt, the named
+  transformation, the finished record, and at least one line from a field back
+  to its source.
+- **Paired traces:** both decisions on the same steps, the first divergence
+  marked.
+- **Secure paved road:** the boundary, the allowed route through one gate, the
+  blocked routes visibly stopped.
+- **Control catalog and compensating layers:** one row per layer, what each
+  catches, and what still gets through.
+- **Traceable decomposition:** every leaf names its code path.
+- **Lifecycle phase map:** every phase, including waits, retries and each end
+  state.
+
+Budgets for any figure: at most nine primary nodes and twelve connections, at
+most two accented elements, text no smaller than 12 units, everything on a
+4-unit grid. Labels and outcomes must read in a still frame; a stepper adds
+emphasis, never the only copy of a fact.
+
+## Drawing a figure
+
+- Start from a house figure (below) or a blank `viewBox`. Draw at the size it
+  should appear: one user unit is one pixel, a figure never grows past its
+  viewBox width, and 720 units is a comfortable width.
+- One ink. Hierarchy is opacity (`data-role`), meaning is dash pattern, colour
+  is only accent (look here) and add/del (this changed). The opacity roles are
+  adapted from Plotter (Pasquale Vitiello, MIT).
+- Name every group the prose or a stepper refers to with `data-part`.
+  Connections are parts too (`e-gateway`), so a step can light the path, not
+  only the boxes.
+- Arrowheads are open chevrons drawn as paths, so they follow the stroke
+  colour.
+- Run the render: every contract breach is a warning naming the file and the
+  value.
+
+## House figures
+
+Starter files in `figures/` (next to this skill's `SKILL.md`), each a valid
+figure with generic labels. Copy one next to `plan.md`, rename the parts and
+labels, delete what you do not need.
+
+| File | Use it for | Pattern |
+|---|---|---|
+| `layer-stack.svg` | Layers, each with what it catches or owns; an optional "gets through" row | Control catalog, compensating layers |
+| `architecture.svg` | Components inside nested trust boundaries, one gate per boundary. For a before/after, mark added parts `data-change="add"` and removed ones `data-change="del"`, and put the change ledger in a table under it | Secure paved road |
+| `swimlane.svg` | Owners as lanes, work moving between them; an optional line of visibility splits what the user sees from what the system does | Stage framework, service blueprint |
+
+Mermaid stays the right tool for sequence, state, flowchart, ER, timeline and
+dependency graphs. Do not redraw those as figures.
+
+## Writing a stepper
+
+- Pick the one idea the stepper exists to teach and say it in the last step's
+  `key:`. Every earlier step is a step toward it.
+- Five to nine steps. More means two steppers or a table.
+- `key:` is the idea, `changed:` is the state. If the key idea of two steps is
+  the same, merge them.
+- Counters count the facts the idea is about (saved, accepted, delivered), not
+  activity. If a counter never changes, cut it.
+- Use the switch only when its off state teaches something (the network is
+  down, a feature is disabled), and give the held step its own key idea.

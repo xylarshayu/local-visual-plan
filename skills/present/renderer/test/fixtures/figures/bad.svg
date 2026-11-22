@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <style>rect{fill:red}</style>
+  <script>alert(1)</script>
+  <g data-part="a" onclick="alert(2)"><rect fill="#ff0000" x="0" y="0" width="10" height="10"/></g>
+  <g data-part="a"><rect style="stroke: rgb(0,0,0); stroke-width: 2" x="20" y="0" width="10" height="10"/></g>
+  <image href="https://example.com/x.png"/>
+  <circle data-accent cx="1" cy="1" r="1"/><circle data-accent cx="2" cy="1" r="1"/><circle data-accent cx="3" cy="1" r="1"/>
+</svg>

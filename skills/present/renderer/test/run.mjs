@@ -10,7 +10,8 @@
 // Run:  node skills/visual-plan/renderer/test/run.mjs
 
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -1140,7 +1141,7 @@ fixture('<coverage>', (check) => {
   const onDisk = readdirSync(FIXTURES)
     .filter((f) => f.endsWith('.md'))
     .sort()
-  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'task-list.md', 'unknown-block.md'].sort()
+  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'stepper.md', 'task-list.md', 'unknown-block.md'].sort()
   check('every fixture file on disk is covered by a test block', () => {
     assert.deepEqual(
       onDisk,
@@ -1636,6 +1637,155 @@ fixture('theme (inline)', (check) => {
     const r = renderPlan('---\ntitle: T\ntheme: neon\n---\nbody\n')
     assert.equal(pfTheme(r.html), 'mono')
     assert.ok(r.warnings.some((w) => /unknown theme "neon"/.test(w)), r.warnings.join('; '))
+  })
+})
+
+fixture('stepper.md', (check) => {
+  const sourcePath = join(FIXTURES, 'stepper.md')
+  const r = renderPlan(read('stepper.md'), { sourcePath })
+  const html = r.html
+  const block = (type) => new RegExp(`<figure data-block="${type}"[\\s\\S]*?</figure>`).exec(html)?.[0] ?? ''
+  const fig = block('figure')
+  const stp = block('stepper')
+  const steps = [...stp.matchAll(/<(li|aside) class="stepper-step[^"]*"[^>]*>/g)].map((m) => m[0])
+  const attr = (tag, name) => {
+    const m = new RegExp(`\\s${name}="([^"]*)"`).exec(tag)
+    return m ? m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&') : null
+  }
+
+  check('a clean figure and stepper render with no warnings', () => {
+    assert.deepEqual(r.warnings, [])
+  })
+
+  check('figure inlines the SVG with title, description and size bounds from the viewBox', () => {
+    assert.match(fig, /<div class="figure-stage"><svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 720 200" role="img" aria-labelledby="fig1-title" aria-describedby="fig1-desc" style="min-width:576px;max-width:720px">/)
+    assert.match(fig, /<title id="fig1-title">Request path<\/title><desc id="fig1-desc">A browser request crosses the gateway/)
+    assert.doesNotMatch(fig, /width="720"|<\?xml/, 'root width/height and the XML prolog are dropped')
+    assert.equal((fig.match(/data-part="/g) || []).length, 7)
+  })
+
+  check('stepper reuses the figure under its own id prefix', () => {
+    assert.match(stp, /<div class="stepper-stage"><svg [^>]*aria-labelledby="stp1-title"/)
+    assert.match(stp, /<desc id="stp1-desc">1\. The user fills the form 2\. The browser sends the request 3\. The service writes the row<\/desc>/)
+  })
+
+  check('steps carry their parts, needs flag and carried-forward counter values', () => {
+    assert.equal(steps.length, 4)
+    assert.deepEqual(steps.map((s) => attr(s, 'data-parts')), [
+      'browser', 'browser e-gateway gateway', 'e-service service e-db db', 'browser',
+    ])
+    assert.deepEqual(steps.map((s) => JSON.parse(attr(s, 'data-counters'))), [
+      { sent: '0', stored: '0' }, { sent: '1', stored: '0' }, { sent: '1', stored: '1' },
+      { sent: '0', stored: '0' },
+    ])
+    assert.deepEqual(steps.map((s) => /\sdata-needs[\s>]/.test(s)), [false, true, true, false])
+    assert.match(steps[3], /^<aside class="stepper-step stepper-held"/)
+  })
+
+  check('each step has a where line, title, narration, key idea and what changed', () => {
+    assert.match(stp, /<p class="stepper-where">Step 2 of 3<\/p><h3>The browser sends the request<\/h3><p>The browser serialises the form/)
+    assert.match(stp, /<div class="stepper-key"><p class="stepper-label">Key idea<\/p><p>The database write is the commit point\.<\/p><\/div>/)
+    assert.match(stp, /<ul><li>One row exists\.<\/li><li>The request is answered\.<\/li><\/ul>/)
+    assert.match(stp, /<p class="stepper-where">Network off<\/p><h3>The network is down<\/h3>/)
+  })
+
+  check('controls: one bar button per sequence step, a switch, counters starting at step 1', () => {
+    assert.equal((stp.match(/<button type="button" data-step="/g) || []).length, 3)
+    assert.match(stp, /class="stepper-switch" role="switch" aria-checked="true">[^]*?Network <span class="stepper-switch-state">on<\/span>/)
+    assert.match(stp, /<p class="stepper-counter" data-counter="sent"><b>0<\/b> Requests sent<\/p>/)
+  })
+
+  check('the stepper and each step are feedback anchors', () => {
+    const map = extractIsland(html, 'pf-anchor-map')
+    const keys = Object.keys(map.anchors)
+    assert.equal(map.anchors['stepper:one-request-end-to-end:the-network-is-down'].kind, 'stepper-step')
+    assert.ok(keys.includes('stepper:one-request-end-to-end'), keys.join(', '))
+    assert.ok(keys.includes('stepper:one-request-end-to-end:the-network-is-down'), keys.join(', '))
+    assert.ok(keys.includes('figure:request-path'), keys.join(', '))
+  })
+})
+
+fixture('<figure + stepper lint>', (check) => {
+  const sourcePath = join(FIXTURES, 'x.md')
+  const one = (md) => renderPlan(md, { sourcePath })
+  const has = (r, re) => assert.ok(r.warnings.some((w) => re.test(w)), `no warning ${re} in: ${r.warnings.join(' | ')}`)
+
+  check('forbidden SVG content is removed and reported', () => {
+    const r = one('```figure src=figures/bad.svg title=Bad\nA bad figure.\n```\n')
+    const fig = /<figure data-block="figure"[\s\S]*?<\/figure>/.exec(r.html)[0]
+    for (const re of [/<script> removed/, /event handler attributes removed/, /<style> removed/, /href "https:\/\/example.com\/x.png" removed/]) has(r, re)
+    assert.doesNotMatch(fig, /<script|onclick|<style|example\.com/)
+  })
+
+  check('non-token colours, duplicate parts, missing viewBox and extra accents are reported', () => {
+    const r = one('```figure src=figures/bad.svg\nA bad figure.\n```\n')
+    has(r, /fill="#ff0000" is not a token colour/)
+    has(r, /stroke="rgb\(0,0,0\)" is not a token colour/)
+    has(r, /data-part "a" is used more than once/)
+    has(r, /no viewBox/)
+    has(r, /3 data-accent elements \(at most 2\)/)
+  })
+
+  check('token colours pass the lint', () => {
+    const r = one('```figure src=figures/request-path.svg\nok\n```\n')
+    assert.deepEqual(r.warnings, [])
+  })
+
+  check('a missing file warns and keeps the description as text', () => {
+    const r = one('```figure src=figures/nope.svg\nThe description survives.\n```\n')
+    has(r, /figure figures\/nope.svg: cannot read file/)
+    assert.match(r.html, /<p class="figure-fallback">The description survives\.<\/p>/)
+  })
+
+  check('an empty body warns', () => {
+    has(one('```figure src=figures/request-path.svg\n```\n'), /body \(what the figure shows\) is empty/)
+  })
+
+  check('ids and references are prefixed per figure', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-fig-'))
+    writeFileSync(join(dir, 'a.svg'), '<svg viewBox="0 0 10 10"><defs><linearGradient id="g"/></defs><rect fill="url(#g)"/><use href="#g"/></svg>')
+    const md = '```figure src=a.svg\nx\n```\n```figure src=a.svg\ny\n```\n'
+    const r = renderPlan(md, { sourcePath: join(dir, 'p.md') })
+    assert.match(r.html, /id="fig1-g"\/><\/defs><rect fill="url\(#fig1-g\)"\/><use href="#fig1-g"\/>/)
+    assert.match(r.html, /id="fig2-g"\/><\/defs><rect fill="url\(#fig2-g\)"\/><use href="#fig2-g"\/>/)
+    assert.deepEqual(r.warnings, [])
+  })
+
+  const stepper = (head, steps) => one('```stepper figure=figures/request-path.svg\n' + head + '\n' + steps + '\n```\n')
+
+  check('unknown parts, unknown counters and missing key ideas are reported', () => {
+    const r = stepper('counter: a | A', '# One\nparts: browser nope\nset: a=1, b=2\n\nText.')
+    has(r, /step "One" names part "nope", which the figure does not have/)
+    has(r, /step "One" sets unknown counter "b"/)
+    has(r, /step "One" has no key:/)
+  })
+
+  check('switch lints: no held step, held without switch, held without needs', () => {
+    has(stepper('switch: Net', '# One\nkey: k\nneeds: switch'), /a switch with no held step/)
+    has(stepper('', '# One\nkey: k\n# Off\nheld\nkey: k'), /"needs: switch" or "held" without a switch/)
+    has(stepper('switch: Net', '# One\nkey: k\n# Off\nheld\nkey: k'), /a held step but no step has "needs: switch"/)
+  })
+
+  check('budgets: more than three counters, one switch, ten steps', () => {
+    const r = stepper('counter: a | A\ncounter: b | B\ncounter: c | C\ncounter: d | D\nswitch: X\nswitch: Y',
+      Array.from({ length: 11 }, (_, i) => `# S${i}\nkey: k`).join('\n'))
+    has(r, /4 counters \(at most 3\)/)
+    has(r, /more than one switch/)
+    has(r, /11 steps \(at most 10\)/)
+    assert.equal((r.html.match(/data-counter="/g) || []).length, 3, 'extra counters are dropped')
+  })
+
+  check('the held step starts from the counters before the first needs: switch step', () => {
+    const r = stepper('counter: a | A\nswitch: Net',
+      '# One\nkey: k\nset: a=1\n# Two\nkey: k\nneeds: switch\nset: a=2\n# Three\nkey: k\nset: a=3\n# Off\nheld\nkey: k')
+    const vals = [...r.html.matchAll(/data-counters="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')).a)
+    assert.deepEqual(vals, ['1', '2', '3', '1'])
+  })
+
+  check('a missing stepper figure warns and still lays out the steps', () => {
+    const r = one('```stepper figure=figures/nope.svg\n# One\nkey: k\n\nNarration survives.\n```\n')
+    has(r, /cannot read file/)
+    assert.match(r.html, /<h3>One<\/h3><p>Narration survives\.<\/p>/)
   })
 })
 

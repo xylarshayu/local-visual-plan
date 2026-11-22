@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" width="720" height="200">
+  <path data-role="hidden" d="M184 24V176"/>
+  <text class="muted" x="192" y="40">server side</text>
+  <g data-part="browser"><rect class="box" x="24" y="72" width="136" height="56" rx="4"/><text x="92" y="105" text-anchor="middle">Browser</text></g>
+  <g data-part="e-gateway"><path d="M160 100H208"/><path d="M201 96L208 100L201 104"/></g>
+  <g data-part="gateway"><rect class="box" x="208" y="72" width="136" height="56" rx="4"/><text x="276" y="105" text-anchor="middle">Gateway</text></g>
+  <g data-part="e-service"><path d="M344 100H392"/><path d="M385 96L392 100L385 104"/></g>
+  <g data-part="service"><rect class="box" x="392" y="72" width="136" height="56" rx="4"/><text x="460" y="105" text-anchor="middle">Orders service</text></g>
+  <g data-part="e-db"><path d="M528 100H576"/><path d="M569 96L576 100L569 104"/></g>
+  <g data-part="db"><path class="box" d="M576 80a60 8 0 0 1 120 0v40a60 8 0 0 1-120 0z"/><path d="M576 80a60 8 0 0 0 120 0"/><text x="636" y="112" text-anchor="middle">Database</text></g>
+</svg>

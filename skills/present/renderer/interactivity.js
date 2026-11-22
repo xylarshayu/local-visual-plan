@@ -136,6 +136,86 @@
     }, { rootMargin: "-48px 0px 0px 0px" }).observe(mast);
   }
 
+  /* ----- Stepper ------------------------------------------------------- */
+  // Steps carry the facts (data-parts, data-counters, data-needs); this only
+  // maps the current step onto the figure's [data-part] groups.
+  function initSteppers() {
+    document.querySelectorAll("figure[data-block=stepper]").forEach(function (fig) {
+      var steps = Array.prototype.slice.call(fig.querySelectorAll(".stepper-steps > li"));
+      if (!steps.length) return;
+      var held = fig.querySelector(".stepper-held");
+      var stage = fig.querySelector(".stepper-stage");
+      var parts = Array.prototype.slice.call(fig.querySelectorAll(".stepper-stage [data-part]"));
+      var bar = Array.prototype.slice.call(fig.querySelectorAll(".stepper-bar button"));
+      var counters = Array.prototype.slice.call(fig.querySelectorAll("[data-counter]"));
+      var sw = fig.querySelector(".stepper-switch");
+      var words = function (el) { return (el.getAttribute("data-parts") || "").split(" ").filter(Boolean); };
+      var named = {};
+      steps.concat(held ? [held] : []).forEach(function (s) { words(s).forEach(function (w) { named[w] = 1; }); });
+      var firstNeed = steps.findIndex(function (s) { return s.hasAttribute("data-needs"); });
+      var i = 0, on = true;
+
+      function render() {
+        var isHeld = !!held && !on && steps[i].hasAttribute("data-needs");
+        var view = isHeld ? held : steps[i];
+        var seen = {}, cur = {};
+        steps.slice(0, isHeld ? firstNeed : i).forEach(function (s) { words(s).forEach(function (w) { seen[w] = 1; }); });
+        words(view).forEach(function (w) { cur[w] = 1; });
+        parts.forEach(function (p) {
+          var n = p.getAttribute("data-part");
+          p.setAttribute("data-state", cur[n] ? "current" : (seen[n] || !named[n]) ? "past" : "future");
+        });
+        var vals = JSON.parse(view.getAttribute("data-counters") || "{}");
+        counters.forEach(function (c) {
+          var b = c.querySelector("b"), v = vals[c.getAttribute("data-counter")];
+          c.classList.toggle("is-changed", b.textContent !== v);
+          b.textContent = v;
+        });
+        steps.concat(held ? [held] : []).forEach(function (s) { s.classList.toggle("is-current", s === view); });
+        bar.forEach(function (b, n) {
+          if (n === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+          b.classList.toggle("is-past", n < i);
+          b.classList.toggle("is-waiting", !on && steps[n].hasAttribute("data-needs"));
+        });
+        var hadFocus = fig.contains(document.activeElement);
+        fig.querySelector(".stepper-prev").disabled = i === 0;
+        fig.querySelector(".stepper-next").disabled = i === steps.length - 1;
+        // Disabling the focused button drops focus out of the stepper; keep it inside.
+        if (hadFocus && (!fig.contains(document.activeElement) || document.activeElement.disabled)) bar[i].focus();
+        if (sw) {
+          sw.setAttribute("aria-checked", on ? "true" : "false");
+          sw.querySelector(".stepper-switch-state").textContent = on ? "on" : "off";
+        }
+        // A narrow stage scrolls; keep the current parts in view.
+        if (stage && stage.scrollWidth > stage.clientWidth) {
+          var box = null;
+          parts.forEach(function (p) {
+            if (!cur[p.getAttribute("data-part")]) return;
+            var r = p.getBoundingClientRect();
+            box = box ? { l: Math.min(box.l, r.left), r: Math.max(box.r, r.right) } : { l: r.left, r: r.right };
+          });
+          if (box) {
+            var s0 = stage.getBoundingClientRect();
+            stage.scrollLeft += (box.l + box.r) / 2 - (s0.left + s0.width / 2);
+          }
+        }
+      }
+      function go(n) { i = Math.max(0, Math.min(steps.length - 1, n)); render(); }
+
+      fig.querySelector(".stepper-prev").addEventListener("click", function () { go(i - 1); });
+      fig.querySelector(".stepper-next").addEventListener("click", function () { go(i + 1); });
+      bar.forEach(function (b, n) { b.addEventListener("click", function () { go(n); }); });
+      if (sw) sw.addEventListener("click", function () { on = !on; render(); });
+      fig.addEventListener("keydown", function (ev) {
+        if (ev.target.closest("input, textarea, select")) return;
+        if (ev.key === "ArrowRight") { ev.preventDefault(); go(i + 1); }
+        else if (ev.key === "ArrowLeft") { ev.preventDefault(); go(i - 1); }
+      });
+      fig.classList.add("is-live");
+      render();
+    });
+  }
+
   /* ----- Mermaid -------------------------------------------------------- */
   var mermaidBusy = false;
 
@@ -234,6 +314,7 @@
     initTabs();
     initScrollspy();
     initTopbarTitle();
+    initSteppers();
     renderMermaid(root.getAttribute("data-theme") || "light");
   }
 
