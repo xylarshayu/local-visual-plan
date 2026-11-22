@@ -384,8 +384,9 @@ The file contract is linted at render time. Each breach is a render warning.
   that must not appear before its step (a copy that does not exist yet);
   other future parts are only faint.
 - `data-flow` on an edge's line `<path>` (not its arrowhead) makes a small
-  accent bead run along the line, in the direction it is drawn, while its
-  part is current in a stepper. Draw each line from source to target. It
+  accent bead run along the line, in the direction it is drawn, when its
+  part becomes current in a stepper: three runs, then it rests until the
+  step is shown again. Draw each line from source to target. It
   does nothing in a plain `figure`, under reduced motion, in print, or
   without script.
 - `data-lift` on a part (a layer of an isometric stack) makes it rise 20

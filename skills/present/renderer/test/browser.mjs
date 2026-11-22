@@ -237,20 +237,20 @@ console.log('\n# flow pulses')
 // 14-unit bead's centre is 62t/744 - 7 along it. Freeze it and read the device pixel (at 2x)
 // just above the line at x=178, clear of the boundary at x=184. The pulse is wider than the
 // line, so that pixel is accent only while the pulse passes it.
-const pulsePixel = async (p, ms) => {
-  const pt = await p.evaluate(async (ms) => {
+const pulsePixel = async (p, ms, x = 178) => {
+  const pt = await p.evaluate(async ({ ms, x }) => {
     await Promise.all(document.getAnimations().filter((a) => a instanceof CSSTransition).map((a) => a.finished))
     const c = document.querySelector('.stepper-stage [data-part=e-gateway] .flow-pulse')
     c.getAnimations().forEach((a) => { a.pause(); a.currentTime = ms })
     const svg = c.ownerSVGElement, m = svg.getScreenCTM(), q = svg.createSVGPoint()
-    q.x = 178; q.y = 98.75
+    q.x = x; q.y = 98.75
     const s = q.matrixTransform(m)
     return { x: Math.floor(s.x * 2), y: Math.floor(s.y * 2) }
-  }, ms)
+  }, { ms, x })
   return pixel(p, await p.screenshot(), pt.x, pt.y)
 }
 
-await check('only data-flow lines of current parts pulse, in drawing direction, in accent', async () => {
+await check('only data-flow lines of current parts pulse, in drawing direction, in accent, three runs then rest', async () => {
   const { p, ctx, errors } = await open({ deviceScaleFactor: 2 })
   const pulses = () => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.flow-pulse')].map((c) =>
     [c.closest('[data-part]').dataset.part, getComputedStyle(c).display !== 'none' && c.getAnimations().length > 0])))
@@ -269,6 +269,9 @@ await check('only data-flow lines of current parts pulse, in drawing direction, 
   const on = await pulsePixel(p, 300), off = await pulsePixel(p, 564)
   assert.ok(near(on, accent, 40), `pulse passing x=178 paints accent: ${on} vs ${accent}`)
   assert.ok(near(off, bg), `pulse elsewhere leaves the background: ${off} vs ${bg}`)
+  const run = await p.evaluate(() => document.querySelector('[data-part=e-gateway] .flow-pulse').getAnimations()[0].effect.getComputedTiming().duration)
+  assert.ok(near(await pulsePixel(p, 2 * run + 300), accent, 40), 'the third run still paints')
+  for (const x of [166, 178, 200]) assert.ok(near(await pulsePixel(p, 3 * run + 300, x), bg), `after three runs the bead rests out of sight (x=${x})`)
   await p.click('.stepper-next')
   assert.deepEqual(await pulses(), { 'e-gateway': false, 'e-service': true })
   assert.deepEqual(errors, [])

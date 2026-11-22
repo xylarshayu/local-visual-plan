@@ -668,12 +668,12 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 /* A data-lift part (a layer of an isometric stack) rises while it is current; the layers drawn over it are ghosted. */
 .stepper-stage svg [data-lift][data-state=current] { transform: translateY(-20px); }
 .stepper-stage svg [data-lift][data-state=current] ~ [data-lift] { opacity: 0.16; }
-/* A 14-unit bead runs along each data-flow line of a current part, start to end, at one speed. */
+/* A 14-unit bead runs along each data-flow line of a current part, start to end, at one speed, three times, then rests past the end. */
 .stepper-stage svg .flow-pulse { display: none; }
 .stepper-stage svg [data-state=current] .flow-pulse {
   display: inline; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; vector-effect: none;
   stroke-dasharray: 14 calc(var(--len) * 1px);
-  animation: pf-flow calc((var(--len) + 14) * 12ms) linear infinite;
+  animation: pf-flow calc((var(--len) + 14) * 12ms) linear 3 forwards;
 }
 @keyframes pf-flow { from { stroke-dashoffset: 14; } to { stroke-dashoffset: calc(var(--len) * -1px); } }
 .figure-fallback { color: var(--fg-muted); }

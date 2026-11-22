@@ -88,7 +88,8 @@ emphasis, never the only copy of a fact.
   Connections are parts too (`e-gateway`), so a step can light the path, not
   only the boxes. Put `data-flow` on the line (drawn source to target) and a
   stepper shows movement along it while that step is current. That is the
-  one moving thing a page has: one speed, one bead, accent only. In an
+  one moving thing a page has: one speed, one bead, accent only, three runs
+  and then rest. In an
   exploded or isometric stack, `data-lift` on each layer makes the current
   one rise out of the stack as the stepper walks it.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
