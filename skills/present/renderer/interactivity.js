@@ -6,35 +6,36 @@
   "use strict";
 
   var root = document.documentElement;
-  var STORE_KEY = "visual-plan-theme";
+  // Renamed from "visual-plan-theme": v1 wrote the system theme on every load, so old values aren't choices.
+  var STORE_KEY = "pf-theme";
+  var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
 
-  /* ----- Theme ---------------------------------------------------------- */
-  function preferredTheme() {
+  /* ----- Theme: the system's until the reader clicks; only a click is stored ----- */
+  function savedTheme() {
     try {
       var saved = localStorage.getItem(STORE_KEY);
       if (saved === "light" || saved === "dark") return saved;
     } catch (e) { /* private mode / file:// restrictions */ }
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      return "dark";
-    }
-    return root.getAttribute("data-theme") || "light";
+    return null;
   }
-
-  function applyTheme(theme) {
-    root.setAttribute("data-theme", theme);
-    try { localStorage.setItem(STORE_KEY, theme); } catch (e) { /* ignore */ }
-  }
+  function systemTheme() { return dark && dark.matches ? "dark" : "light"; }
 
   // Set the theme before first paint; the first diagram render waits for boot().
-  applyTheme(preferredTheme());
+  root.setAttribute("data-theme", savedTheme() || systemTheme());
 
+  function setTheme(theme) {
+    root.setAttribute("data-theme", theme);
+    renderMermaid(theme);
+  }
   document.addEventListener("click", function (ev) {
-    var toggle = ev.target.closest("[data-theme-toggle]");
-    if (!toggle) return;
+    if (!ev.target.closest("[data-theme-toggle]")) return;
     var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    applyTheme(next);
-    renderMermaid(next);
+    try { localStorage.setItem(STORE_KEY, next); } catch (e) { /* ignore */ }
+    setTheme(next);
   });
+  if (dark && dark.addEventListener) {
+    dark.addEventListener("change", function () { if (!savedTheme()) setTheme(systemTheme()); });
+  }
 
   /* ----- Tabs ----------------------------------------------------------- */
   function initTabs() {
@@ -149,6 +150,14 @@
       var bar = Array.prototype.slice.call(fig.querySelectorAll(".stepper-bar button"));
       var counters = Array.prototype.slice.call(fig.querySelectorAll("[data-counter]"));
       var sw = fig.querySelector(".stepper-switch");
+      stage.querySelectorAll("path[data-flow]").forEach(function (line) {
+        var pulse = line.cloneNode(false);
+        ["data-flow", "id"].forEach(function (a) { pulse.removeAttribute(a); });
+        pulse.setAttribute("class", "flow-pulse");
+        pulse.setAttribute("pathLength", "100");
+        pulse.setAttribute("aria-hidden", "true");
+        line.after(pulse);
+      });
       var words = function (el) { return (el.getAttribute("data-parts") || "").split(" ").filter(Boolean); };
       var named = {};
       steps.concat(held ? [held] : []).forEach(function (s) { words(s).forEach(function (w) { named[w] = 1; }); });

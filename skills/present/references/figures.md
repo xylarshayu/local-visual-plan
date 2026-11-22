@@ -86,7 +86,9 @@ emphasis, never the only copy of a fact.
   adapted from Plotter (Pasquale Vitiello, MIT).
 - Name every group the prose or a stepper refers to with `data-part`.
   Connections are parts too (`e-gateway`), so a step can light the path, not
-  only the boxes.
+  only the boxes. Put `data-flow` on the line (drawn source to target) and a
+  stepper shows movement along it while that step is current. That is the
+  one motion a page has: one speed, one bead, accent only.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
   colour.
 - Run the render: every contract breach is a warning naming the file and the

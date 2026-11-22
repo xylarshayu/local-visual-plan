@@ -7,12 +7,12 @@
   <g data-part="visibility"><path data-role="hidden" d="M24 192H696"/><text class="muted" x="24" y="184">line of visibility</text></g>
 
   <g data-part="s-order"><rect class="box" x="136" y="32" width="120" height="48" rx="4"/><text x="196" y="60" text-anchor="middle">Places order</text></g>
-  <g data-part="e-confirm"><path d="M256 56H276V144H296"/><path d="M289 140L296 144L289 148"/></g>
+  <g data-part="e-confirm"><path data-flow d="M256 56H276V144H296"/><path d="M289 140L296 144L289 148"/></g>
   <g data-part="s-confirm"><rect class="box" x="296" y="120" width="120" height="48" rx="4"/><text x="356" y="148" text-anchor="middle">Confirms order</text></g>
-  <g data-part="e-pick"><path d="M416 144H436V232H456"/><path d="M449 228L456 232L449 236"/></g>
+  <g data-part="e-pick"><path data-flow d="M416 144H436V232H456"/><path d="M449 228L456 232L449 236"/></g>
   <g data-part="s-pick"><rect class="box" x="456" y="208" width="120" height="48" rx="4"/><text x="516" y="236" text-anchor="middle">Picks stock</text></g>
-  <g data-part="e-record"><path d="M516 256V296"/><path d="M512 289L516 296L520 289"/></g>
+  <g data-part="e-record"><path data-flow d="M516 256V296"/><path d="M512 289L516 296L520 289"/></g>
   <g data-part="s-record"><rect class="box" x="456" y="296" width="120" height="48" rx="4"/><text x="516" y="324" text-anchor="middle">Records sale</text></g>
-  <g data-part="e-receipt"><path d="M576 320H638V80"/><path d="M634 87L638 80L642 87"/></g>
+  <g data-part="e-receipt"><path data-flow d="M576 320H638V80"/><path d="M634 87L638 80L642 87"/></g>
   <g data-part="s-receipt"><rect class="box" x="580" y="32" width="116" height="48" rx="4"/><text x="638" y="60" text-anchor="middle">Gets receipt</text></g>
 </svg>

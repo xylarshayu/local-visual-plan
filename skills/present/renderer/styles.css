@@ -663,6 +663,13 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 .stepper-stage svg [data-state=future] { opacity: 0.32; }
 .stepper-stage svg [data-state=future][data-future=hidden] { visibility: hidden; }
 .stepper-stage svg [data-part] { transition: opacity var(--dur-2) var(--ease), color var(--dur-1) var(--ease); }
+/* A bead runs along each data-flow line of a current part, in the line's drawing direction. */
+.stepper-stage svg .flow-pulse { display: none; }
+.stepper-stage svg [data-state=current] .flow-pulse {
+  display: inline; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
+  stroke-dasharray: 8 92; vector-effect: none; animation: pf-flow 1.6s linear infinite;
+}
+@keyframes pf-flow { from { stroke-dashoffset: 8; } to { stroke-dashoffset: -92; } }
 .figure-fallback { color: var(--fg-muted); }
 
 figure[data-block=stepper] { container-type: inline-size; }
@@ -712,6 +719,7 @@ figure[data-block=stepper].is-live .stepper-step { margin-top: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .stepper-stage svg [data-part], .stepper-counter b, .stepper-track::after { transition: none; }
+  .stepper-stage svg [data-state] .flow-pulse { display: none; }
 }
 
 /* ----- embed (poster first; the iframe replaces it on Run) -------------- */
@@ -1355,7 +1363,6 @@ pre[data-block=unknown]::before {
 
 /* ----- responsive -------------------------------------------------------- */
 @media (max-width: 640px) {
-  .theme-toggle-label { display: none; }
   .topbar-inner, .plan-main, .pf-sidenav { padding-left: 16px; padding-right: 16px; }
   figure[data-block=diff][data-mode="split"] .diff-split { grid-template-columns: 1fr; }
   .diff-split .diff-pane + .diff-pane { border-left: 0; border-top: 1px solid var(--border); }
@@ -1373,6 +1380,7 @@ pre[data-block=unknown]::before {
   .stepper-main { position: static !important; }
   .stepper-stage svg [data-state] { opacity: 1; color: var(--fg); transition: none; }
   .stepper-stage svg [data-state][data-future] { visibility: visible; }
+  .stepper-stage svg [data-state] .flow-pulse { display: none; }
   .stepper-stage svg [data-state] .box { fill: var(--bg); }
   .embed-stage iframe, .embed-run { display: none !important; }
   .embed-stage.is-running .embed-poster { display: block !important; }

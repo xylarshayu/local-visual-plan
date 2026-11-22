@@ -231,6 +231,93 @@ await check('figure: text renders at its drawn size and the dark theme repaints 
   await ctx.close()
 })
 
+console.log('\n# flow pulses')
+
+// Freeze the e-gateway pulse at a point of its 1.6s cycle and read the device pixel (at 2x)
+// just above the line at x=178 (37.5% along M160 100H208, clear of the boundary at x=184). The pulse is wider than the
+// line, so that pixel is accent only while the pulse passes it.
+const pulsePixel = async (p, ms) => {
+  const pt = await p.evaluate(async (ms) => {
+    await Promise.all(document.getAnimations().filter((a) => a instanceof CSSTransition).map((a) => a.finished))
+    const c = document.querySelector('.stepper-stage [data-part=e-gateway] .flow-pulse')
+    c.getAnimations().forEach((a) => { a.pause(); a.currentTime = ms })
+    const svg = c.ownerSVGElement, m = svg.getScreenCTM(), q = svg.createSVGPoint()
+    q.x = 178; q.y = 98.75
+    const s = q.matrixTransform(m)
+    return { x: Math.floor(s.x * 2), y: Math.floor(s.y * 2) }
+  }, ms)
+  return pixel(p, await p.screenshot(), pt.x, pt.y)
+}
+
+await check('only data-flow lines of current parts pulse, in drawing direction, in accent', async () => {
+  const { p, ctx, errors } = await open({ deviceScaleFactor: 2 })
+  const pulses = () => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.flow-pulse')].map((c) =>
+    [c.closest('[data-part]').dataset.part, getComputedStyle(c).display !== 'none' && c.getAnimations().length > 0])))
+  assert.deepEqual(await pulses(), { 'e-gateway': false, 'e-service': false }, 'one pulse per data-flow line, none running on step 1')
+  await p.click('.stepper-next')
+  assert.deepEqual(await pulses(), { 'e-gateway': true, 'e-service': false })
+  const offsets = await p.evaluate(() => {
+    const c = document.querySelector('[data-part=e-gateway] .flow-pulse')
+    return [200, 800, 1400].map((ms) => {
+      c.getAnimations().forEach((a) => { a.pause(); a.currentTime = ms })
+      return parseFloat(getComputedStyle(c).strokeDashoffset)
+    })
+  })
+  assert.ok(offsets[0] > offsets[1] && offsets[1] > offsets[2], `offset falls, so the dash runs start to end: ${offsets}`)
+  const bg = await token(p, '--bg'), accent = await token(p, '--accent')
+  const on = await pulsePixel(p, 664), off = await pulsePixel(p, 200)
+  assert.ok(near(on, accent, 40), `pulse passing x=178 paints accent: ${on} vs ${accent}`)
+  assert.ok(near(off, bg), `pulse elsewhere leaves the background: ${off} vs ${bg}`)
+  await p.click('.stepper-next')
+  assert.deepEqual(await pulses(), { 'e-gateway': false, 'e-service': true })
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
+await check('flow pulses are off under reduced motion, in print and without script', async () => {
+  const shown = (p) => p.evaluate(() => [...document.querySelectorAll('.flow-pulse')].filter((c) => getComputedStyle(c).display !== 'none').length)
+  const rm = await open({ reducedMotion: 'reduce' })
+  await rm.p.click('.stepper-next')
+  assert.equal(await rm.p.locator('.flow-pulse').count(), 2, 'pulses exist')
+  assert.equal(await shown(rm.p), 0, 'reduced motion')
+  await rm.ctx.close()
+  const pr = await open()
+  await pr.p.click('.stepper-next')
+  assert.equal(await shown(pr.p), 1, 'one pulse on screen')
+  await pr.p.emulateMedia({ media: 'print' })
+  assert.equal(await shown(pr.p), 0, 'print')
+  await pr.ctx.close()
+  const nj = await open({ javaScriptEnabled: false })
+  assert.equal(await nj.p.locator('.flow-pulse').count(), 0, 'no script')
+  await nj.ctx.close()
+})
+
+console.log('\n# theme toggle')
+
+await check('theme: follows the system until clicked, stores only a click, icon only', async () => {
+  const { p, ctx, errors } = await open({ colorScheme: 'dark' })
+  const st = () => p.evaluate(() => ({ theme: document.documentElement.dataset.theme, saved: localStorage.getItem('pf-theme') }))
+  const themeIs = (t) => p.waitForFunction((t) => document.documentElement.dataset.theme === t, t, { timeout: 2000 }).catch(() => {})
+  assert.deepEqual(await st(), { theme: 'dark', saved: null }, 'system dark, nothing stored on load')
+  assert.equal((await p.locator('.theme-toggle').innerText()).trim().length <= 1, true, 'the toggle shows an icon, no label')
+  await p.emulateMedia({ colorScheme: 'light' })
+  await themeIs('light')
+  assert.deepEqual(await st(), { theme: 'light', saved: null }, 'follows a live system change')
+  await p.click('.theme-toggle')
+  assert.deepEqual(await st(), { theme: 'dark', saved: 'dark' }, 'a click flips and stores')
+  // Media query changes are reported once per frame, so let each flip land.
+  for (const c of ['dark', 'light']) {
+    await p.emulateMedia({ colorScheme: c })
+    await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+  }
+  await themeIs('light')
+  assert.equal((await st()).theme, 'dark', 'a stored choice beats later system changes')
+  await p.reload()
+  assert.deepEqual(await st(), { theme: 'dark', saved: 'dark' }, 'and survives a reload')
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
 console.log('\n# embed in a browser')
 
 const embedFixture = join(here, 'fixtures', 'embed.md')
