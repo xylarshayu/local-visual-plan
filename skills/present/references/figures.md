@@ -164,6 +164,7 @@ labels, delete what you do not need.
 | `architecture.svg` | Components inside nested trust boundaries, one gate per boundary. For a before/after, mark added parts `data-change="add"` and removed ones `data-change="del"`, and put the change ledger in a table under it | Secure paved road |
 | `exploded.svg` | Layers lifted apart in isometric, each with a label and what it is for; a stepper can light one layer at a time | Control catalog, traceable decomposition |
 | `plan.svg` | Parts that sit side by side on one platform and connect: an intake, three services, a guard across one lane, a store; each kind its own shape, lanes carry the flow | Fan-in queue, traceable decomposition |
+| `click-path.svg` | A request through a cache to an app and its database, with a bypass drawn only while a stepper's switch is off | The worked switch below |
 | `swimlane.svg` | Owners as lanes, work moving between them; an optional line of visibility splits what the user sees from what the system does | Stage framework, service blueprint |
 
 **Spectacle, selectively.** The audience runs from executives to developers,
@@ -253,11 +254,12 @@ key: With no cache, every click is a database read.
 ```
 ````
 
-The figure draws the bypass only while the switch is off:
+The figure is the house figure `figures/click-path.svg`. It draws the bypass
+only while the switch is off, routed around the boxes rather than through them:
 
 ```
 <g data-show="switch=off">
-  <g data-part="e-bypass"><path data-flow="" d="M72 72V40H456V72" fill="none"/></g>
+  <g data-part="e-bypass"><path data-flow d="M72 72V40H456V72" fill="none"/><path d="M452 65L456 72L460 65"/><text class="muted" x="264" y="32" text-anchor="middle">no cache: straight to the app</text></g>
 </g>
 ```
 

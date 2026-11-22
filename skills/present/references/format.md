@@ -511,7 +511,8 @@ everything after them is the narration, in Markdown.
   `needs: switch` step while the switch is off. At most one; it is not in the
   step bar.
 - `off: <title>` makes the step an off step: while the switch is off it is
-  shown in place of the step with that title. It is not in the step bar. Use
+  shown in place of the step with that title. The off step keeps its own
+  `# title` line; `off:` names the other step. It is not in the step bar. Use
   it when one step plays out differently with the switch off; use `held` when
   every step that needs the switch stops the same way. An off step wins over
   `held` for its step.

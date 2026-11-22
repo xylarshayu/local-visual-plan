@@ -118,6 +118,28 @@ await check('next and the step bar move the state; earlier parts become past', a
   await ctx.close()
 })
 
+await check('a stepper control focused under the review pill scrolls clear of it', async () => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    const { p, ctx } = await open({ viewport })
+    const r = await p.evaluate(async () => {
+      document.documentElement.style.scrollBehavior = 'auto'
+      const pill = document.querySelector('.pf-pill').getBoundingClientRect()
+      const out = {}
+      for (const q of ['.stepper-bar button', '.stepper-switch']) {
+        const el = document.querySelector(q)
+        scrollBy(0, el.getBoundingClientRect().bottom - innerHeight + 10)
+        const under = el.getBoundingClientRect().bottom > pill.top
+        el.focus()
+        await new Promise((r) => setTimeout(r, 50))
+        out[q] = [under, el.getBoundingClientRect().bottom <= pill.top]
+      }
+      return out
+    })
+    assert.deepEqual(r, { '.stepper-bar button': [true, true], '.stepper-switch': [true, true] }, JSON.stringify(viewport))
+    await ctx.close()
+  }
+})
+
 await check('switch off shows the held step in place of a step that needs it', async () => {
   const { p, ctx } = await open()
   await p.click('.stepper-next')

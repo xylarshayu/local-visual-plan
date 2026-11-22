@@ -153,7 +153,7 @@
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+html { scroll-behavior: smooth; scroll-padding: 64px 0 72px; }
 
 body {
   margin: 0;

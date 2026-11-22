@@ -90,7 +90,10 @@ The common case for a `stepper`, in order:
 2. Copy the closest house figure from `<skill-dir>/figures/` next to your
    markdown, or draw one at 720 units wide. Give every box and every line a
    step will light a `data-part`.
-3. Write the stepper: one idea, five to nine steps, a `key:` each.
+3. Write the stepper: one idea, five to nine steps, a `key:` each. If the
+   reader should be able to turn something off (a cache, the network), start
+   from "A switch, worked through" in `references/figures.md` and its figure
+   `<skill-dir>/figures/click-path.svg`.
 4. Render, fix every warning, run `check.mjs`, fix every warning.
 
 With no codebase, leave out `repo:`, `code:` and `docs:`.

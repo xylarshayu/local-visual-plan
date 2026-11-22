@@ -1838,8 +1838,9 @@ fixture('<figure + stepper lint>', (check) => {
   check('every house figure renders clean, and a stepper can walk all its parts', () => {
     const dir = join(__dirname, '..', '..', 'figures')
     const files = readdirSync(dir).filter((f) => f.endsWith('.svg'))
-    assert.deepEqual(files.sort(), ['architecture.svg', 'exploded.svg', 'layer-stack.svg', 'plan.svg', 'swimlane.svg'])
-    for (const f of files) {
+    assert.deepEqual(files.sort(), ['architecture.svg', 'click-path.svg', 'exploded.svg', 'layer-stack.svg', 'plan.svg', 'swimlane.svg'])
+    // click-path.svg needs a switch; the worked-switch test walks it
+    for (const f of files.filter((f) => f !== 'click-path.svg')) {
       const svg = readFileSync(join(dir, f), 'utf8')
       const parts = [...svg.matchAll(/data-part="([^"]+)"/g)].map((m) => m[1])
       assert.ok(parts.length >= 4, `${f}: ${parts.length} parts`)
@@ -2068,12 +2069,13 @@ fixture('<figure + stepper lint>', (check) => {
     const doc = readFileSync(join(__dirname, '..', '..', 'references', 'figures.md'), 'utf8')
     const block = /\n(```stepper figure=figures\/click-path\.svg[\s\S]*?\n```)\n/.exec(doc.slice(doc.indexOf('## A switch, worked through')))[1]
     const svg = /\n(<g data-show="switch=off">[\s\S]*?\n<\/g>)\n/.exec(doc)[1]
-    const dir = mkdtempSync(join(tmpdir(), 'pf-switch-doc-'))
-    mkdirSync(join(dir, 'figures'))
-    const parts = ['browser', 'cache', 'app', 'db', 'e-req', 'e-hit', 'e-miss', 'e-read']
-    writeFileSync(join(dir, 'figures', 'click-path.svg'), '<svg viewBox="0 0 720 200">' + parts.map((n) => `<g data-part="${n}"/>`).join('') + svg + '</svg>')
-    const r = renderPlan('# T\n\n' + block + '\n', { sourcePath: join(dir, 'p.md') })
+    const house = readFileSync(join(__dirname, '..', '..', 'figures', 'click-path.svg'), 'utf8')
+    const lines = (s) => s.split('\n').map((l) => l.trim()).join('\n')
+    assert.ok(lines(house).includes(lines(svg)), 'the snippet is the house figure\'s own bypass')
+    const r = renderPlan('# T\n\n' + block + '\n', { sourcePath: join(__dirname, '..', '..', 'p.md') })
     assert.deepEqual(r.warnings, [])
+    const named = new Set(block.split('\n').filter((l) => l.startsWith('parts:')).flatMap((l) => l.slice(6).trim().split(/\s+/)))
+    assert.deepEqual([...house.matchAll(/data-part="([^"]+)"/g)].map((m) => m[1]).filter((p) => !named.has(p)), [], 'the example lights every part of click-path.svg')
     const last = (a) => JSON.parse([...r.html.matchAll(new RegExp(`<li class="stepper-step"[^>]* ${a}="([^"]*)"`, 'g'))].at(-1)[1].replace(/&quot;/g, '"'))
     assert.deepEqual(last('data-counters'), { cache: '1', db: '1' }, 'cache on: 1 and 1')
     assert.deepEqual(last('data-off-counters'), { cache: '0', db: '2' }, 'cache off: 0 and 2')
