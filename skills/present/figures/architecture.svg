@@ -14,5 +14,5 @@
   <g data-part="e-orders-db"><path d="M520 100H540V172H580"/><path d="M573 168L580 172L573 176"/></g>
   <g data-part="e-billing-db"><path d="M520 260H540V188H580"/><path d="M573 184L580 188L573 192"/></g>
   <g data-part="db"><path class="box" d="M580 152a46 8 0 0 1 92 0v56a46 8 0 0 1-92 0z"/><path d="M580 152a46 8 0 0 0 92 0"/><text x="626" y="192" text-anchor="middle">Database</text></g>
-  <g data-part="blocked"><path d="M88 152V96H190" stroke-dasharray="3 5"/><path d="M184 90l12 12M196 90l-12 12"/><text class="muted" x="88" y="84">direct access: blocked</text></g>
+  <g data-part="blocked"><path d="M88 152V96H190" stroke-dasharray="3 5"/><path d="M184 90l12 12M196 90l-12 12"/><text class="muted" x="24" y="84">direct access: blocked</text></g>
 </svg>

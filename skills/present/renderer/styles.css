@@ -661,6 +661,7 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 :is(.figure-stage, .stepper-stage) svg [data-change=add] { color: var(--add-fg); }
 :is(.figure-stage, .stepper-stage) svg [data-change=del] { color: var(--del-fg); stroke-dasharray: 3 5; }
 .stepper-stage svg [data-state=future] { opacity: 0.32; }
+.stepper-stage svg [data-state=future][data-future=hidden] { visibility: hidden; }
 .stepper-stage svg [data-part] { transition: opacity var(--dur-2) var(--ease), color var(--dur-1) var(--ease); }
 .figure-fallback { color: var(--fg-muted); }
 
@@ -1352,6 +1353,7 @@ pre[data-block=unknown]::before {
   figure[data-block=stepper] .stepper-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .stepper-main { position: static !important; }
   .stepper-stage svg [data-state] { opacity: 1; color: var(--fg); transition: none; }
+  .stepper-stage svg [data-state][data-future] { visibility: visible; }
   .stepper-stage svg [data-state] .box { fill: var(--bg); }
   body, body[data-has-chapters] { background: #fff; font-size: 10.5pt; padding: 0; }
   .plan-topbar { position: static; }

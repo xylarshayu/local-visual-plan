@@ -162,6 +162,10 @@ await check('screenshot: the current part is filled with accent-soft, a future p
   assert.ok(near(await pixel(p, png, fut.x, fut.y), bg), 'future box is the page background')
   const op = await p.evaluate(() => getComputedStyle(document.querySelector('.stepper-stage [data-part=service]')).opacity)
   assert.equal(op, '0.32')
+  const vis = () => p.evaluate(() => getComputedStyle(document.querySelector('.stepper-stage [data-part=db]')).visibility)
+  assert.equal(await vis(), 'hidden', 'a data-future="hidden" part is hidden while future')
+  await p.click('.stepper-bar button[data-step="2"]')
+  assert.equal(await vis(), 'visible', 'and shown once its step arrives')
   await ctx.close()
 })
 
@@ -209,6 +213,7 @@ await check('print: every step is laid out, controls hidden, the figure is ink',
   assert.equal(s.visible.length, 4)
   assert.equal(await p.isVisible('.stepper-controls'), false)
   assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.stepper-stage [data-part=service]')).opacity), '1')
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.stepper-stage [data-part=db]')).visibility), 'visible', 'hidden-future parts print')
   await ctx.close()
 })
 

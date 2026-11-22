@@ -373,7 +373,9 @@ The file contract is linted at render time. Each breach is a render warning.
 - `data-accent` marks the focal element, at most two per figure. Inside a
   `stepper` the stepper sets the accent instead.
 - `data-part="name"` names a group that a stepper or the prose refers to.
-  Names are unique within the file.
+  Names are unique within the file. Add `data-future="hidden"` to a part
+  that must not appear before its step (a copy that does not exist yet);
+  other future parts are only faint.
 - Not allowed, and removed with a warning: `<script>`, `on*` attributes,
   `<foreignObject>`, `<style>` (it would restyle the whole page), and any
   `href` that is not `#id`.

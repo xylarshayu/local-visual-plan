@@ -4,7 +4,7 @@
   <text x="24" y="148">Front desk</text>
   <text x="24" y="236">Back office</text>
   <text x="24" y="324">System</text>
-  <g data-part="visibility"><path data-role="hidden" d="M24 192H696"/><text class="muted" x="696" y="184" text-anchor="end">line of visibility</text></g>
+  <g data-part="visibility"><path data-role="hidden" d="M24 192H696"/><text class="muted" x="24" y="184">line of visibility</text></g>
 
   <g data-part="s-order"><rect class="box" x="136" y="32" width="120" height="48" rx="4"/><text x="196" y="60" text-anchor="middle">Places order</text></g>
   <g data-part="e-confirm"><path d="M256 56H276V144H296"/><path d="M289 140L296 144L289 148"/></g>
