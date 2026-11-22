@@ -25,6 +25,16 @@ Excalidraw. <https://github.com/excalidraw/virgil>
 
 ## Design lineage (no code vendored)
 
+The SVG line roles in `skills/present/renderer/styles.css` (`svg [data-role]`:
+one ink, hierarchy by opacity, meaning by dash pattern) adapt the opacity and
+dash values of Plotter's standard roles
+(`skills/plotter/assets/foundation/standard.json` in
+[`pasqualevitiello/plotter`](https://github.com/pasqualevitiello/plotter)).
+MIT License: Copyright (c) 2025 coss.com and Origin UI; Copyright (c) 2026
+Pasquale Vitiello. Only those values are adapted; no Plotter drawings, fonts or
+scripts are included.
+
+
 The planning discipline documented in the skills is adapted from BuilderIO's
 MIT-licensed [`BuilderIO/skills`](https://github.com/BuilderIO/skills)
 (`visual-plan` / `visual-recap`). The renderer, formats, and everything this

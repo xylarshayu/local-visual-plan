@@ -23,9 +23,9 @@
   function applyTheme(theme) {
     root.setAttribute("data-theme", theme);
     try { localStorage.setItem(STORE_KEY, theme); } catch (e) { /* ignore */ }
-    renderMermaid(theme);
   }
 
+  // Set the theme before first paint; the first diagram render waits for boot().
   applyTheme(preferredTheme());
 
   document.addEventListener("click", function (ev) {
@@ -33,6 +33,7 @@
     if (!toggle) return;
     var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
     applyTheme(next);
+    renderMermaid(next);
   });
 
   /* ----- Tabs ----------------------------------------------------------- */
@@ -136,7 +137,6 @@
   }
 
   /* ----- Mermaid -------------------------------------------------------- */
-  var mermaidReady = false;
   var mermaidBusy = false;
 
   // Kill mermaid's own DOMContentLoaded auto-start SYNCHRONOUSLY, before it can
@@ -154,10 +154,7 @@
     if (typeof window.mermaid === "undefined") return; // --lean output
     var nodes = document.querySelectorAll("pre.mermaid");
     if (!nodes.length) return;
-    // SERIALIZE: the page calls this both on initial theme apply AND on boot, so
-    // two passes can otherwise run concurrently — re-initializing mermaid mid-run
-    // and non-deterministically dropping the per-run config (diagrams came out
-    // classic instead of hand-drawn). One render at a time; skip overlaps.
+    // One render at a time: re-initializing mermaid mid-run drops the run's config.
     if (mermaidBusy) return;
     mermaidBusy = true;
 
@@ -173,30 +170,56 @@
         }
       });
 
-      // Load the hand-drawn font BEFORE mermaid measures text. If the font is not
-      // ready at measure time, node boxes are sized for the fallback metrics and
-      // the wider Virgil glyphs overflow/clip. Each diagram's look (handDrawn or
-      // clean) is declared in its own source frontmatter, so it is deterministic.
-      if (document.fonts && document.fonts.load) {
+      // Hand-drawn diagrams need Virgil loaded BEFORE mermaid measures text, or
+      // node boxes are sized for fallback metrics and the wider glyphs clip.
+      // Mermaid measures with the GLOBAL font, so one hand-drawn diagram makes
+      // Virgil the page-wide diagram font.
+      var handDrawn = !!document.querySelector('pre.mermaid[data-look="handDrawn"]');
+      if (handDrawn && document.fonts && document.fonts.load) {
         try {
           await document.fonts.load('16px "Virgil"');
           await document.fonts.ready;
         } catch (e) { /* fall back to default metrics */ }
       }
 
-      window.mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: "strict",
-        look: "handDrawn",
-        theme: theme === "dark" ? "dark" : "neutral",
-        themeVariables: { fontFamily: '"Virgil", "Segoe Print", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }
-      });
+      var css = getComputedStyle(root);
+      var tok = function (name) { return css.getPropertyValue(name).trim(); };
+      var font = handDrawn
+        ? '"Virgil", "Segoe Print", ' + tok("--sans")
+        : tok("--sans");
+      var config = { startOnLoad: false, securityLevel: "strict" };
+      if (root.getAttribute("data-pf-theme") === "manual") {
+        config.theme = theme === "dark" ? "dark" : "neutral";
+        config.themeVariables = { fontFamily: font };
+      } else {
+        // Mermaid's base theme derives its palette from these, so diagrams follow the page tokens.
+        config.theme = "base";
+        config.themeVariables = {
+          darkMode: theme === "dark",
+          fontFamily: font,
+          fontSize: "14px",
+          background: tok("--bg"),
+          primaryColor: tok("--bg"),
+          primaryTextColor: tok("--fg"),
+          primaryBorderColor: tok("--fg"),
+          secondaryColor: tok("--bg-sunken"),
+          tertiaryColor: tok("--bg-sunken"),
+          lineColor: tok("--fg-muted"),
+          textColor: tok("--fg"),
+          edgeLabelBackground: tok("--bg"),
+          clusterBkg: tok("--bg-sunken"),
+          clusterBorder: tok("--border"),
+          noteBkgColor: tok("--bg-sunken"),
+          noteTextColor: tok("--fg"),
+          noteBorderColor: tok("--border")
+        };
+      }
+      window.mermaid.initialize(config);
       await window.mermaid.run({ querySelector: "pre.mermaid" });
     } catch (e) {
       // Leave the raw source visible rather than blanking the diagram.
       if (window.console && console.warn) console.warn("mermaid render failed:", e);
     } finally {
-      mermaidReady = true;
       mermaidBusy = false;
     }
   }
@@ -206,7 +229,7 @@
     initTabs();
     initScrollspy();
     initTopbarTitle();
-    if (!mermaidReady) renderMermaid(root.getAttribute("data-theme") || "light");
+    renderMermaid(root.getAttribute("data-theme") || "light");
   }
 
   if (document.readyState === "loading") {

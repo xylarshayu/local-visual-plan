@@ -1599,6 +1599,47 @@ fixture('replies island & extractPrevVersion', (check) => {
 })
 
 // ---------------------------------------------------------------------------
+// Theme: mono by default, `theme: manual` restores the original look.
+// ---------------------------------------------------------------------------
+fixture('theme (inline)', (check) => {
+  const diagram = '```diagram\nflowchart LR\n  A --> B\n```\n'
+  const looks = (html) => [...html.matchAll(/<pre class="mermaid" data-look="(\w+)"/g)].map((m) => m[1])
+  const pfTheme = (html) => /<html[^>]*data-pf-theme="(\w+)"/.exec(html)?.[1]
+
+  check('default is mono with clean diagrams and no Virgil font', () => {
+    const r = renderPlan('# T\n\n' + diagram)
+    assert.equal(pfTheme(r.html), 'mono')
+    assert.deepEqual(looks(r.html), ['clean'])
+    assert.doesNotMatch(r.html, /font-family:"Virgil"/)
+  })
+
+  check('frontmatter theme: manual restores hand-drawn diagrams and Virgil', () => {
+    const r = renderPlan('---\ntitle: T\ntheme: manual\n---\n' + diagram)
+    assert.equal(pfTheme(r.html), 'manual')
+    assert.deepEqual(looks(r.html), ['handDrawn'])
+    assert.match(r.html, /font-family:"Virgil"/)
+  })
+
+  check('the theme option overrides frontmatter', () => {
+    const r = renderPlan('---\ntitle: T\ntheme: manual\n---\n' + diagram, { theme: 'mono' })
+    assert.equal(pfTheme(r.html), 'mono')
+    assert.deepEqual(looks(r.html), ['clean'])
+  })
+
+  check('an explicit look wins over the theme default', () => {
+    const src = '```diagram look=handDrawn\nflowchart LR\n  A --> B\n```\n```diagram look=clean\nflowchart LR\n  C --> D\n```\n'
+    assert.deepEqual(looks(renderPlan(src).html), ['handDrawn', 'clean'])
+    assert.deepEqual(looks(renderPlan(src, { theme: 'manual' }).html), ['handDrawn', 'clean'])
+  })
+
+  check('an unknown theme warns and falls back to mono', () => {
+    const r = renderPlan('---\ntitle: T\ntheme: neon\n---\nbody\n')
+    assert.equal(pfTheme(r.html), 'mono')
+    assert.ok(r.warnings.some((w) => /unknown theme "neon"/.test(w)), r.warnings.join('; '))
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Summary + exit code.
 // ---------------------------------------------------------------------------
 console.log('\n' + '─'.repeat(60))

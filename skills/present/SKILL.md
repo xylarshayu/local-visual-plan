@@ -184,7 +184,7 @@ keys) — surface the printed `changes:` line so they know it's there.
 The output is a **single self-contained HTML file** — inlined CSS, inlined
 vanilla JS for tabs / collapse / theme / annotation, (unless `--lean`) an
 inlined Mermaid bundle that renders diagrams in the browser, and — when a
-hand-drawn diagram is present — the Virgil font embedded as a base64 data URI.
+hand-drawn diagram is present (opt in with `look=handDrawn`, or `theme: manual`) — the Virgil font embedded as a base64 data URI.
 No CDN, no web-font fetch, no external URLs: it opens straight from `file://`
 and works with the network off. Any notes or answers the reader pins
 also stay local — they live in the page's `localStorage` (or, where that's

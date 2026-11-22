@@ -41,7 +41,7 @@ const esc = escapeHtml;
  * ========================================================================== */
 
 function parseFrontmatter(src) {
-  const fm = { title: "", objective: "", status: "" };
+  const fm = { title: "", objective: "", status: "", theme: "" };
   let body = src;
   // bodyOffset: 0-based index, in the ORIGINAL source's line array, of the first
   // line of `body`. Custom-block / chapter line ranges are computed relative to
@@ -61,7 +61,7 @@ function parseFrontmatter(src) {
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
         val = val.slice(1, -1);
       }
-      if (key === "title" || key === "objective" || key === "status") fm[key] = val;
+      if (key === "title" || key === "objective" || key === "status" || key === "theme") fm[key] = val;
     }
     body = src.slice(m[0].length);
     bodyOffset = (m[0].match(/\n/g) || []).length;
@@ -702,7 +702,8 @@ function withDiagramFrontmatter(src, look) {
 
 function renderDiagram(body, attrs, lean, ctx) {
   const reg = ctx.reg;
-  const look = attrs.look === "clean" ? "clean" : "handDrawn";
+  const look = attrs.look === "clean" || attrs.look === "handDrawn" ? attrs.look
+    : reg.theme === "manual" ? "handDrawn" : "clean";
   const idx = nextTypeIndex(reg, "diagram");
   const slugSrc = attrs.title || `diagram-${idx}`;
   const label = attrs.title || `diagram ${idx}`;
@@ -1770,6 +1771,14 @@ function changesScript(changes) {
   });
 }
 
+const THEMES = new Set(["mono", "manual"]);
+function resolveTheme(value, warnings) {
+  const t = String(value || "mono").trim().toLowerCase();
+  if (THEMES.has(t)) return t;
+  warnings.push(`unknown theme "${value}"; using mono (known: mono, manual)`);
+  return "mono";
+}
+
 export function renderPlan(markdownSource, {
   lean = false,
   sourcePath = null,
@@ -1777,6 +1786,7 @@ export function renderPlan(markdownSource, {
   prevRenderedAt = null,   // the previous page's own render timestamp (for its history entry)
   prevHistory = null,      // the previous page's pf-history entries, carried forward
   replies = null,          // agent replies to reviewer notes: [{anchor, reply, note?}]
+  theme: themeOpt = null,  // "mono" | "manual"; overrides frontmatter `theme:`
 } = {}) {
   configureMarked();
   const source = String(markdownSource ?? "");
@@ -1787,6 +1797,7 @@ export function renderPlan(markdownSource, {
 
   // Shared anchor registry + doc identity (the feedback plumbing).
   const reg = createRegistry(source, sourcePath, title);
+  reg.theme = resolveTheme(themeOpt || frontmatter.theme, warnings);
   const docId = computeDocId(source);
 
   // Chapters are a top-level directive resolved BEFORE block extraction, so each
@@ -1864,6 +1875,7 @@ export function renderPlan(markdownSource, {
   const bodyAttr = chapters.hasChapters ? ' data-has-chapters="true"' : "";
   let html = template
     .replace("<!-- TITLE -->", () => escapeHtml(title))
+    .replace("<!-- THEME -->", () => reg.theme)
     .replace("<!-- BODYATTR -->", () => bodyAttr)
     .replace("<!-- STATUS -->", () => statusHtml)
     .replaceAll("<!-- HEADING -->", () => escapeHtml(title))
@@ -1948,6 +1960,8 @@ function parseArgs(argv) {
     else if (a === "--prev") { args.prev = argv[++i]; }
     else if (a.startsWith("--prev=")) { args.prev = a.slice("--prev=".length); }
     else if (a === "--replies") { args.replies = argv[++i]; }
+    else if (a === "--theme") { args.theme = argv[++i]; }
+    else if (a.startsWith("--theme=")) { args.theme = a.slice("--theme=".length); }
     else if (a.startsWith("--replies=")) { args.replies = a.slice("--replies=".length); }
     else if (a === "-h" || a === "--help") { args.help = true; }
     else if (!a.startsWith("-") && !args.input) { args.input = a; }
@@ -1956,7 +1970,7 @@ function parseArgs(argv) {
   return args;
 }
 
-const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open] [--github] [--prev <path>] [--fresh]
+const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open] [--github] [--prev <path>] [--fresh] [--theme mono|manual]
 
   <plan.md>     path to a plan written in the visual-plan format
   --out <path>  output HTML path (default: ./.visual-plans/<slug>/index.html)
@@ -1970,6 +1984,8 @@ const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open]
                 is used). Default: the page being overwritten at the output
                 path, when one exists.
   --fresh       no change highlights (skip the previous-version diff)
+  --theme <t>   mono (default) or manual (the original warm palette and
+                hand-drawn diagrams); overrides the frontmatter \`theme:\` key
   --replies <path>
                 JSON file of agent replies to reviewer notes, shown inline in
                 the page: {"replies":[{"anchor":"…","reply":"…","note":"…"?}]}
@@ -2036,6 +2052,7 @@ async function main() {
     prevRenderedAt: prev ? prev.renderedAt : null,
     prevHistory: prev ? prev.history : [],
     replies,
+    theme: args.theme,
   });
 
   let result;

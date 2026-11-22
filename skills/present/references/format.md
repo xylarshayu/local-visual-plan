@@ -12,6 +12,7 @@ key classes) so the renderer, the stylesheet, and the tests all agree.
 title: Short plan title (≤ ~70 chars)
 objective: One or two sentences on the outcome.
 status: draft | proposed | approved
+theme: mono | manual
 ---
 
 Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
@@ -19,8 +20,14 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
 ```
 
 - Frontmatter is a leading `---` fenced YAML-ish block of simple `key: value`
-  lines. Only `title`, `objective`, `status` are recognized; unknown keys are
-  ignored. `title` is required; the others are optional.
+  lines. Only `title`, `objective`, `status`, `theme` are recognized; unknown
+  keys are ignored. `title` is required; the others are optional.
+- `theme` picks the palette. `mono` (default) is ink on white with one accent:
+  colour means either "look here" (accent) or "this changed" (green/red), and
+  diagrams render clean. `manual` restores the original warm palette with
+  hand-drawn diagrams. The renderer's `--theme mono|manual` flag overrides the
+  key. An unknown value warns and falls back to `mono`. The output `<html>`
+  carries `data-pf-theme="mono|manual"`.
 - Everything outside a recognized custom block is rendered as GitHub-flavored
   Markdown via vendored `marked`.
 
@@ -111,10 +118,10 @@ export function isTooLarge(n: number) { return n > MAX_BYTES }
 carry `data-hl="1"`, and `.code-note` callouts.
 
 ### `diagram` — Mermaid
-Info attrs: `title=<text>` (optional), `look=handDrawn|clean` (default
-`handDrawn`). Body is raw Mermaid source. **Diagrams render hand-drawn by default**
-(sketchy shapes + the vendored Virgil font); set `look=clean` for a crisp/classic
-diagram where the sketch look hurts readability. For *which diagram type to use*
+Info attrs: `title=<text>` (optional), `look=handDrawn|clean` (default `clean`,
+or `handDrawn` under `theme: manual`). Body is raw Mermaid source. Diagrams
+render clean by default; set `look=handDrawn` (sketchy shapes plus the vendored
+Virgil font) only for a deliberately rough, conceptual sketch. For *which diagram type to use*
 and per-type syntax, see **`references/diagrams.md`** (loaded on demand).
 
 ```diagram title="Upload flow"
@@ -125,10 +132,12 @@ flowchart LR
 **Output:** a `<figure data-block="diagram">` with optional `<figcaption>` and a
 `<pre class="mermaid" data-look="handDrawn|clean">` holding the raw source
 (rendered client-side by the inlined mermaid bundle; under `--lean`, shown as a
-labeled code block instead). The hand-drawn defaults (`look:handDrawn` + Virgil
-font) are applied globally by `interactivity.js`; a `look=clean` diagram carries a
-small Mermaid frontmatter override prepended to its source. An author's own
-frontmatter / `%%{init}%%` is left untouched.
+labeled code block instead). Each diagram carries a small Mermaid frontmatter
+setting its look. Under `mono`, `interactivity.js` renders with Mermaid's `base`
+theme and `themeVariables` read from the page's CSS tokens, so diagrams follow
+light and dark. When any diagram on the page is hand-drawn, Virgil becomes the
+diagram font for the whole page (Mermaid measures text with one global font).
+An author's own frontmatter / `%%{init}%%` is left untouched.
 
 ### `wireframe` — UI mockup
 Info attrs: `surface=page|panel|popover|sheet|toolbar` (default `page`),
