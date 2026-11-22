@@ -50,8 +50,10 @@ page" — is this skill, directly.
 - **`figure` and `stepper` when Mermaid can't draw it.** A `figure` inlines an
   SVG file you draw (layer stacks, trust boundaries, swimlanes, exploded
   isometric views); a `stepper` walks the reader through a figure a step at a time,
-  with a key idea, "what changed" and live counters per step. Facts stay in the
-  markdown; the SVG holds only geometry. `references/figures.md` says which
+  with a key idea, "what changed" and live counters per step. When the page is
+  about a codebase, point each part at its code (`code: part path`), so readers
+  can jump from the picture to the file. Facts stay in the markdown; the SVG
+  holds only geometry. `references/figures.md` says which
   pattern and starter figure to use and how to draw one that passes the lint.
   An `embed` (a sandboxed local HTML file behind a poster) is the last rung,
   for an interaction nothing else can show.

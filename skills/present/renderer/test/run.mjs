@@ -10,7 +10,7 @@
 // Run:  node skills/visual-plan/renderer/test/run.mjs
 
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -1141,7 +1141,7 @@ fixture('<coverage>', (check) => {
   const onDisk = readdirSync(FIXTURES)
     .filter((f) => f.endsWith('.md'))
     .sort()
-  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'embed.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'stepper.md', 'task-list.md', 'unknown-block.md'].sort()
+  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'embed.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'stepper.md', 'composite.md', 'task-list.md', 'unknown-block.md'].sort()
   check('every fixture file on disk is covered by a test block', () => {
     assert.deepEqual(
       onDisk,
@@ -1738,6 +1738,28 @@ fixture('embed.md', (check) => {
   })
 })
 
+fixture('composite.md', (check) => {
+  const r = renderPlan(read('composite.md'), { sourcePath: join(FIXTURES, 'composite.md') })
+  const steps = [...r.html.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
+  const paths = (st) => [...st.matchAll(/<code>([^<]+)<\/code><\/a>/g)].map((m) => m[1])
+
+  check('inside this git worktree, every cited path is checked and reported missing, nothing else warns', () => {
+    assert.equal(r.warnings.length, 7, r.warnings.join(' | '))
+    assert.ok(r.warnings.every((w) => /code path "src\/[^"]+" is not in the repo/.test(w)), r.warnings.join(' | '))
+  })
+
+  check('the workers part is a three-layer card and its pools are hidden until their step', () => {
+    const workers = /<g data-part="workers">[\s\S]*?<\/g>/.exec(r.html)[0]
+    assert.equal((workers.match(/<rect class="box"/g) || []).length, 3)
+    for (const w of ['w-images', 'w-email', 'w-search']) assert.match(r.html, new RegExp(`<g data-part="${w}" data-future="hidden">`))
+  })
+
+  check('each step lists the code of its own parts, linked under repo:', () => {
+    assert.deepEqual(steps.map(paths), [['src/api/jobs.ts', 'src/queue/'], ['src/workers/'], ['src/workers/images.ts', 'src/workers/email.ts', 'src/workers/search.ts'], ['src/store/']])
+    assert.match(steps[0], /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts">/)
+  })
+})
+
 fixture('<figure + stepper lint>', (check) => {
   const sourcePath = join(FIXTURES, 'x.md')
   const one = (md) => renderPlan(md, { sourcePath })
@@ -1777,6 +1799,44 @@ fixture('<figure + stepper lint>', (check) => {
       assert.deepEqual(r.warnings, [], f)
       for (const p of parts) assert.match(r.html, new RegExp(`data-part="${p}"`), `${f}: ${p}`)
     }
+  })
+
+  check('stepper code: captions per step, linked under repo:, checked against the git root', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-code-'))
+    for (const d of ['.git', 'docs', 'src/api', 'src/queue']) mkdirSync(join(dir, d), { recursive: true })
+    writeFileSync(join(dir, 'src/api/jobs.ts'), '')
+    writeFileSync(join(dir, 'src/api/a b&c.ts'), '')
+    writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"><rect class="box" x="0" y="0" width="20" height="20"/></g><g data-part="b"><rect class="box" x="40" y="0" width="20" height="20"/></g><g data-part="c"><rect class="box" x="80" y="0" width="20" height="20"/></g></svg>')
+    writeFileSync(join(dir, 'docs', 'f.svg'), readFileSync(join(dir, 'f.svg'), 'utf8'))
+    const md = (fm, code) => `---\ntitle: T\n${fm}---\n\n\`\`\`stepper figure=f.svg\n${code}\n# One\nparts: a\nkey: k\n\n# Two\nparts: b c\nkey: k\n\`\`\`\n`
+    const steps = (r) => [...r.html.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
+    const code = 'code: a src/api/jobs.ts\ncode: a src/api/a b&c.ts\ncode: b src/queue/'
+
+    const r = renderPlan(md('repo: https://git.example.com/shop/blob/main/\n', code), { sourcePath: join(dir, 'docs', 'p.md') })
+    assert.deepEqual(r.warnings, [])
+    const [one, two] = steps(r)
+    assert.match(one, /<div class="stepper-code"><p class="stepper-label">In the code<\/p><ul><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts"><code>src\/api\/jobs\.ts<\/code><\/a><\/li><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/a%20b%26c\.ts"><code>src\/api\/a b&amp;c\.ts<\/code><\/a><\/li><\/ul><\/div>/)
+    assert.doesNotMatch(one, /src\/queue/)
+    assert.match(two, /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/queue\/"><code>src\/queue\/<\/code><\/a>/)
+    assert.doesNotMatch(two, /jobs\.ts/)
+
+    const plain = renderPlan(md('', code), { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(plain.warnings, [])
+    assert.match(steps(plain)[0], /<li><code>src\/api\/jobs\.ts<\/code><\/li>/)
+    assert.doesNotMatch(plain.html, /<a href="[^"#]*src\/api/)
+
+    const bad = renderPlan(md('repo: javascript:alert(1)\n', code + '\ncode: a src/api/gone.ts\ncode: zz src/x.ts\ncode: c ../outside.ts\ncode: c /etc/passwd\ncode: c'), { sourcePath: join(dir, 'p.md') })
+    has(bad, /repo: must be an http\(s\) URL/)
+    has(bad, /code path "src\/api\/gone\.ts" is not in the repo/)
+    has(bad, /code: unknown part "zz"/)
+    has(bad, /code path "\.\.\/outside\.ts" must be relative to the repo root/)
+    has(bad, /code path "\/etc\/passwd" must be relative to the repo root/)
+    has(bad, /"code: c" needs a part and a path/)
+    assert.doesNotMatch(bad.html, /javascript:|outside\.ts<|passwd/)
+
+    const loose = mkdtempSync(join(tmpdir(), 'pf-code-'))
+    writeFileSync(join(loose, 'f.svg'), readFileSync(join(dir, 'f.svg'), 'utf8'))
+    assert.deepEqual(renderPlan(md('', 'code: a src/not-here.ts'), { sourcePath: join(loose, 'p.md') }).warnings, [], 'outside a git repo, paths are not checked')
   })
 
   check('embed lint: URL src, missing poster, remote refs, size and count', () => {

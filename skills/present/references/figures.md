@@ -91,6 +91,13 @@ emphasis, never the only copy of a fact.
   one motion a page has: one speed, one bead, accent only.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
   colour.
+- A part that is really several things (a pool of workers, a set of services)
+  is drawn as a three-layer card: the box plus two `class="box"` copies offset
+  6 units up and right, back one first, all inside the part's group. When the
+  story needs the members, draw them inside the box as their own parts with
+  `data-future="hidden"`, and the step that names them opens the box. When the
+  members are a topic of their own, give them an exploded figure in their own
+  chapter. Sample: `renderer/test/fixtures/composite.md`.
 - Run the render: every contract breach is a warning naming the file and the
   value.
 

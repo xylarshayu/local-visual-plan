@@ -12,8 +12,8 @@
 // CLI:
 //   node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open]
 
-import { readFileSync, writeFileSync, mkdirSync, accessSync, constants } from "node:fs";
-import { dirname, resolve, join } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, accessSync, constants, existsSync } from "node:fs";
+import { dirname, resolve, join, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { marked } from "./vendor/marked.esm.js";
@@ -41,7 +41,7 @@ const esc = escapeHtml;
  * ========================================================================== */
 
 function parseFrontmatter(src) {
-  const fm = { title: "", objective: "", status: "", theme: "" };
+  const fm = { title: "", objective: "", status: "", theme: "", repo: "" };
   let body = src;
   // bodyOffset: 0-based index, in the ORIGINAL source's line array, of the first
   // line of `body`. Custom-block / chapter line ranges are computed relative to
@@ -61,7 +61,7 @@ function parseFrontmatter(src) {
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
         val = val.slice(1, -1);
       }
-      if (key === "title" || key === "objective" || key === "status" || key === "theme") fm[key] = val;
+      if (key in fm) fm[key] = val;
     }
     body = src.slice(m[0].length);
     bodyOffset = (m[0].match(/\n/g) || []).length;
@@ -1306,8 +1306,16 @@ const STEPPER_LIMITS = { counters: 3, steps: 10 };
 
 // Parse the stepper body: header lines (counter:, switch:), then `# title` steps
 // whose setting lines come first and whose remaining lines are narration.
+function findGitRoot(dir) {
+  for (let d = dir; ; d = dirname(d)) {
+    if (existsSync(join(d, ".git"))) return d;
+    if (dirname(d) === d) return null;
+  }
+}
+
 function parseStepper(body, where, warnings) {
   const counters = [];
+  const code = [];
   let switchLabel = null;
   const steps = [];
   let cur = null;
@@ -1323,6 +1331,8 @@ function parseStepper(body, where, warnings) {
     let m;
     if (!cur) {
       if ((m = /^counter:\s*([\w-]+)\s*\|\s*(.+)$/.exec(line))) counters.push({ name: m[1], label: m[2].trim() });
+      else if ((m = /^code:\s*(\S+)\s+(.+)$/.exec(line))) code.push({ part: m[1], path: m[2].trim() });
+      else if (/^code:/.test(line)) warnings.push(`${where}: "${line}" needs a part and a path`);
       else if ((m = /^switch:\s*(.+)$/.exec(line))) {
         if (switchLabel) warnings.push(`${where}: more than one switch (at most 1)`);
         else switchLabel = m[1].trim();
@@ -1349,7 +1359,7 @@ function parseStepper(body, where, warnings) {
     }
     cur.narration.push(raw);
   });
-  return { counters, switchLabel, steps };
+  return { counters, switchLabel, steps, code };
 }
 
 function renderStepper(body, attrs, ctx, warnings) {
@@ -1358,7 +1368,7 @@ function renderStepper(body, attrs, ctx, warnings) {
   const where = `stepper ${attrs.title || attrs.figure || idx}`;
   const label = attrs.title || `stepper ${idx}`;
   const anchor = registerAnchor(reg, "stepper", attrs.title || `stepper-${idx}`, label, ctx.blockLines, body);
-  const { counters: allCounters, switchLabel, steps } = parseStepper(body, where, warnings);
+  const { counters: allCounters, switchLabel, steps, code: allCode } = parseStepper(body, where, warnings);
 
   if (allCounters.length > STEPPER_LIMITS.counters) warnings.push(`${where}: ${allCounters.length} counters (at most ${STEPPER_LIMITS.counters})`);
   const counters = allCounters.slice(0, STEPPER_LIMITS.counters);
@@ -1381,6 +1391,15 @@ function renderStepper(body, attrs, ctx, warnings) {
     for (const n of Object.keys(s.set)) if (!names.has(n)) warnings.push(`${where}: step "${s.title}" sets unknown counter "${n}"`);
     if (fig) for (const p of s.parts) if (!fig.parts.has(p)) warnings.push(`${where}: step "${s.title}" names part "${p}", which the figure does not have`);
   }
+  const code = allCode.filter((c) => {
+    if (fig && !fig.parts.has(c.part)) { warnings.push(`${where}: code: unknown part "${c.part}"`); return false; }
+    if (isAbsolute(c.path) || c.path.split("/").includes("..")) { warnings.push(`${where}: code path "${c.path}" must be relative to the repo root`); return false; }
+    if (reg.gitRoot && !existsSync(join(reg.gitRoot, c.path))) warnings.push(`${where}: code path "${c.path}" is not in the repo (${reg.gitRoot})`);
+    return true;
+  });
+  const codeLink = (path) => reg.repo
+    ? `<a href="${esc(reg.repo + "/" + path.split("/").map(encodeURIComponent).join("/"))}"><code>${esc(path)}</code></a>`
+    : `<code>${esc(path)}</code>`;
 
   // Counter values per step, carried forward; the held step starts from the
   // values just before the first step that needs the switch.
@@ -1403,6 +1422,8 @@ function renderStepper(body, attrs, ctx, warnings) {
     if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
     if (s.key) out += `<div class="stepper-key"><p class="stepper-label">Key idea</p><p>${inlineMd(s.key)}</p></div>`;
     if (s.changed.length) out += `<div class="stepper-changed"><p class="stepper-label">What changed</p><ul>${s.changed.map((c) => `<li>${inlineMd(c)}</li>`).join("")}</ul></div>`;
+    const paths = [...new Set(code.filter((c) => s.parts.includes(c.part)).map((c) => c.path))];
+    if (paths.length) out += `<div class="stepper-code"><p class="stepper-label">In the code</p><ul>${paths.map((p) => `<li>${codeLink(p)}</li>`).join("")}</ul></div>`;
     return out + `</${tag}>`;
   };
 
@@ -2077,6 +2098,9 @@ export function renderPlan(markdownSource, {
   const reg = createRegistry(source, sourcePath, title);
   reg.theme = resolveTheme(themeOpt || frontmatter.theme, warnings);
   reg.baseDir = sourcePath ? dirname(resolve(sourcePath)) : process.cwd();
+  reg.gitRoot = findGitRoot(reg.baseDir);
+  if (frontmatter.repo && !/^https?:\/\//i.test(frontmatter.repo)) warnings.push(`repo: must be an http(s) URL, not "${frontmatter.repo}"`);
+  else if (frontmatter.repo) reg.repo = frontmatter.repo.replace(/\/+$/, "");
   const docId = computeDocId(source);
 
   // Chapters are a top-level directive resolved BEFORE block extraction, so each

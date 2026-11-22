@@ -13,6 +13,7 @@ title: Short plan title (≤ ~70 chars)
 objective: One or two sentences on the outcome.
 status: draft | proposed | approved
 theme: mono | manual
+repo: https://github.com/org/repo/blob/main
 ---
 
 Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
@@ -20,7 +21,7 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
 ```
 
 - Frontmatter is a leading `---` fenced YAML-ish block of simple `key: value`
-  lines. Only `title`, `objective`, `status`, `theme` are recognized; unknown
+  lines. Only `title`, `objective`, `status`, `theme`, `repo` are recognized; unknown
   keys are ignored. `title` is required; the others are optional.
 - `theme` picks the palette. `mono` (default) is ink on white with one accent:
   colour means either "look here" (accent) or "this changed" (green/red), and
@@ -28,6 +29,9 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
   hand-drawn diagrams. The renderer's `--theme mono|manual` flag overrides the
   key. An unknown value warns and falls back to `mono`. The output `<html>`
   carries `data-pf-theme="mono|manual"`.
+- `repo` is the URL that a stepper's `code:` paths are appended to, to make
+  them links (a file URL base such as `.../blob/main`). It must be http(s), or
+  it warns and the paths stay plain text.
 - Everything outside a recognized custom block is rendered as GitHub-flavored
   Markdown via vendored `marked`.
 
@@ -434,6 +438,10 @@ Lines before the first `#` set up the stepper:
 
 - `counter: name | Label`, at most three. Every counter starts at `0`.
 - `switch: Label`, at most one. It starts on. Only the header declares it.
+- `code: part path` points a part at its representative file or directory,
+  relative to the repo root. Repeat the line for more paths. Each step lists the
+  paths of its own parts under "In the code", in the narration rail (never
+  inside the figure), linked when the frontmatter sets `repo:`.
 
 Each `# title` starts a step. Its setting lines come first, in any order;
 everything after them is the narration, in Markdown.
@@ -462,7 +470,10 @@ Lint warnings: the figure is missing (the steps still render); a `parts:` name
 the figure does not have; a `set:` name that is not a counter; a step with no
 `key:`; `needs: switch` or `held` with no switch in the header; a switch with
 no held step, or a held step with no `needs: switch` step; more than three counters, one switch, one held step, or ten
-steps.
+steps; a `code:` line without a path, for a part the figure does not have, or
+with an absolute or `..` path (dropped); and, when the page sits in a git repo,
+a `code:` path that does not exist from the repo root (kept, so a stale page
+says so on its next render).
 
 **Behaviour.** Without script, and in print, every step is laid out in order
 under the figure, which shows all parts in ink. With script, the stepper shows
