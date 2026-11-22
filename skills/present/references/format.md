@@ -366,8 +366,8 @@ The file contract is linted at render time. Each breach is a render warning.
   `inherit`, `var(--...)` or `url(#...)`. The defaults are ink strokes and ink
   text with no fill. Class `box` fills a shape with the page background so it
   hides lines behind it, class `solid` fills it with ink, class `muted` uses
-  the muted ink. Hierarchy is opacity, set with `data-role` (`primary`,
-  `secondary`, `hatch`, `guide`, `grid`, `hidden`, `proposed`, `transfer`).
+  the muted ink. `data-role="guide"` is a faint rule (lane lines),
+  `data-role="hidden"` a faint dashed line (boundaries, what is not seen).
   Change is `data-change="add|del"` (added in the positive colour, removed in
   the negative colour, dashed).
 - `data-accent` marks the focal element, at most two per figure. Inside a

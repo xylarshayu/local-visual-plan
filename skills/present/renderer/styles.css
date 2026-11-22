@@ -637,14 +637,8 @@ svg [data-role] {
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
-svg [data-role=primary]   { opacity: 1; }
-svg [data-role=secondary] { opacity: 0.32; }
-svg [data-role=hatch]     { opacity: 0.18; }
-svg [data-role=guide]     { opacity: 0.14; }
-svg [data-role=grid]      { opacity: 0.06; }
-svg [data-role=hidden],
-svg [data-role=proposed]  { opacity: 0.32; stroke-dasharray: 3 5; }
-svg [data-role=transfer]  { opacity: 0.32; stroke-dasharray: 4 6; }
+svg [data-role=guide]  { opacity: 0.14; }
+svg [data-role=hidden] { opacity: 0.32; stroke-dasharray: 3 5; }
 
 /* ----- figure + stepper (frameless: the drawing sits on the page) -------- */
 figure[data-block=figure] > figcaption,

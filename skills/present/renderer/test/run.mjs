@@ -1731,6 +1731,21 @@ fixture('<figure + stepper lint>', (check) => {
     assert.deepEqual(r.warnings, [])
   })
 
+  check('every house figure renders clean, and a stepper can walk all its parts', () => {
+    const dir = join(__dirname, '..', '..', 'figures')
+    const files = readdirSync(dir).filter((f) => f.endsWith('.svg'))
+    assert.deepEqual(files.sort(), ['architecture.svg', 'layer-stack.svg', 'swimlane.svg'])
+    for (const f of files) {
+      const svg = readFileSync(join(dir, f), 'utf8')
+      const parts = [...svg.matchAll(/data-part="([^"]+)"/g)].map((m) => m[1])
+      assert.ok(parts.length >= 5, `${f}: ${parts.length} parts`)
+      const md = `\`\`\`figure src=${f}\nx\n\`\`\`\n\`\`\`stepper figure=${f}\n# All\nparts: ${parts.join(' ')}\nkey: k\n\`\`\`\n`
+      const r = renderPlan(md, { sourcePath: join(dir, 'p.md') })
+      assert.deepEqual(r.warnings, [], f)
+      for (const p of parts) assert.match(r.html, new RegExp(`data-part="${p}"`), `${f}: ${p}`)
+    }
+  })
+
   check('a missing file warns and keeps the description as text', () => {
     const r = one('```figure src=figures/nope.svg\nThe description survives.\n```\n')
     has(r, /figure figures\/nope.svg: cannot read file/)

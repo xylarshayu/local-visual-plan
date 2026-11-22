@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 344">
+  <g data-part="b-network" data-role="hidden"><rect x="196" y="16" width="508" height="312" rx="8"/></g>
+  <text class="muted" x="212" y="40">Private network</text>
+  <g data-part="b-data" data-role="hidden"><rect x="556" y="108" width="140" height="148" rx="8"/></g>
+  <text class="muted" x="568" y="128">Data zone</text>
+
+  <g data-part="client"><rect class="box" x="24" y="152" width="128" height="56" rx="4"/><text x="88" y="184" text-anchor="middle">Client</text></g>
+  <g data-part="e-gateway"><path d="M152 180H220"/><path d="M213 176L220 180L213 184"/></g>
+  <g data-part="gateway"><rect class="box" x="220" y="152" width="128" height="56" rx="4"/><text x="284" y="184" text-anchor="middle">Gateway</text></g>
+  <g data-part="e-orders"><path d="M348 172H368V100H392"/><path d="M385 96L392 100L385 104"/></g>
+  <g data-part="orders"><rect class="box" x="392" y="72" width="128" height="56" rx="4"/><text x="456" y="104" text-anchor="middle">Orders</text></g>
+  <g data-part="e-billing"><path d="M348 188H368V260H392"/><path d="M385 256L392 260L385 264"/></g>
+  <g data-part="billing"><rect class="box" x="392" y="232" width="128" height="56" rx="4"/><text x="456" y="264" text-anchor="middle">Billing</text></g>
+  <g data-part="e-orders-db"><path d="M520 100H540V172H580"/><path d="M573 168L580 172L573 176"/></g>
+  <g data-part="e-billing-db"><path d="M520 260H540V188H580"/><path d="M573 184L580 188L573 192"/></g>
+  <g data-part="db"><path class="box" d="M580 152a46 8 0 0 1 92 0v56a46 8 0 0 1-92 0z"/><path d="M580 152a46 8 0 0 0 92 0"/><text x="626" y="192" text-anchor="middle">Database</text></g>
+  <g data-part="blocked"><path d="M88 152V96H190" stroke-dasharray="3 5"/><path d="M184 90l12 12M196 90l-12 12"/><text class="muted" x="88" y="84">direct access: blocked</text></g>
+</svg>
