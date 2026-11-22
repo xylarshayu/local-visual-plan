@@ -64,7 +64,9 @@ Images is the busiest pool, so it has the most workers.
 
 # Email, under a rate limit
 parts: e-email w-email limit
-key: The limit on top keeps sends under what the mail provider accepts.
+key: A gate on the way in keeps sends under what the mail provider accepts.
+
+The gate lets ten jobs a second through to the email workers.
 
 # Search
 parts: e-search w-search

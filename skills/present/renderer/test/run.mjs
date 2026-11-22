@@ -1794,9 +1794,11 @@ fixture('composite.md', (check) => {
     assert.match(r.html, /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers" id="stepper:inside-the-workers"/)
   })
 
-  check('inside the workers is an axonometric plan: the pools side by side, the limit on top, each building a rise part', () => {
+  check('inside the workers is an axonometric plan: the pools side by side, a gate on the email lane, each building a rise part, marks painted on roofs', () => {
     const inside = /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers"[\s\S]*?<\/figure>/.exec(r.html)[0]
-    assert.deepEqual([...inside.matchAll(/<g data-part="([^"]+)" data-rise="">/g)].map((m) => m[1]), ['queue', 'w-images', 'w-email', 'limit', 'w-search', 'store'])
+    assert.deepEqual([...inside.matchAll(/<g data-part="([^"]+)" data-rise="">/g)].map((m) => m[1]), ['queue', 'w-images', 'limit', 'w-email', 'w-search', 'store'])
+    const marks = [...inside.matchAll(/<use href="#([^"]+)" class="mark"[^>]* transform="matrix\(1 0\.5 -1 0\.5 /g)].map((m) => m[1].replace(/^.*m-/, ''))
+    assert.deepEqual(marks, ['redis', 'elasticsearch', 'postgresql'], 'each mark is skewed onto a roof')
     assert.deepEqual([...inside.matchAll(/<g data-part="(e-[^"]+)">/g)].map((m) => m[1]), ['e-images', 'e-email', 'e-search', 'e-store'])
     assert.equal((/<g data-part="e-store">[\s\S]*?<\/g>/.exec(inside)[0].match(/data-flow/g) || []).length, 3, 'three lanes merge on the store')
     const stack = /<figure data-block="stepper" data-pf-anchor="stepper:four-layers"[\s\S]*?<\/figure>/.exec(r.html)[0]

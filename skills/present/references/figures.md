@@ -105,7 +105,15 @@ emphasis, never the only copy of a fact.
 - An axonometric plan (`plan.svg`) shows parts that sit side by side and
   connect, not stacked: buildings on one platform, lanes between them. Put
   `data-rise` on each building; the current one rises 12 units and nothing is
-  ghosted. Name each building on a tag on its roof, so the tag rises with it.
+  ghosted. Keep each label inside its building's group so it rises too.
+- In a plan, give each kind of part its own simple shape, still one ink: a
+  channel of tiles for a queue, ridged units for workers, a gate across a lane
+  for a limit, stacked disks for a store. A detail or two per shape, never
+  shading or colour.
+- Plan labels are plain text on clear ground (a `class="box"` backing with
+  `style="stroke:none"` keeps lines from crossing them), not bordered tags.
+  A label with no clear ground on its part sits beside it with a short leader.
+  Leave arrowheads clear of the shapes in front of them.
 - Any part a step names is a shortcut: clicking it goes to the first step
   that names it, and hovering gives it a hint of accent (a `data-rise`
   building also lifts a little). Nothing to declare.
@@ -120,7 +128,10 @@ emphasis, never the only copy of a fact.
   glyph in `<defs>` as `<symbol id="m-name" class="mark" viewBox="0 0 24 24">`
   (filled paths, no colour of its own), and place it with
   `<use href="#m-name" class="mark" x=".." y=".." width="14" height="14"/>`
-  inside the part's group, 4 units in from the corner. It draws in ink at 0.3
+  inside the part's group, 4 units in from the corner. On a plan, paint it
+  flat on a roof instead: `width`/`height` the size in plan units and
+  `transform="matrix(1 0.5 -1 0.5 X Y)"`, where X, Y is the roof corner it
+  starts from. It draws in ink at 0.3
   opacity, accent at 0.55 while its part is current; text over it wins. A CC0
   set such as Simple Icons works; take only the paths, never brand colours.
 - When a step changes what the figure looks like (a part moves, a lid opens),
@@ -151,7 +162,7 @@ labels, delete what you do not need.
 | `layer-stack.svg` | Layers, each with what it catches or owns; an optional "gets through" row | Control catalog, compensating layers |
 | `architecture.svg` | Components inside nested trust boundaries, one gate per boundary. For a before/after, mark added parts `data-change="add"` and removed ones `data-change="del"`, and put the change ledger in a table under it | Secure paved road |
 | `exploded.svg` | Layers lifted apart in isometric, each with a label and what it is for; a stepper can light one layer at a time | Control catalog, traceable decomposition |
-| `plan.svg` | Parts that sit side by side on one platform and connect: an intake, three services, a guard on one of them, a store; lanes carry the flow | Fan-in queue, traceable decomposition |
+| `plan.svg` | Parts that sit side by side on one platform and connect: an intake, three services, a guard across one lane, a store; each kind its own shape, lanes carry the flow | Fan-in queue, traceable decomposition |
 | `swimlane.svg` | Owners as lanes, work moving between them; an optional line of visibility splits what the user sees from what the system does | Stage framework, service blueprint |
 
 **Spectacle, selectively.** The audience runs from executives to developers,

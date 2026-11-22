@@ -461,6 +461,9 @@ await check('a technology mark is a filled, faint watermark inside its box: ink 
   await ctx.close()
 })
 
+const [, , planW, planH] = /viewBox="([^"]+)"/.exec(readFileSync(join(here, 'fixtures', 'figures', 'workers-plan.svg'), 'utf8'))[1].split(' ').map(Number)
+const planAspect = planH / planW
+
 await check('a stepper widens past the prose column to fit its figure and rail, clear of the side nav, sticky within the window', async () => {
   const chapters = join(out, 'composite-chapters.html')
   writeFileSync(chapters, renderPlan(readFileSync(compositeSrc, 'utf8').replace(/^(---\n[\s\S]*?\n---\n)/, '$1\n<!-- chapter: One -->\n\nIntro.\n\n'), { sourcePath: compositeSrc }).html)
@@ -496,7 +499,7 @@ await check('a stepper widens past the prose column to fit its figure and rail, 
   ;({ p, ctx } = await open({ viewport: { width: 1440, height: 600 } }, composite))
   b = await box(p, '#stepper\\:inside-the-workers')
   assert.ok(b.sticky <= 600 - 64, `the sticky figure column fits under the top bar: ${b.sticky}px`)
-  assert.ok(b.svg.height < b.svg.width * 493 / 822, `the drawing is capped by the window height: ${b.svg.height}`)
+  assert.ok(b.svg.height < b.svg.width * planAspect, `the drawing is capped by the window height: ${b.svg.height}`)
   await ctx.close()
   ;({ p, ctx } = await open({ viewport: { width: 390, height: 800 } }, chapters))
   b = await box(p)
@@ -506,7 +509,7 @@ await check('a stepper widens past the prose column to fit its figure and rail, 
   await p.emulateMedia({ media: 'print' })
   b = await box(p, '#stepper\\:inside-the-workers')
   assert.equal(b.width, b.prose, 'print keeps the stepper in the column')
-  assert.ok(Math.abs(b.svg.height - b.svg.width * 493 / 822) < 1, 'print does not cap the height')
+  assert.ok(Math.abs(b.svg.height - b.svg.width * planAspect) < 1, 'print does not cap the height')
   await ctx.close()
 })
 
