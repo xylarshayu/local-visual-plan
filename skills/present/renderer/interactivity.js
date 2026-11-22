@@ -123,6 +123,18 @@
     });
   }
 
+  /* ----- Topbar title --------------------------------------------------- */
+  // Hide the topbar's copy of the title while the masthead (which shows it) is on screen.
+  function initTopbarTitle() {
+    var bar = document.querySelector(".plan-topbar");
+    var mast = document.querySelector(".plan-masthead");
+    if (!bar || !mast || typeof IntersectionObserver === "undefined") return;
+    new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) bar.setAttribute("data-title-hidden", "");
+      else bar.removeAttribute("data-title-hidden");
+    }, { rootMargin: "-48px 0px 0px 0px" }).observe(mast);
+  }
+
   /* ----- Mermaid -------------------------------------------------------- */
   var mermaidReady = false;
   var mermaidBusy = false;
@@ -193,6 +205,7 @@
   function boot() {
     initTabs();
     initScrollspy();
+    initTopbarTitle();
     if (!mermaidReady) renderMermaid(root.getAttribute("data-theme") || "light");
   }
 

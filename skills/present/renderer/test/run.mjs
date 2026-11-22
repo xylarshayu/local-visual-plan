@@ -897,7 +897,7 @@ fixture('api-endpoint.md', (check) => {
     assert.match(html, /class="api-section" data-section="request"[^>]*id="api-endpoint:post-v2-uploads:request"/)
     assert.match(html, /class="api-section" data-section="response" data-code="201"[^>]*id="api-endpoint:post-v2-uploads:resp-201"/)
     assert.match(html, /class="api-section" data-section="response" data-code="413"/)
-    assert.match(html, /class="api-code">REQUEST</, 'request badge')
+    assert.match(html, /class="api-code">Request</, 'request badge')
     assert.match(html, /class="api-code">201</, 'response code badge')
   })
 

@@ -1142,7 +1142,7 @@ function renderApiEndpoint(body, attrs, ctx) {
   for (const s of sections) {
     const codeAttr = s.kind === "response" ? ` data-code="${esc(s.code)}"` : "";
     out += `<div class="api-section" data-section="${s.kind}"${codeAttr} data-pf-anchor="${esc(s.anchor)}" id="${esc(s.anchor)}">`;
-    out += `<span class="api-code">${s.kind === "request" ? "REQUEST" : esc(s.code)}</span>`;
+    out += `<span class="api-code">${s.kind === "request" ? "Request" : esc(s.code)}</span>`;
     out += renderJsonBody(s.bodyLines.join("\n"));
     out += "</div>";
   }
