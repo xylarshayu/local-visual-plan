@@ -26,8 +26,9 @@ rung.
 4. **Stepper.** The idea is temporal or causal: what happens in order and what
    is true after each step. One per page is normal; it carries the page's
    central idea.
-5. **Section or exploded figure.** A physical object whose inside matters.
-   Flat section first; exploded only when the stacking order is the point.
+5. **Exploded or isometric figure.** Layers, containment or a physical
+   object whose inside matters, when the stacking order is the point. Often
+   the page's most memorable picture: spend it on the central idea.
 6. **Embed.** An interaction nothing above can show: a simulation, a
    parameter the reader turns. Always with a poster and a body that say what
    it shows; at most two per page.
@@ -101,7 +102,14 @@ labels, delete what you do not need.
 |---|---|---|
 | `layer-stack.svg` | Layers, each with what it catches or owns; an optional "gets through" row | Control catalog, compensating layers |
 | `architecture.svg` | Components inside nested trust boundaries, one gate per boundary. For a before/after, mark added parts `data-change="add"` and removed ones `data-change="del"`, and put the change ledger in a table under it | Secure paved road |
+| `exploded.svg` | Layers lifted apart in isometric, each with a label and what it is for; a stepper can light one layer at a time | Control catalog, traceable decomposition |
 | `swimlane.svg` | Owners as lanes, work moving between them; an optional line of visibility splits what the user sees from what the system does | Stage framework, service blueprint |
+
+**Spectacle, selectively.** The audience runs from executives to developers,
+and a page should be remembered. One striking figure per page (exploded,
+isometric, a stepper over it) does that; three compete. Keep the budgets and
+the one-ink rule: depth comes from drawing (faces, offsets, alignment lines),
+not from colour. Shade a side face with `style="fill:var(--bg-sunken)"`.
 
 Mermaid stays the right tool for sequence, state, flowchart, ER, timeline and
 dependency graphs. Do not redraw those as figures.

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 464">
+  <g data-role="hidden"><path d="M120 94V358M400 94V358M260 164V428"/></g>
+  <g data-part="storage">
+    <path class="box" d="M120 358L260 428V444L120 374Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 428L400 358V374L260 444Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 288L400 358L260 428L120 358Z"/>
+    <path d="M408 366H472"/><text x="480" y="370">Storage</text><text class="muted" x="480" y="388">what is kept</text>
+  </g>
+  <g data-part="services">
+    <path class="box" d="M120 270L260 340V356L120 286Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 340L400 270V286L260 356Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 200L400 270L260 340L120 270Z"/>
+    <path d="M408 278H472"/><text x="480" y="282">Services</text><text class="muted" x="480" y="300">the rules</text>
+  </g>
+  <g data-part="api">
+    <path class="box" d="M120 182L260 252V268L120 198Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 252L400 182V198L260 268Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 112L400 182L260 252L120 182Z"/>
+    <path d="M408 190H472"/><text x="480" y="194">API</text><text class="muted" x="480" y="212">the one way in</text>
+  </g>
+  <g data-part="interface">
+    <path class="box" d="M120 94L260 164V180L120 110Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 164L400 94V110L260 180Z" style="fill:var(--bg-sunken)"/>
+    <path class="box" d="M260 24L400 94L260 164L120 94Z"/>
+    <path d="M408 102H472"/><text x="480" y="106">Interface</text><text class="muted" x="480" y="124">what people see and touch</text>
+  </g>
+</svg>

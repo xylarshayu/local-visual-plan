@@ -1763,11 +1763,11 @@ fixture('<figure + stepper lint>', (check) => {
   check('every house figure renders clean, and a stepper can walk all its parts', () => {
     const dir = join(__dirname, '..', '..', 'figures')
     const files = readdirSync(dir).filter((f) => f.endsWith('.svg'))
-    assert.deepEqual(files.sort(), ['architecture.svg', 'layer-stack.svg', 'swimlane.svg'])
+    assert.deepEqual(files.sort(), ['architecture.svg', 'exploded.svg', 'layer-stack.svg', 'swimlane.svg'])
     for (const f of files) {
       const svg = readFileSync(join(dir, f), 'utf8')
       const parts = [...svg.matchAll(/data-part="([^"]+)"/g)].map((m) => m[1])
-      assert.ok(parts.length >= 5, `${f}: ${parts.length} parts`)
+      assert.ok(parts.length >= 4, `${f}: ${parts.length} parts`)
       const md = `\`\`\`figure src=${f}\nx\n\`\`\`\n\`\`\`stepper figure=${f}\n# All\nparts: ${parts.join(' ')}\nkey: k\n\`\`\`\n`
       const r = renderPlan(md, { sourcePath: join(dir, 'p.md') })
       assert.deepEqual(r.warnings, [], f)

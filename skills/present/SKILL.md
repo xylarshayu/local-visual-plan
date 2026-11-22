@@ -42,14 +42,14 @@ page" — is this skill, directly.
   mode** — a *Present* button in the page walks the reader one chapter at a
   time, with keyboard navigation and a clickable progress rail.
 - **The lowest rung that teaches it.** Bullets, then a table, then one drawn
-  diagram, then a `stepper`, then a section figure. Most topics stop at a
+  diagram, then a `stepper`, then an exploded figure. Most topics stop at a
   table; a page usually has at most one stepper, for its central idea.
 - **Diagrams and wireframes where they beat prose.** A `diagram` (Mermaid) for
   flows, sequences, state, or relationships; a `wireframe` for UI. Use prose
   for everything a picture wouldn't clarify.
 - **`figure` and `stepper` when Mermaid can't draw it.** A `figure` inlines an
-  SVG file you draw (layer stacks, trust boundaries, swimlanes, physical
-  sections); a `stepper` walks the reader through a figure a step at a time,
+  SVG file you draw (layer stacks, trust boundaries, swimlanes, exploded
+  isometric views); a `stepper` walks the reader through a figure a step at a time,
   with a key idea, "what changed" and live counters per step. Facts stay in the
   markdown; the SVG holds only geometry. `references/figures.md` says which
   pattern and starter figure to use and how to draw one that passes the lint.
