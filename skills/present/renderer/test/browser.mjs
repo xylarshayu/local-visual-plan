@@ -402,6 +402,33 @@ await check('switch off shows an off: step in place of the one step it names, wi
   await ctx.close()
 })
 
+await check('switch off: past parts and values follow the off story, a held step keeps it, and the figure can show the switch', async () => {
+  mkdirSync(join(out, 'figures'), { recursive: true })
+  writeFileSync(join(out, 'figures', 'off.svg'), '<svg viewBox="0 0 200 40">' + ['a', 'b', 'c', 'd', 'h'].map((n, k) => `<g data-part="${n}"><rect class="box" x="${k * 40}" y="0" width="30" height="20"/></g>`).join('')
+    + ['slip=lifted', 'pen=down', 'switch=on', 'switch=off'].map((v) => `<g data-show="${v}"><text x="0" y="36">${v}</text></g>`).join('') + '</svg>')
+  const page = join(out, 'off.html')
+  writeFileSync(page, renderPlan('# Off\n\n```stepper figure=figures/off.svg\ncounter: n | Acknowledged\nstate: slip flat lifted\nstate: pen up down\nswitch: Net\n'
+    + '# One\nparts: a\nset: n=1\nkey: k\n# Two\nparts: b\nneeds: switch\nset: n=5\nkey: k\n# End\nparts: c\nset: n=9, slip=lifted\nkey: k\n'
+    + '# End offline\noff: End\nparts: d\nset: slip=lifted\nkey: k\n# After\nparts: b\nneeds: switch\nset: n=7\nkey: k\n# Held\nheld\nparts: h\nset: pen=down\nkey: k\n```\n', { sourcePath: join(out, 'off.md') }).html)
+  const { p, ctx, errors } = await open({}, page)
+  const look = () => p.evaluate(() => ({
+    parts: [...document.querySelectorAll('[data-part]')].map((g) => g.dataset.state).join(' '),
+    on: [...document.querySelectorAll('[data-show][data-on]')].map((g) => g.dataset.show).join(' '),
+    n: document.querySelector('.stepper-counter b').textContent,
+  }))
+  const step = (n) => p.locator(`.stepper-bar button[data-step="${n}"]`).click()
+  await p.locator('.stepper-switch').click()
+  assert.deepEqual(await look(), { parts: 'current future future future future', on: 'switch=off', n: '1' }, 'at step 1 the figure already knows the switch is off')
+  await step(2)
+  assert.deepEqual(await look(), { parts: 'past future future current future', on: 'slip=lifted switch=off', n: '1' }, 'Two was never seen, so b stays future and nothing it counted is counted')
+  await step(3)
+  assert.deepEqual(await look(), { parts: 'past future future past current', on: 'slip=lifted pen=down switch=off', n: '1' }, 'the held step keeps the lifted slip, then its own set:')
+  await p.locator('.stepper-switch').click()
+  assert.deepEqual(await look(), { parts: 'past current past future future', on: 'slip=lifted switch=on', n: '7' })
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
 await check('a state: shows one data-show group per value, fades between them as steps set it, and mono labels use the mono font', async () => {
   const { p, ctx, errors } = await open({}, composite)
   const fig = p.locator('figure[data-block=stepper]').first()

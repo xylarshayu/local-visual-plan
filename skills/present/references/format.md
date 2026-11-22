@@ -461,6 +461,8 @@ Lines before the first `#` set up the stepper:
 
 - `counter: name | Label`, at most three. Every counter starts at `0`.
 - `switch: Label`, at most one. It starts on. Only the header declares it.
+  The figure can follow it like a state: `data-show="switch=on"` and
+  `data-show="switch=off"`.
 - `state: name value value ...` names a figure state and its values; the first
   is the initial one. A step changes it with `set: name=value`, carried
   forward like a counter. In the SVG, a group with `data-show="name=value"` is
@@ -492,12 +494,10 @@ everything after them is the narration, in Markdown.
   `needs: switch` step while the switch is off. At most one; it is not in the
   step bar.
 - `off: <title>` makes the step an off step: while the switch is off it is
-  shown in place of the step with that title, and its counters and states
-  start from the values before that step, then apply its own `set:`. It is not
-  in the step bar. Use it when one step plays out differently with the switch
-  off; use `held` when every step that needs the switch stops the same way.
-  An off step wins over `held` for its step. Later steps keep the switch-on
-  values.
+  shown in place of the step with that title. It is not in the step bar. Use
+  it when one step plays out differently with the switch off; use `held` when
+  every step that needs the switch stops the same way. An off step wins over
+  `held` for its step.
 
 Part states follow from the steps: a part named by the current step is
 **current** (accent), a part named by an earlier step is **past** (ink), and a
@@ -505,9 +505,11 @@ part not yet named is **future** (faint: lower opacity, same line style, so
 dash keeps its meaning). A part no step ever names
 is always ink, as context.
 
-The held step behaves as if it sat just before the first `needs: switch` step:
-its past parts are those named by the steps before that one, and its counters
-start from their values there, then apply its own `set:`.
+While the switch is off, the story is the step list with the `needs: switch`
+steps left out and the off steps swapped in. Past parts, counters and states
+follow that story: an off step starts from the story's values before it, then
+applies its own `set:`; a held step shows the story so far plus its own `set:`,
+wherever it stands in.
 
 Lint warnings: the figure is missing (the steps still render); a `parts:` name
 the figure does not have; a `set:` name that is not a counter or state, or a state value it does not
@@ -546,7 +548,8 @@ part lifts 4 units.
 `.stepper-stage` holding the inlined SVG (same contract as `figure`), a
 `.stepper-counters` row of `[data-counter]` items, a `.stepper-controls` bar
 (hidden until script runs), and an `<ol class="stepper-steps">` of
-`<li data-parts data-counters data-needs>` steps, each with an `<h3>`, the
+`<li data-parts data-counters data-off-counters data-needs>` steps (the
+off counters only with a switch), each with an `<h3>`, the
 narration, a `.stepper-key` and a `ul.stepper-changed`; the held step is an
 `<aside class="stepper-held">` with the same shape, and an off step an
 `<aside class="stepper-off" data-off-for="n">` (n is the 0-based step it

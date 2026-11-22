@@ -1701,10 +1701,13 @@ fixture('stepper.md', (check) => {
     assert.deepEqual(steps.map((s) => attr(s, 'data-parts')), [
       'browser', 'browser e-gateway gateway', 'e-service service e-db db', 'browser',
     ])
-    assert.deepEqual(steps.map((s) => JSON.parse(attr(s, 'data-counters'))), [
+    assert.deepEqual(steps.slice(0, 3).map((s) => JSON.parse(attr(s, 'data-counters'))), [
       { sent: '0', stored: '0' }, { sent: '1', stored: '0' }, { sent: '1', stored: '1' },
-      { sent: '0', stored: '0' },
     ])
+    assert.deepEqual(steps.slice(0, 3).map((s) => JSON.parse(attr(s, 'data-off-counters'))), [
+      { sent: '0', stored: '0' }, { sent: '0', stored: '0' }, { sent: '0', stored: '0' },
+    ], 'with the network off nothing is sent or stored')
+    assert.equal(attr(steps[3], 'data-counters'), null, 'a held step shows the values of the step it stands in for')
     assert.deepEqual(steps.map((s) => /\sdata-needs[\s>]/.test(s)), [false, true, true, false])
     assert.match(steps[3], /^<aside class="stepper-step stepper-held"/)
   })
@@ -2037,11 +2040,24 @@ fixture('<figure + stepper lint>', (check) => {
     assert.equal((r.html.match(/data-counter="/g) || []).length, 3, 'extra counters are dropped')
   })
 
-  check('the held step starts from the counters before the first needs: switch step', () => {
-    const r = stepper('counter: a | A\nswitch: Net',
-      '# One\nkey: k\nset: a=1\n# Two\nkey: k\nneeds: switch\nset: a=2\n# Three\nkey: k\nset: a=3\n# Off\nheld\nkey: k')
-    const vals = [...r.html.matchAll(/data-counters="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')).a)
-    assert.deepEqual(vals, ['1', '2', '3', '1'])
+  check('switch off: the story leaves out needs: switch steps and swaps in off: steps; a held step keeps that story so far', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-off-'))
+    writeFileSync(join(dir, 's.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"/><g data-show="slip=lifted"/><g data-show="switch=off"/><g data-show="switch=on"/></svg>')
+    const r = renderPlan('# T\n\n```stepper figure=s.svg\ncounter: n | Acknowledged\nstate: slip flat lifted\nstate: pen up down\nswitch: Net\n'
+      + '# One\nparts: a\nset: n=1\nkey: k\n# Two\nneeds: switch\nset: n=5\nkey: k\n# End\nset: n=9, slip=lifted\nkey: k\n'
+      + '# End offline\noff: End\nset: slip=lifted\nkey: k\n# After\nneeds: switch\nset: n=7\nkey: k\n# Held\nheld\nset: pen=down\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(r.warnings, [])
+    const read = (a) => [...r.html.matchAll(new RegExp(`<li class="stepper-step"[^>]* ${a}="([^"]*)"`, 'g'))].map((m) => Object.values(JSON.parse(m[1].replace(/&quot;/g, '"'))).join(' '))
+    assert.deepEqual(read('data-counters'), ['1 flat up', '5 flat up', '9 lifted up', '7 lifted up'])
+    assert.deepEqual(read('data-off-counters'), ['1 flat up', '1 flat down', '1 lifted up', '1 lifted down'],
+      'Two and After are held (pen down); End offline starts from the off story (n=1) and After keeps its lifted slip')
+    assert.match(r.html, /<aside class="stepper-step stepper-off"[^>]* data-counters="[^"]*lifted[^"]*"/, "the off step carries its own off-story values")
+    assert.match(r.html, /<g data-show="switch=on" data-init data-on\/>/, 'the switch is a figure state, on at first')
+    assert.match(r.html, /<g data-show="switch=off"\/>/)
+    const none = renderPlan('# T\n\n```stepper figure=s.svg\nstate: slip flat lifted\n# One\nparts: a\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    has(none, /data-show "switch=off" names no state/)
+    const own = renderPlan('# T\n\n```stepper figure=s.svg\nstate: slip flat lifted\nstate: switch on off\nswitch: Net\n# One\nparts: a\nkey: k\n# Off\nheld\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    assert.ok(!own.warnings.some((w) => /switch/.test(w) && /data-show/.test(w)), own.warnings.join(' | '))
   })
 
   check('an off: step stands in for one step: from the values before it, out of the bar, linted', () => {

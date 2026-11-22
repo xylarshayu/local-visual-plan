@@ -165,20 +165,24 @@
       var words = function (el) { return (el.getAttribute("data-parts") || "").split(" ").filter(Boolean); };
       var named = {};
       steps.concat(asides).forEach(function (s) { words(s).forEach(function (w) { named[w] = 1; }); });
-      var firstNeed = steps.findIndex(function (s) { return s.hasAttribute("data-needs"); });
       var i = 0, on = true;
 
       function render() {
         var alt = on ? null : offs[i] || (held && steps[i].hasAttribute("data-needs") ? held : null);
         var view = alt || steps[i];
         var seen = {}, cur = {};
-        steps.slice(0, alt && alt === held ? firstNeed : i).forEach(function (s) { words(s).forEach(function (w) { seen[w] = 1; }); });
+        // With the switch off the story leaves out needs-switch steps and swaps in off: steps.
+        steps.slice(0, i).forEach(function (s, k) {
+          var told = on ? s : offs[k] || (s.hasAttribute("data-needs") ? null : s);
+          if (told) words(told).forEach(function (w) { seen[w] = 1; });
+        });
         words(view).forEach(function (w) { cur[w] = 1; });
         parts.forEach(function (p) {
           var n = p.getAttribute("data-part");
           p.setAttribute("data-state", cur[n] ? "current" : (seen[n] || !named[n]) ? "past" : "future");
         });
-        var vals = JSON.parse(view.getAttribute("data-counters") || "{}");
+        var vals = JSON.parse(steps[i].getAttribute(on ? "data-counters" : "data-off-counters") || "{}");
+        if (sw) vals["switch"] = on ? "on" : "off";
         counters.forEach(function (c) {
           var b = c.querySelector("b"), v = vals[c.getAttribute("data-counter")];
           c.classList.toggle("is-changed", b.textContent !== v);

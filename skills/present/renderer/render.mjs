@@ -1249,7 +1249,7 @@ function renderFigure(body, attrs, ctx, warnings) {
   if (!desc) warnings.push(`figure ${attrs.src || "(no src)"}: the body (what the figure shows) is empty`);
   const fig = loadFigure(attrs.src, `fig${idx}-`, attrs.title, desc, reg, warnings);
   if (fig && fig.accents > 2) warnings.push(`figure ${attrs.src}: ${fig.accents} data-accent elements (at most 2)`);
-  if (fig && /\sdata-show\s*=/.test(fig.svg)) warnings.push(`figure ${attrs.src}: data-show works only in a stepper with state:`);
+  if (fig && /\sdata-show\s*=/.test(fig.svg)) warnings.push(`figure ${attrs.src}: data-show works only in a stepper with state: or switch:`);
   let out = `<figure data-block="figure" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}"${fig ? fig.size : ""}>`;
   if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
   out += fig ? `<div class="figure-stage">${fig.svg}</div>` : `<p class="figure-fallback">${esc(desc)}</p>`;
@@ -1424,14 +1424,16 @@ function renderStepper(body, attrs, ctx, warnings) {
     if (fig) for (const p of s.parts) if (!fig.parts.has(p)) warnings.push(`${where}: step "${s.title}" names part "${p}", which the figure does not have`);
   }
   // A data-show group is drawn at the state's first value (data-init, kept for print); script moves data-on.
+  // With a switch, `switch=on` and `switch=off` are shown too.
   if (fig) {
     const bad = new Set();
+    const showOf = switchLabel && !stateOf.switch ? { ...stateOf, switch: ["on", "off"] } : stateOf;
     fig.svg = fig.svg.replace(/(\sdata-show\s*=\s*(["']))(.*?)\2/g, (m, a, q, kv) => {
       const [n, v] = kv.split("=");
       if (v === undefined) bad.add(`data-show "${kv}" needs name=value`);
-      else if (!stateOf[n]) bad.add(`data-show "${kv}" names no state`);
-      else if (!stateOf[n].includes(v)) bad.add(`data-show "${kv}": ${n} is one of: ${stateOf[n].join(" ")}`);
-      return stateOf[n] && stateOf[n][0] === v ? m + " data-init data-on" : m;
+      else if (!showOf[n]) bad.add(`data-show "${kv}" names no state`);
+      else if (!showOf[n].includes(v)) bad.add(`data-show "${kv}": ${n} is one of: ${showOf[n].join(" ")}`);
+      return showOf[n] && showOf[n][0] === v ? m + " data-init data-on" : m;
     });
     for (const b of bad) warnings.push(`${where}: ${b}`);
   }
@@ -1457,23 +1459,25 @@ function renderStepper(body, attrs, ctx, warnings) {
     return `<li>${word}${link}${note ? ` <span class="stepper-note">${esc(note)}</span>` : ""}</li>`;
   };
 
-  // Counter values per step, carried forward. The held step starts from the values
-  // before the first step that needs the switch, an off: step from those before its step.
+  // Counter values per step, carried forward. With the switch off the story is the steps
+  // without "needs: switch", off: steps swapped in; a held step shows that story so far plus its own set:.
   const pick = (set) => Object.fromEntries(Object.entries(set).filter(([k, v]) => names.has(k) && (!stateOf[k] || stateOf[k].includes(v))));
   const vals = Object.fromEntries([...counters.map((c) => [c.name, "0"]), ...states.map((st) => [st.name, st.values[0]])]);
-  let heldBase = null;
+  const offVals = { ...vals };
   seq.forEach((s, i) => {
-    if (i === firstNeed) heldBase = { ...vals };
-    if (offFor.has(i)) offFor.get(i).values = { ...vals, ...pick(offFor.get(i).set) };
     Object.assign(vals, pick(s.set));
     s.values = { ...vals };
+    const off = offFor.get(i);
+    if (off) Object.assign(offVals, pick(off.set));
+    else if (!s.needs) Object.assign(offVals, pick(s.set));
+    s.offValues = { ...offVals, ...(off || !s.needs ? {} : pick((held || s).set)) };
+    if (off) off.values = s.offValues;
   });
-  if (held) held.values = { ...(heldBase || vals), ...pick(held.set) };
 
   const stepHtml = (s, tag, whereText, cls = "", more = "") => {
     const lines = ctx.bodyStartLine != null ? [ctx.bodyStartLine + s.startIdx, ctx.bodyStartLine + s.endIdx] : null;
     const a = registerChildAnchor(reg, `${anchor}:${slugify(s.title || "step")}`, "stepper-step", s.title, lines, s.title + " " + s.key + " " + s.narration.join(" "));
-    let out = `<${tag} class="stepper-step${cls}" data-pf-anchor="${esc(a)}" id="${esc(a)}" data-parts="${esc(s.parts.join(" "))}" data-counters="${esc(JSON.stringify(s.values))}"${s.needs ? " data-needs" : ""}${more}>`;
+    let out = `<${tag} class="stepper-step${cls}" data-pf-anchor="${esc(a)}" id="${esc(a)}" data-parts="${esc(s.parts.join(" "))}" ${s.values ? ` data-counters="${esc(JSON.stringify(s.values))}"` : ""}${switchLabel && s.offValues ? ` data-off-counters="${esc(JSON.stringify(s.offValues))}"` : ""}${s.needs ? " data-needs" : ""}${more}>`;
     out += `<p class="stepper-where">${esc(whereText)}</p><h3>${esc(s.title)}</h3>`;
     const narration = s.narration.join("\n").trim();
     if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
