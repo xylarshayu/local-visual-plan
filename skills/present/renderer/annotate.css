@@ -200,8 +200,7 @@
   width: min(390px, 92vw);
   z-index: 60;
   background: var(--bg-elev);
-  border-left: 1px solid var(--border-strong);
-  box-shadow: -2px 0 0 var(--border-strong);
+  border-left: 1px solid var(--border);
   transform: translateX(100%);
   transition: transform 0.18s ease-out;
   display: flex;
@@ -540,7 +539,7 @@ body.pf-present .pf-chapter.pf-present-cur { display: block; }
 body.pf-present .pf-sidenav { display: none; }
 
 /* ----- Review-progress meter --------------------------------------------- */
-.pf-pill-btn.pf-pill-progress { color: var(--tag-new); }
+.pf-pill-btn.pf-pill-progress { color: var(--fg-muted); }
 .pf-prog-row {
   display: flex;
   align-items: center;

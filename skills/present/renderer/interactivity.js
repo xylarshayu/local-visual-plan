@@ -216,6 +216,11 @@
       }
       window.mermaid.initialize(config);
       await window.mermaid.run({ querySelector: "pre.mermaid" });
+      // Don't let a wide diagram shrink below 60% of its natural size; scroll it instead.
+      document.querySelectorAll("pre.mermaid svg").forEach(function (svg) {
+        var vb = svg.viewBox && svg.viewBox.baseVal;
+        if (vb && vb.width) svg.style.minWidth = Math.round(vb.width * 0.6) + "px";
+      });
     } catch (e) {
       // Leave the raw source visible rather than blanking the diagram.
       if (window.console && console.warn) console.warn("mermaid render failed:", e);

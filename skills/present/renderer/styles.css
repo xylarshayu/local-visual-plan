@@ -201,10 +201,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  transition: opacity 0.15s;
 }
 /* The masthead already shows the title; the topbar repeats it only once that scrolls away. */
-.plan-topbar[data-title-hidden] .topbar-title { opacity: 0; }
+.plan-topbar[data-title-hidden] .topbar-title { display: none; }
 .topbar-spacer { flex: 1; }
 
 /* ----- Masthead ---------------------------------------------------------- */
@@ -1279,7 +1278,7 @@ pre[data-block=unknown]::before {
   :root { --bg: #fff; --bg-elev: #fff; }
   body, body[data-has-chapters] { background: #fff; font-size: 10.5pt; padding: 0; }
   .plan-topbar { position: static; }
-  .plan-topbar[data-title-hidden] .topbar-title { opacity: 1; }
+  .plan-topbar[data-title-hidden] .topbar-title { display: inline; }
   .theme-toggle, .skip-link, .plan-footer, .pf-sidenav { display: none; }
   .plan-main { max-width: none; padding: 0; }
   figure, aside[data-block], div[data-block], ol[data-block], details[data-block], .step { break-inside: avoid; }
@@ -1287,6 +1286,7 @@ pre[data-block=unknown]::before {
   .pf-chapter:first-of-type { break-before: auto; }
   details[data-block=collapsible] > .collapsible-body { display: block !important; }
   .json-tree details > .json-children { display: block !important; }
+  figure[data-block=diagram] .mermaid svg { min-width: 0 !important; }
   .json-summary::before { content: "▾" !important; }
   .tab-panel[hidden] { display: block !important; }
   .tab-panel[hidden]::before { content: "(tab) "; font-weight: 700; color: var(--fg-muted); }
