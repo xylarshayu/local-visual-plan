@@ -368,6 +368,11 @@ await check('a state: shows one data-show group per value, fades between them as
   const fonts = await fig.evaluate((f) => [getComputedStyle(f.querySelector('text.mono')).fontFamily, getComputedStyle(document.querySelector('code')).fontFamily, getComputedStyle(f.querySelector('[data-part=api] text:not(.mono)')).fontFamily])
   assert.equal(fonts[0], fonts[1], 'a mono label uses the page mono font')
   assert.notEqual(fonts[0], fonts[2])
+  const text = await fig.evaluate((f) => {
+    const cs = (sel) => getComputedStyle(f.querySelector(sel))
+    return { sizes: [...new Set([...f.querySelectorAll('.stepper-stage text')].map((t) => getComputedStyle(t).fontSize))], name: cs('[data-part=queue] text:not(.muted)').fontWeight, caption: cs('[data-part=queue] text.muted').fontWeight }
+  })
+  assert.deepEqual(text, { sizes: ['12px'], name: '600', caption: '400' }, 'one text size in a figure; a name stands out by weight only')
   await p.emulateMedia({ media: 'print' })
   assert.deepEqual(await shown(), { 'queue=empty': true, 'queue=one': false }, 'print shows the first value, whatever step is on screen')
   assert.deepEqual(errors, [])

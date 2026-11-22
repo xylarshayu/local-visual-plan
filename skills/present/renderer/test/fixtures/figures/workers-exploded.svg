@@ -4,18 +4,18 @@
     <path class="box" d="M120 270L260 340V356L120 286Z" style="fill:var(--bg-sunken)"/>
     <path class="box" d="M260 340L400 270V286L260 356Z" style="fill:var(--bg-sunken)"/>
     <path class="box" d="M260 200L400 270L260 340L120 270Z"/>
-    <path d="M408 278H472"/><text x="480" y="282">Search</text><text class="muted" x="480" y="300">reindexes a changed record</text>
+    <path d="M408 278H472"/><text x="480" y="282" font-weight="600">Search</text><text class="muted" x="480" y="300">reindexes a changed record</text>
   </g>
   <g data-lift="" data-part="w-email">
     <path class="box" d="M120 182L260 252V268L120 198Z" style="fill:var(--bg-sunken)"/>
     <path class="box" d="M260 252L400 182V198L260 268Z" style="fill:var(--bg-sunken)"/>
     <path class="box" d="M260 112L400 182L260 252L120 182Z"/>
-    <path d="M408 190H472"/><text x="480" y="194">Email</text><text class="muted" x="480" y="212">sends mail, retries a bounce</text>
+    <path d="M408 190H472"/><text x="480" y="194" font-weight="600">Email</text><text class="muted" x="480" y="212">sends mail, retries a bounce</text>
   </g>
   <g data-lift="" data-part="w-images">
     <path class="box" d="M120 94L260 164V180L120 110Z" style="fill:var(--bg-sunken)"/>
     <path class="box" d="M260 164L400 94V110L260 180Z" style="fill:var(--bg-sunken)"/>
     <path class="box" d="M260 24L400 94L260 164L120 94Z"/>
-    <path d="M408 102H472"/><text x="480" y="106">Images</text><text class="muted" x="480" y="124">resizes an upload into three sizes</text>
+    <path d="M408 102H472"/><text x="480" y="106" font-weight="600">Images</text><text class="muted" x="480" y="124">resizes an upload into three sizes</text>
   </g>
 </svg>

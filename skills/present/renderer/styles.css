@@ -647,7 +647,7 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 :is(.figure-stage, .stepper-stage) > svg {
   display: block; width: 100%; height: auto;
   min-width: calc(var(--fig-w) * 0.8); max-width: var(--fig-w);
-  color: var(--fg); font-family: var(--sans); font-size: 13px;
+  color: var(--fg); font-family: var(--sans); font-size: 12px;
 }
 /* A stepper figure may grow to 1.25x its drawing. */
 .stepper-stage > svg { max-width: calc(var(--fig-w) * 1.25); }

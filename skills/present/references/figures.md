@@ -81,8 +81,11 @@ emphasis, never the only copy of a fact.
 - Start from a house figure (below) or a blank `viewBox`. Draw at the size it
   should appear: one user unit is one pixel, a figure never grows past its
   viewBox width (a stepper's past 1.25x), and 720 units is a comfortable
-  width. Names at 13 and labels at 12 units: at a stepper's 1.25x that is
-  about body size, and no figure text should read larger than the prose.
+  width.
+- One text size: every label is 12 units (the default; set no `font-size`).
+  A part's name is `font-weight="600"` in full ink, its caption regular with
+  `class="muted"`. Hierarchy is weight and ink, never size. At a stepper's
+  1.25x that reads at 15px, just under the prose.
 - Do not reach for size to get clarity or emphasis. Try spacing, weight and
   removal first.
 - One ink. Hierarchy is opacity (`data-role`), meaning is dash pattern, colour
