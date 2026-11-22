@@ -1363,7 +1363,7 @@ function parseStepper(body, where, warnings) {
       if ((m = /^key:\s*(.*)$/.exec(line))) { cur.key = m[1]; return; }
       if ((m = /^changed:\s*(.*)$/.exec(line))) { cur.changed.push(m[1]); return; }
       if ((m = /^set:\s*(.*)$/.exec(line))) {
-        for (const kv of m[1].split(",")) {
+        for (const kv of m[1].split(/,|\s+(?=[\w-]+=)/)) {
           const i = kv.indexOf("=");
           if (i > 0) cur.set[kv.slice(0, i).trim()] = kv.slice(i + 1).trim();
           else if (kv.trim()) warnings.push(`${where}: "set: ${kv.trim()}" needs name=value`);

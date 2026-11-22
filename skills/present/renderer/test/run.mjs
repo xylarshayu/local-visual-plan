@@ -1981,6 +1981,10 @@ fixture('<figure + stepper lint>', (check) => {
     assert.match(r.html, /<g data-show="light=on">/)
     assert.equal((r.html.match(/stepper-counter"/g) || []).length, 1, 'a state is not drawn as a counter')
 
+    const spaced = at('state: door open shut\nstate: light off on\ncounter: n | Things\ncounter: t | Time', '# One\nparts: a\nset: door=shut n=2 t=3 ms\nkey: k\n')
+    assert.deepEqual(spaced.warnings, [])
+    assert.deepEqual(JSON.parse(/data-counters="([^"]*)"/.exec(spaced.html)[1].replace(/&quot;/g, '"')), { n: '2', t: '3 ms', door: 'shut', light: 'off' }, 'set: splits on spaces before a name=, as parts: does, and keeps spaces inside a value')
+
     const bad = at('state: door open shut\nstate: lone x\ncounter: door | Doors', '# One\nparts: a\nset: door=ajar, nope=1\nkey: k\n')
     has(bad, /state: lone x" needs a name and at least two values/)
     has(bad, /"door" is both a counter and a state/)

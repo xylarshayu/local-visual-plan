@@ -503,7 +503,7 @@ everything after them is the narration, in Markdown.
 - `parts:` the `data-part` names this step is about, separated by spaces.
 - `key:` the key idea, one sentence. Required.
 - `changed:` one item of "what changed"; repeat the line for more.
-- `set: name=value, name=value` new counter or state values. Counter values are
+- `set: name=value, name=value` new counter or state values (commas or spaces between them). Counter values are
   text, shown as written; a state value must be one of its values. A counter or
   state not set keeps its value from the step before.
 - `needs: switch` marks a step that only happens with the switch on.
