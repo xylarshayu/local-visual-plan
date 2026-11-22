@@ -218,6 +218,16 @@
         }
       }
       function go(n) { i = Math.max(0, Math.min(steps.length - 1, n)); render(); }
+      // Clicking a part goes to the first step that names it, unless the current step does.
+      parts.forEach(function (p) {
+        var name = p.getAttribute("data-part");
+        var n = steps.findIndex(function (s) { return words(s).indexOf(name) >= 0; });
+        if (n < 0) return;
+        p.setAttribute("data-goto", "");
+        p.addEventListener("click", function (ev) {
+          if (!ev.target.closest("a") && words(steps[i]).indexOf(name) < 0) go(n);
+        });
+      });
 
       fig.querySelector(".stepper-prev").addEventListener("click", function () { go(i - 1); });
       fig.querySelector(".stepper-next").addEventListener("click", function () { go(i + 1); });

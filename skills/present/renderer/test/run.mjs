@@ -1776,14 +1776,15 @@ fixture('composite.md', (check) => {
     assert.ok(r.warnings.every((w) => /code path "src\/[^"]+" is not in the repo/.test(w)), r.warnings.join(' | '))
   })
 
-  check('the workers part is a three-layer card and its pools are hidden until their step', () => {
-    const workers = /<g data-part="workers">[\s\S]*?<\/g>/.exec(r.html)[0]
-    assert.equal((workers.match(/<rect class="box"/g) || []).length, 3)
-    for (const w of ['w-images', 'w-email', 'w-search']) assert.match(r.html, new RegExp(`<g data-part="${w}" data-future="hidden">`))
+  check('the workers part is a three-layer card the size of its neighbours, stacked toward the bottom right', () => {
+    const workers = /<g data-part="workers">[\s\S]*?<\/g>/.exec(first)[0]
+    const rects = [...workers.matchAll(/<rect class="box" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/g)].map((m) => m.slice(1).map(Number))
+    assert.deepEqual(rects, [[352, 160, 112, 56], [348, 156, 112, 56], [344, 152, 112, 56]], 'back copy first, each 4 down and right of the next')
+    assert.match(first, /<g data-part="queue">\s*<rect class="box" x="\d+" y="152" width="112" height="56"/)
   })
 
   check('each step lists the code of its own parts, linked under repo:', () => {
-    assert.deepEqual(steps.map(paths), [['src/api/jobs.ts', 'src/queue/'], ['src/workers/'], ['src/workers/images.ts', 'src/workers/email.ts', 'src/workers/search.ts'], ['src/store/']])
+    assert.deepEqual(steps.map(paths), [['src/api/jobs.ts', 'src/queue/'], ['src/workers/'], ['src/store/']])
     assert.match(steps[0], /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts">/)
   })
 
@@ -1793,10 +1794,13 @@ fixture('composite.md', (check) => {
     assert.match(r.html, /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers" id="stepper:inside-the-workers"/)
   })
 
-  check('the exploded pools are lift layers, one per step', () => {
+  check('inside the workers is an axonometric plan: the pools side by side, the limit on top, each building a rise part', () => {
     const inside = /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers"[\s\S]*?<\/figure>/.exec(r.html)[0]
-    assert.deepEqual([...inside.matchAll(/<g data-lift="" data-part="([^"]+)"/g)].map((m) => m[1]), ['w-search', 'w-email', 'w-images'])
-    assert.deepEqual([...inside.matchAll(/data-parts="([^"]+)"/g)].map((m) => m[1]), ['w-images', 'w-email', 'w-search'])
+    assert.deepEqual([...inside.matchAll(/<g data-part="([^"]+)" data-rise="">/g)].map((m) => m[1]), ['queue', 'w-images', 'w-email', 'limit', 'w-search', 'store'])
+    assert.deepEqual([...inside.matchAll(/<g data-part="(e-[^"]+)">/g)].map((m) => m[1]), ['e-images', 'e-email', 'e-search', 'e-store'])
+    assert.equal((/<g data-part="e-store">[\s\S]*?<\/g>/.exec(inside)[0].match(/data-flow/g) || []).length, 3, 'three lanes merge on the store')
+    const stack = /<figure data-block="stepper" data-pf-anchor="stepper:four-layers"[\s\S]*?<\/figure>/.exec(r.html)[0]
+    assert.deepEqual([...stack.matchAll(/<g data-part="([^"]+)" data-lift="">/g)].map((m) => m[1]), ['storage', 'services', 'api', 'interface'], 'a layer stack keeps data-lift')
   })
 })
 
@@ -1829,7 +1833,7 @@ fixture('<figure + stepper lint>', (check) => {
   check('every house figure renders clean, and a stepper can walk all its parts', () => {
     const dir = join(__dirname, '..', '..', 'figures')
     const files = readdirSync(dir).filter((f) => f.endsWith('.svg'))
-    assert.deepEqual(files.sort(), ['architecture.svg', 'exploded.svg', 'layer-stack.svg', 'swimlane.svg'])
+    assert.deepEqual(files.sort(), ['architecture.svg', 'exploded.svg', 'layer-stack.svg', 'plan.svg', 'swimlane.svg'])
     for (const f of files) {
       const svg = readFileSync(join(dir, f), 'utf8')
       const parts = [...svg.matchAll(/data-part="([^"]+)"/g)].map((m) => m[1])

@@ -646,11 +646,9 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 .figure-stage, .stepper-stage { overflow-x: auto; padding: 8px 0; }
 :is(.figure-stage, .stepper-stage) > svg {
   display: block; width: 100%; height: auto;
-  min-width: calc(var(--fig-w) * 0.8); max-width: var(--fig-w);
+  min-width: calc(var(--fig-w) * 0.8); max-width: calc(var(--fig-w) * 1.25);
   color: var(--fg); font-family: var(--sans); font-size: 12px;
 }
-/* A stepper figure may grow to 1.25x its drawing. */
-.stepper-stage > svg { max-width: calc(var(--fig-w) * 1.25); }
 :is(.figure-stage, .stepper-stage) svg :is(rect, circle, ellipse, path, line, polyline, polygon) {
   fill: none; stroke: currentColor; stroke-width: 1.25; vector-effect: non-scaling-stroke;
 }
@@ -677,6 +675,12 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 /* A data-lift part (a layer of an isometric stack) rises while it is current; the layers drawn over it are ghosted. */
 .stepper-stage svg [data-lift][data-state=current] { transform: translateY(-20px); }
 .stepper-stage svg [data-lift][data-state=current] ~ [data-lift] { opacity: 0.16; }
+/* A data-rise part (a building on an axonometric plan) rises while current; nothing is ghosted. */
+.stepper-stage svg [data-rise][data-state=current] { transform: translateY(-12px); }
+/* A part a step names is a shortcut to that step: a hint of accent on hover, and a plan building lifts a little. */
+.stepper-stage svg [data-goto] { cursor: pointer; }
+.stepper-stage svg [data-goto]:not([data-state=current]):hover { color: color-mix(in srgb, var(--accent) 60%, var(--fg)); }
+.stepper-stage svg [data-rise][data-goto]:not([data-state=current]):hover { transform: translateY(-4px); }
 /* A data-show group is drawn only while its state has that value. */
 .stepper-stage svg [data-show] { transition: opacity var(--dur-2) var(--ease), visibility var(--dur-2); }
 .stepper-stage svg [data-show]:not([data-on]) { opacity: 0; visibility: hidden; }
@@ -699,7 +703,8 @@ figure[data-block=stepper] {
 }
 .stepper-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
 @container (min-width: 820px) {
-  .stepper-grid { grid-template-columns: minmax(0, 1fr) clamp(280px, 28cqw, 360px); gap: 32px; align-items: start; }
+  /* The rail takes what the figure at 1.25x leaves, so a narrow figure still gets the full 360px. */
+  .stepper-grid { grid-template-columns: minmax(0, 1fr) clamp(280px, max(28cqw, 100cqw - 32px - var(--fig-w, 100cqw) * 1.25), 360px); gap: 32px; align-items: start; }
   .stepper-main { position: sticky; top: 64px; }
   /* Sticky, so the figure and its controls fit in the window. */
   .stepper-stage > svg { max-height: calc(100vh - 200px); }
@@ -1413,7 +1418,7 @@ pre[data-block=unknown]::before {
   .stepper-stage svg [data-state][data-future] { visibility: visible; }
   .stepper-stage svg [data-state] .flow-pulse { display: none; }
   .stepper-stage svg [data-state] .box { fill: var(--bg); }
-  .stepper-stage svg [data-state][data-lift] { transform: none; opacity: 1 !important; }
+  .stepper-stage svg [data-state]:is([data-lift], [data-rise]) { transform: none; opacity: 1 !important; }
   .stepper-stage svg [data-show][data-init] { opacity: 1; visibility: visible; }
   .stepper-stage svg [data-show]:not([data-init]) { opacity: 0; visibility: hidden; }
   .embed-stage iframe, .embed-run { display: none !important; }

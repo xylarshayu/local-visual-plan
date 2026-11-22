@@ -8,9 +8,6 @@ repo: https://git.example.com/shop/blob/main
 code: api src/api/jobs.ts
 code: queue src/queue/
 code: workers src/workers/
-code: w-images src/workers/images.ts
-code: w-email src/workers/email.ts
-code: w-search src/workers/search.ts
 code: store src/store/
 state: queue empty one
 switch: Store
@@ -29,14 +26,7 @@ set: queue=empty
 key: Workers pull jobs; nothing pushes work at them.
 changed: The job is claimed.
 
-A free worker takes the oldest job. The stacked outline says this box is more than one thing, and its link leads to the exploded view below.
-
-# Inside the workers
-parts: w-images w-email w-search
-key: Workers is three pools, one per kind of job.
-changed: The job runs in the pool for its kind.
-
-Each pool scales on its own, so a burst of email does not slow image resizing.
+A free worker takes the oldest job. The stacked outline says this box is more than one thing, and its link leads to the plan below.
 
 # The result is stored
 parts: e-write store
@@ -55,18 +45,46 @@ changed: The job waits in the queue again.
 The write fails, so the worker returns the job to the queue.
 ```
 
-```stepper figure=figures/workers-exploded.svg title="Inside the workers"
+```stepper figure=figures/workers-plan.svg title="Inside the workers"
+code: w-images src/workers/images.ts
+code: w-email src/workers/email.ts
+code: w-search src/workers/search.ts
+
+# One queue feeds every pool
+parts: queue
+key: Every pool takes its jobs from the same queue.
+
+Jobs wait in order. Each pool takes only its own kind.
+
 # Images
-parts: w-images
-key: Uploads are resized into three sizes.
+parts: e-images w-images
+key: Three workers side by side take a burst of uploads at once.
 
-The images pool is the busiest, so it has the most workers.
+Images is the busiest pool, so it has the most workers.
 
-# Email
-parts: w-email
-key: One message per job, retried on a bounce.
+# Email, under a rate limit
+parts: e-email w-email limit
+key: The limit on top keeps sends under what the mail provider accepts.
 
 # Search
-parts: w-search
-key: A changed record is reindexed.
+parts: e-search w-search
+key: A changed record is reindexed by whichever worker is free.
+
+# One queue in, one store out
+parts: queue e-store store
+key: However many pools there are, jobs come from one queue and land in one store.
+```
+
+```stepper figure=figures/layers-exploded.svg title="Four layers"
+# Interface
+parts: interface
+key: What people see and touch.
+
+# API
+parts: api
+key: The one way in.
+
+# Services
+parts: services
+key: Where the rules live.
 ```

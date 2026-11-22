@@ -1,29 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 280" width="720" height="280">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 256" width="640" height="256">
   <defs><symbol id="m-queue" class="mark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol></defs>
   <g data-part="api">
     <path d="M80 112V152"/><path d="M76 145L80 152L84 145"/>
-    <text class="mono" x="80" y="100" text-anchor="middle">POST /v1/jobs</text>
+    <text class="mono" x="80" y="100" text-anchor="middle">POST /jobs</text>
     <rect class="box" x="24" y="152" width="112" height="56" rx="4"/><text x="80" y="185" text-anchor="middle" font-weight="600">API</text>
   </g>
-  <g data-part="e-enqueue"><path data-flow="" d="M136 180H176"/><path d="M169 176L176 180L169 184"/></g>
+  <g data-part="e-enqueue"><path data-flow="" d="M136 180H184"/><path d="M177 176L184 180L177 184"/></g>
   <g data-part="queue">
-    <rect class="box" x="176" y="152" width="112" height="56" rx="4"/><text x="232" y="176" text-anchor="middle" font-weight="600">Queue</text>
-    <use href="#m-queue" class="mark" x="270" y="156" width="14" height="14"/>
-    <text data-show="queue=empty" class="muted" x="232" y="196" text-anchor="middle">empty</text>
-    <text data-show="queue=one" class="muted" x="232" y="196" text-anchor="middle">1 waiting</text>
+    <rect class="box" x="184" y="152" width="112" height="56" rx="4"/><text x="240" y="176" text-anchor="middle" font-weight="600">Queue</text>
+    <use href="#m-queue" class="mark" x="278" y="156" width="14" height="14"/>
+    <text data-show="queue=empty" class="muted" x="240" y="196" text-anchor="middle">empty</text>
+    <text data-show="queue=one" class="muted" x="240" y="196" text-anchor="middle">1 waiting</text>
   </g>
+  <g data-part="e-claim"><path data-flow="" d="M296 180H344"/><path d="M337 176L344 180L337 184"/></g>
   <g data-part="workers">
-    <rect class="box" x="344" y="88" width="224" height="152" rx="4"/>
-    <rect class="box" x="338" y="94" width="224" height="152" rx="4"/>
-    <rect class="box" x="332" y="100" width="224" height="152" rx="4"/>
-    <text x="444" y="128" text-anchor="middle" font-weight="600">Workers</text>
-    <a href="#stepper:inside-the-workers"><text x="548" y="240" text-anchor="end">See inside ↓</text></a>
+    <rect class="box" x="352" y="160" width="112" height="56" rx="4"/>
+    <rect class="box" x="348" y="156" width="112" height="56" rx="4"/>
+    <rect class="box" x="344" y="152" width="112" height="56" rx="4"/>
+    <text x="400" y="185" text-anchor="middle" font-weight="600">Workers</text>
+    <a href="#stepper:inside-the-workers"><text x="400" y="244" text-anchor="middle">See inside ↓</text></a>
   </g>
-  <g data-part="e-claim"><path data-flow="" d="M288 180H332"/><path d="M325 176L332 180L325 184"/></g>
-  <g data-part="w-images" data-future="hidden"><rect class="box" x="344" y="152" width="60" height="56" rx="4"/><text x="374" y="185" text-anchor="middle" font-weight="600">Images</text></g>
-  <g data-part="w-email" data-future="hidden"><rect class="box" x="414" y="152" width="60" height="56" rx="4"/><text x="444" y="185" text-anchor="middle" font-weight="600">Email</text></g>
-  <g data-part="w-search" data-future="hidden"><rect class="box" x="484" y="152" width="60" height="56" rx="4"/><text x="514" y="185" text-anchor="middle" font-weight="600">Search</text></g>
-  <g data-part="e-write"><path data-flow="" d="M568 180H608"/><path d="M601 176L608 180L601 184"/></g>
-  <g data-part="store"><path class="box" d="M608 160a48 8 0 0 1 96 0v40a48 8 0 0 1-96 0z"/><path d="M608 160a48 8 0 0 0 96 0"/><text x="656" y="192" text-anchor="middle" font-weight="600">Store</text></g>
+  <g data-part="e-write"><path data-flow="" d="M464 180H520"/><path d="M513 176L520 180L513 184"/></g>
+  <g data-part="store"><path class="box" d="M520 160a48 8 0 0 1 96 0v40a48 8 0 0 1-96 0z"/><path d="M520 160a48 8 0 0 0 96 0"/><text x="568" y="192" text-anchor="middle" font-weight="600">Store</text></g>
 </svg>

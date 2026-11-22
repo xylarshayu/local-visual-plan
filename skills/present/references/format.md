@@ -369,8 +369,8 @@ A request crosses the gateway to the orders service, which writes one database.
 The file contract is linted at render time. Each breach is a render warning.
 
 - The root is `<svg>` with a `viewBox`; its `width`/`height` are dropped and the
-  stage sizes it: at most the viewBox width (draw at the size it should
-  appear; a stepper may grow it to 1.25x) and never narrower than 0.8 of it.
+  stage sizes it: up to 1.25x the viewBox width when the column has room
+  (draw at the size it should appear) and never narrower than 0.8 of it.
   A narrower screen scrolls the stage sideways instead of shrinking the text.
   The `<figure>` carries the drawn width as `style="--fig-w:720px"`.
 - Colour comes from tokens only. A paint value (`fill`, `stroke`, `stop-color`,
@@ -401,6 +401,9 @@ The file contract is linted at render time. Each breach is a render warning.
   drawn after it (the ones over it), so the stack shows which layer the step
   is about. Draw the stack bottom layer first. It does nothing in a plain
   `figure` or in print.
+- `data-rise` on a part (a building on an axonometric plan) makes it rise 12
+  units while it is current in a stepper; nothing is ghosted. It does nothing
+  in a plain `figure` or in print.
 - Not allowed, and removed with a warning: `<script>`, `on*` attributes,
   `<foreignObject>`, `<style>` (it would restyle the whole page), and any
   `href` that is not `#id`.
@@ -534,7 +537,10 @@ nav. The figure column is sticky and its drawing is capped so it and the
 controls fit in the window. Print keeps the stepper in the column. On a wide
 stage the rail sits right of the figure; on a narrow one it sits below, and the stage (same minimum
 width as `figure`) scrolls to keep the current parts in view. While the switch is off, steps that need it are dashed
-in the step bar.
+in the step bar. Every part some step names gets `data-goto`: clicking it
+(outside a link) goes to the first step that names it, unless the current
+step names it too; hovering tints it toward the accent, and a `data-rise`
+part lifts 4 units.
 
 **Output:** `<figure data-block="stepper">` with an optional `<figcaption>`, a
 `.stepper-stage` holding the inlined SVG (same contract as `figure`), a

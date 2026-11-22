@@ -79,13 +79,13 @@ emphasis, never the only copy of a fact.
 ## Drawing a figure
 
 - Start from a house figure (below) or a blank `viewBox`. Draw at the size it
-  should appear: one user unit is one pixel, a figure never grows past its
-  viewBox width (a stepper's past 1.25x), and 720 units is a comfortable
+  should appear: one user unit is one pixel, a figure grows to at most 1.25x
+  its viewBox width when the column has room, and 720 units is a comfortable
   width.
 - One text size: every label is 12 units (the default; set no `font-size`).
   A part's name is `font-weight="600"` in full ink, its caption regular with
-  `class="muted"`. Hierarchy is weight and ink, never size. At a stepper's
-  1.25x that reads at 15px, just under the prose.
+  `class="muted"`. Hierarchy is weight and ink, never size. At 1.25x that
+  reads at 15px, just under the prose.
 - Do not reach for size to get clarity or emphasis. Try spacing, weight and
   removal first.
 - One ink. Hierarchy is opacity (`data-role`), meaning is dash pattern, colour
@@ -96,9 +96,19 @@ emphasis, never the only copy of a fact.
   only the boxes. Put `data-flow` on the line (drawn source to target) and a
   stepper shows movement along it while that step is current. That is the
   one moving thing a page has: one speed, one bead, accent only, three runs
-  and then rest. In an
-  exploded or isometric stack, `data-lift` on each layer makes the current
-  one rise out of the stack as the stepper walks it.
+  and then rest.
+- In an exploded or isometric stack, `data-lift` on each layer makes the
+  current one rise 20 units out of the stack as the stepper walks it, and
+  ghosts the layers drawn over it. A layer carries its labels up with it, so
+  keep the labels of layers on one level at least 36 units apart, or spread
+  them with leaders.
+- An axonometric plan (`plan.svg`) shows parts that sit side by side and
+  connect, not stacked: buildings on one platform, lanes between them. Put
+  `data-rise` on each building; the current one rises 12 units and nothing is
+  ghosted. Name each building on a tag on its roof, so the tag rises with it.
+- Any part a step names is a shortcut: clicking it goes to the first step
+  that names it, and hovering gives it a hint of accent (a `data-rise`
+  building also lifts a little). Nothing to declare.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
   colour.
 - An edge label is a plain word for what it carries (`sync`, `enqueue`), or
@@ -117,16 +127,16 @@ emphasis, never the only copy of a fact.
   declare a `state:` in the stepper and draw each look once in a group with
   `data-show="name=value"`. The stepper fades between them. Keep it to the
   one change the story turns on.
-- A part that is really several things (a pool of workers, a set of services)
-  is drawn as a three-layer card: the box plus two `class="box"` copies offset
-  6 units up and right, back one first, all inside the part's group. When the
-  story needs the members, draw them inside the box as their own parts with
-  `data-future="hidden"`, and the step that names them opens the box. When the
-  members are a topic of their own, give them an exploded figure elsewhere on
-  the page and put a small "See inside" link in the card's corner
-  (`<a href="#stepper:title-slug"><text>See inside ↓</text></a>`, or `#figure:` for a plain figure), so the
-  overview stays simple and the reader can still drill down. Sample:
-  `renderer/test/fixtures/composite.md`.
+- A part that is really several things (a pool of workers, two processes)
+  is drawn as a stacked card the same size as its neighbours: one
+  `class="box"` copy per extra member, at most two, each offset 4 units down
+  and right, back one first, all inside the part's group. Draw a two-member
+  part with one copy, not two. When the members are a topic of their own,
+  draw them in their own figure lower on the page (often a plan) and put a
+  small "See inside ↓" link under the card
+  (`<a href="#stepper:title-slug"><text>See inside ↓</text></a>`, or
+  `#figure:` for a plain figure), so the overview stays simple and the reader
+  can still drill down. Sample: `renderer/test/fixtures/composite.md`.
 - Run the render: every contract breach is a warning naming the file and the
   value.
 
@@ -141,6 +151,7 @@ labels, delete what you do not need.
 | `layer-stack.svg` | Layers, each with what it catches or owns; an optional "gets through" row | Control catalog, compensating layers |
 | `architecture.svg` | Components inside nested trust boundaries, one gate per boundary. For a before/after, mark added parts `data-change="add"` and removed ones `data-change="del"`, and put the change ledger in a table under it | Secure paved road |
 | `exploded.svg` | Layers lifted apart in isometric, each with a label and what it is for; a stepper can light one layer at a time | Control catalog, traceable decomposition |
+| `plan.svg` | Parts that sit side by side on one platform and connect: an intake, three services, a guard on one of them, a store; lanes carry the flow | Fan-in queue, traceable decomposition |
 | `swimlane.svg` | Owners as lanes, work moving between them; an optional line of visibility splits what the user sees from what the system does | Stage framework, service blueprint |
 
 **Spectacle, selectively.** The audience runs from executives to developers,
@@ -159,6 +170,9 @@ dependency graphs. Do not redraw those as figures.
 - Five to nine steps. More means two steppers or a table.
 - `key:` is the idea, `changed:` is the state. If the key idea of two steps is
   the same, merge them.
+- `code:` is per part and shows under every step that names it. Attach it to
+  the parts only one step names (an edge, or a small part for the thing that
+  step creates), so a path is not repeated down the stepper.
 - Counters count the facts the idea is about (saved, accepted, delivered), not
   activity. If a counter never changes, cut it.
 - Use the switch only when its off state teaches something (the network is
