@@ -23,6 +23,14 @@ The Excalidraw hand-drawn font, embedded as a data URI in pages that use
 hand-drawn diagrams. SIL Open Font License 1.1 — Copyright (c) 2020,
 Excalidraw. <https://github.com/excalidraw/virgil>
 
+## Simple Icons glyphs (test fixtures)
+
+The Redis, Elasticsearch and PostgreSQL marks in
+`skills/present/renderer/test/fixtures/figures/` are path data from
+[Simple Icons](https://simpleicons.org) (v13), released under CC0 1.0. The
+names and logos are trademarks of their owners; they appear only as faint
+one-ink marks identifying a technology in a sample figure.
+
 ## Design lineage (no code vendored)
 
 The SVG line roles in `skills/present/renderer/styles.css` (`svg [data-role]`:
