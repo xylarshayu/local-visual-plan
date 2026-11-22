@@ -80,6 +80,21 @@ steppers: when, which pattern, how to draw) are loaded on demand — they don't 
 always-on context. Unknown blocks degrade to a labeled `<pre>`, so the `.md`
 stays readable anywhere, even without this renderer.
 
+## A walk-through over a drawing
+
+The common case for a `stepper`, in order:
+
+1. Read `references/figures.md` (which figure, how to draw it, how to pace
+   the steps, and a worked switch), then the `figure` and `stepper` sections of
+   `references/format.md`.
+2. Copy the closest house figure from `<skill-dir>/figures/` next to your
+   markdown, or draw one at 720 units wide. Give every box and every line a
+   step will light a `data-part`.
+3. Write the stepper: one idea, five to nine steps, a `key:` each.
+4. Render, fix every warning, run `check.mjs`, fix every warning.
+
+With no codebase, leave out `repo:`, `code:` and `docs:`.
+
 ## New: `data-model` and `api-endpoint`
 
 Two blocks purpose-built for shapes a Mermaid diagram can't show a *change*
@@ -143,12 +158,15 @@ time.** Many harnesses/IDEs (Claude Code included) auto-open a surfaced
 still works when the native openers can't — e.g. WSL with interop disabled,
 where the printed UNC path opens straight from Windows anyway.
 
-**Verify diagrams before presenting.** Run
+**Verify the page before presenting.** Run
 `node <skill-dir>/renderer/check.mjs <output.html>` — a best-effort check that
-loads the page in whatever headless Chromium it can find locally and fails,
+loads the page in whatever headless Chromium it can find locally. It fails,
 listing captions, if any Mermaid diagram didn't produce an SVG (a plain syntax
-slip otherwise ships silently). No local browser found → it skips cleanly;
-treat that as a pass, not a blocker.
+slip otherwise ships silently), and it prints a `warning:` for each drawn
+figure whose label spills out of its box or overlaps another label, or whose
+text shows too small. Fix those as you would a render warning: you may not be
+able to see the page, but the reader will. No local browser found → it skips
+cleanly; treat that as a pass, not a blocker.
 
 ## Sharing the page
 

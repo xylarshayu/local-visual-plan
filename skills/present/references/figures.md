@@ -30,7 +30,8 @@ rung.
    object whose inside matters, when the stacking order is the point. Often
    the page's most memorable picture: spend it on the central idea.
 6. **Embed.** An interaction nothing above can show: a simulation, a
-   parameter the reader turns. Always with a poster and a body that say what
+   parameter the reader turns through many values. An on/off is a stepper's
+   switch, not an embed. Always with a poster and a body that say what
    it shows; at most two per page.
 
 ## Pick the behaviour before the layout
@@ -172,7 +173,8 @@ the one-ink rule: depth comes from drawing (faces, offsets, alignment lines),
 not from colour. Shade a side face with `style="fill:var(--bg-sunken)"`.
 
 Mermaid stays the right tool for sequence, state, flowchart, ER, timeline and
-dependency graphs. Do not redraw those as figures.
+dependency graphs. Do not redraw those as figures, unless a stepper walks
+through it: a stepper needs a figure.
 
 ## Writing a stepper
 
@@ -185,8 +187,78 @@ dependency graphs. Do not redraw those as figures.
   the parts only one step names (an edge, or a small part for the thing that
   step creates), so a path is not repeated down the stepper.
 - Counters count the facts the idea is about (saved, accepted, delivered), not
-  activity. If a counter never changes, cut it.
-- Use the switch only when its off state teaches something (the network is
-  down, a feature is disabled). When one step plays out differently, write that
-  version as an `off:` step; when every step that needs the switch stops the
-  same way, write one `held` step. Either gets its own key idea.
+  activity. If a counter never changes, cut it. `set:` gives a value, not an
+  increment.
+- A count the figure itself should show (a digit on a box) is a `state:` with
+  one `data-show` group per value.
+- To show a count grow, tell the same thing more than once (two clicks, two
+  syncs). The first sets the stage; the second is where the idea shows.
+
+## A switch, worked through
+
+The switch belongs to the reader, not to the story. At any step the reader can
+turn it off, and the stepper tells the same story without the thing the switch
+names: steps marked `needs: switch` drop out, an `off: <title>` step stands in
+for the step with that title, and one `held` step stands in for every
+`needs: switch` step that has no off step. Use it only when the off state
+teaches something (the network is down, a cache is disabled).
+
+- An off step stands in for exactly one step. It may keep that step's title,
+  name other parts and set its own values. When turning the thing off adds
+  work (no cache means a database read), that work goes in the off steps; the
+  step bar does not grow.
+- Use `held` when every step that needs the switch stops the same way (nothing
+  syncs offline); use off steps when each plays out differently.
+- A step both stories share holds in both, `set:` included. Set a value that
+  differs between the stories only in the steps that differ.
+- When the off story takes another path, draw that path as its own part inside
+  a `data-show="switch=off"` group, and name it in the off steps.
+
+A cache the reader can turn off, counted over two clicks:
+
+````
+```stepper figure=figures/click-path.svg title="Two clicks on one link"
+counter: cache | Served from the cache
+counter: db | Reached the database
+switch: Edge cache
+
+# A click arrives
+parts: browser e-req
+key: Every click is one GET for a short code.
+
+# The cache misses
+needs: switch
+parts: cache e-miss app e-read db
+set: db=1
+key: An empty cache sends the first click on to the database.
+changed: The cache now holds the link.
+
+# The app reads the database
+off: The cache misses
+parts: e-bypass app e-read db
+set: db=1
+key: With no cache, the click goes straight to the app.
+
+# The second click hits
+needs: switch
+parts: browser e-req cache e-hit
+set: cache=1
+key: A warm cache answers repeat clicks; the database never hears of them.
+
+# The second click reads again
+off: The second click hits
+parts: browser e-bypass app e-read db
+set: db=2
+key: With no cache, every click is a database read.
+```
+````
+
+The figure draws the bypass only while the switch is off:
+
+```
+<g data-show="switch=off">
+  <g data-part="e-bypass"><path data-flow="" d="M72 72V40H456V72" fill="none"/></g>
+</g>
+```
+
+With the cache on, the counters end at 1 and 1; off, at 0 and 2.

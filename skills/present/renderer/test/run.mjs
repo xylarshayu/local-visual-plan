@@ -2060,6 +2060,21 @@ fixture('<figure + stepper lint>', (check) => {
     assert.ok(!own.warnings.some((w) => /switch/.test(w) && /data-show/.test(w)), own.warnings.join(' | '))
   })
 
+  check("figures.md's worked switch example renders clean and counts as it says", () => {
+    const doc = readFileSync(join(__dirname, '..', '..', 'references', 'figures.md'), 'utf8')
+    const block = /\n(```stepper figure=figures\/click-path\.svg[\s\S]*?\n```)\n/.exec(doc.slice(doc.indexOf('## A switch, worked through')))[1]
+    const svg = /\n(<g data-show="switch=off">[\s\S]*?\n<\/g>)\n/.exec(doc)[1]
+    const dir = mkdtempSync(join(tmpdir(), 'pf-switch-doc-'))
+    mkdirSync(join(dir, 'figures'))
+    const parts = ['browser', 'cache', 'app', 'db', 'e-req', 'e-hit', 'e-miss', 'e-read']
+    writeFileSync(join(dir, 'figures', 'click-path.svg'), '<svg viewBox="0 0 720 200">' + parts.map((n) => `<g data-part="${n}"/>`).join('') + svg + '</svg>')
+    const r = renderPlan('# T\n\n' + block + '\n', { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(r.warnings, [])
+    const last = (a) => JSON.parse([...r.html.matchAll(new RegExp(`<li class="stepper-step"[^>]* ${a}="([^"]*)"`, 'g'))].at(-1)[1].replace(/&quot;/g, '"'))
+    assert.deepEqual(last('data-counters'), { cache: '1', db: '1' }, 'cache on: 1 and 1')
+    assert.deepEqual(last('data-off-counters'), { cache: '0', db: '2' }, 'cache off: 0 and 2')
+  })
+
   check('an off: step stands in for one step: from the values before it, out of the bar, linted', () => {
     const r = stepper('counter: a | A\nswitch: Net',
       '# One\nkey: k\nset: a=1\n# Two\nkey: k\nset: a=2\n# Three\nkey: k\nset: a=3\n# Two, offline\noff: Two\nparts: browser\nkey: k')

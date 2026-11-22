@@ -5,6 +5,22 @@ writing a plan) and the **renderer** (`render.mjs`). Every block lists its
 authoring syntax AND the output HTML contract (a stable `data-block` attribute +
 key classes) so the renderer, the stylesheet, and the tests all agree.
 
+This file is long. Read the list below, then only the sections your page
+uses (each is a `## ` or `### ` heading; `grep -n '^##' format.md` gives
+their lines). A walk-through over a drawing needs `figure` and `stepper`, and
+`references/figures.md` for how to draw and pace one.
+
+- File shape: frontmatter (`title`, `objective`, `repo`, ...)
+- Custom blocks: `steps`, `filetree`, `diff`, `code`, `diagram`, `wireframe`
+- Grouping directives (tabs, collapsible), rendering pipeline, escaping
+- `questions`, `callout`, `data-model`, `api-endpoint`
+- `figure`, `stepper`, `embed`
+- Chapters (side-nav sections)
+- Anchors and feedback plumbing (the output contract)
+
+Wherever a line takes a trailing ` — note` or ` — caption`, ` -- ` works the
+same, for writing without em-dashes.
+
 ## File shape
 
 ```
@@ -461,8 +477,9 @@ Lines before the first `#` set up the stepper:
 
 - `counter: name | Label`, at most three. Every counter starts at `0`.
 - `switch: Label`, at most one. It starts on. Only the header declares it.
-  The figure can follow it like a state: `data-show="switch=on"` and
-  `data-show="switch=off"`.
+  The reader flips it at any step to see the story without that thing (see
+  the steps below; `references/figures.md` works one through). The figure can
+  follow it like a state: `data-show="switch=on"` and `data-show="switch=off"`.
 - `state: name value value ...` names a figure state and its values; the first
   is the initial one. A step changes it with `set: name=value`, carried
   forward like a counter. In the SVG, a group with `data-show="name=value"` is

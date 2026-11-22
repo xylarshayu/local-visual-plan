@@ -12,6 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 import { renderPlan } from '../render.mjs'
@@ -334,7 +335,7 @@ await check('a composite card\'s link is accent, underlined, and jumps to its ex
 await check('a plan building rises while current; clicking a part goes to its step; hovering hints at it', async () => {
   const { p, ctx, errors } = await open({}, composite)
   const fig = p.locator('#stepper\\:inside-the-workers')
-  const settle = () => fig.evaluate((f) => Promise.all(f.getAnimations({ subtree: true }).filter((a) => a.transitionProperty).map((a) => a.finished)))
+  const settle = () => fig.evaluate((f) => Promise.all(f.getAnimations({ subtree: true }).filter((a) => a.transitionProperty).map((a) => a.finished.catch(() => {}))))
   const look = (n) => fig.evaluate((f, n) => { const g = f.querySelector(`[data-part="${n}"]`), c = getComputedStyle(g); return [c.transform, c.color, c.cursor] }, n)
   const current = () => fig.locator('.stepper-bar [aria-current=step]').textContent()
   await settle()
@@ -702,6 +703,33 @@ await check('an embed cannot navigate its own frame anywhere (the page sets fram
     assert.equal(await p.locator('.embed-stage iframe').count(), 1, name)
     await ctx.close()
   }
+})
+
+await check('check.mjs reports labels that spill or overlap and text drawn too small, not hidden or unoutlined ones', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pf-layout-'))
+  mkdirSync(join(dir, 'figures'))
+  writeFileSync(join(dir, 'figures', 'layout.svg'), '<svg viewBox="0 0 360 120">'
+    + '<g data-part="spill"><rect class="box" x="0" y="0" width="60" height="40"/><text x="8" y="24">A label far too long</text></g>'
+    + '<g data-part="fits"><rect class="box" x="0" y="60" width="160" height="40"/><text x="12" y="84">Fits</text></g>'
+    + '<g data-part="tight"><rect class="box" x="180" y="60" width="40" height="40"/><text x="181" y="84">Tight</text></g>'
+    + '<g data-part="bare"><rect class="box" style="stroke:none" x="250" y="60" width="40" height="40"/><text x="251" y="84">Bare</text></g>'
+    + '<text x="200" y="24">Left</text><text x="210" y="24">Right</text></svg>')
+  writeFileSync(join(dir, 'figures', 'show.svg'), '<svg viewBox="0 0 360 60"><g data-part="a"><rect class="box" x="0" y="0" width="160" height="40"/><text x="12" y="24">Shown</text></g>'
+    + '<g data-show="switch=off"><text x="20" y="24">Hidden over it</text></g></svg>')
+  writeFileSync(join(dir, 'figures', 'wide.svg'), '<svg viewBox="0 0 2400 60"><g data-part="a"><rect class="box" x="0" y="0" width="160" height="40"/><text x="12" y="24">Tiny</text></g></svg>')
+  const file = join(dir, 'layout.html')
+  writeFileSync(file, renderPlan('# Layout\n\n```figure src=figures/layout.svg title="Layout"\nBoxes.\n```\n\n```figure src=figures/wide.svg title="Wide"\nWide.\n```\n\n'
+    + '```stepper figure=figures/show.svg title="Show"\nswitch: Net\n\n# One\nneeds: switch\nparts: a\nkey: k\n\n# Two\noff: One\nparts: a\nkey: k\n```\n', { sourcePath: join(dir, 'layout.md') }).html)
+  const r = spawnSync(process.execPath, [join(here, '..', 'check.mjs'), file, '--browser', chromium.executablePath()], { encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stderr)
+  const warnings = r.stderr.split('\n').filter((l) => l.startsWith('warning: ')).sort()
+  assert.equal(warnings.length, 4, warnings.join('\n'))
+  assert.equal(warnings[0], 'warning: Layout: label "A label far too long" touches or spills out of its box')
+  assert.equal(warnings[1], 'warning: Layout: label "Tight" touches or spills out of its box')
+  assert.equal(warnings[2], 'warning: Layout: labels "Left" and "Right" overlap')
+  assert.match(warnings[3], /^warning: Wide: text shows at \d+(\.\d)?px; draw the figure narrower/)
+  assert.match(r.stdout, /4 figure layout warning\(s\)/)
+  assert.ok(readFileSync(file, 'utf8').indexOf('present-check-layout') < 0, 'the checked page is left untouched')
 })
 
 server.close(); udp.close()
