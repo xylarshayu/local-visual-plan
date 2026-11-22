@@ -1658,7 +1658,9 @@ fixture('stepper.md', (check) => {
   })
 
   check('figure inlines the SVG with title, description and size bounds from the viewBox', () => {
-    assert.match(fig, /<div class="figure-stage"><svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 720 200" role="img" aria-labelledby="fig1-title" aria-describedby="fig1-desc" style="min-width:576px;max-width:720px">/)
+    assert.match(fig, /<div class="figure-stage"><svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 720 200" role="img" aria-labelledby="fig1-title" aria-describedby="fig1-desc">/)
+    assert.match(fig, /^<figure data-block="figure"[^>]* style="--fig-w:720px">/)
+    assert.match(stp, /^<figure data-block="stepper"[^>]* style="--fig-w:\d+px">/)
     assert.match(fig, /<title id="fig1-title">Request path<\/title><desc id="fig1-desc">A browser request crosses the gateway/)
     assert.doesNotMatch(fig, /width="720"|<\?xml/, 'root width/height and the XML prolog are dropped')
     assert.equal((fig.match(/data-part="/g) || []).length, 7)
@@ -1742,7 +1744,7 @@ fixture('composite.md', (check) => {
   const r = renderPlan(read('composite.md'), { sourcePath: join(FIXTURES, 'composite.md') })
   const first = /<figure data-block="stepper"[\s\S]*?<\/figure>/.exec(r.html)[0]
   const steps = [...first.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
-  const paths = (st) => [...st.matchAll(/<code>([^<]+)<\/code><\/a>/g)].map((m) => m[1])
+  const paths = (st) => [...st.matchAll(/<code>(.*?)<\/code><\/a>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''))
 
   check('inside this git worktree, every cited path is checked and reported missing, nothing else warns', () => {
     assert.equal(r.warnings.length, 7, r.warnings.join(' | '))
@@ -1828,14 +1830,14 @@ fixture('<figure + stepper lint>', (check) => {
     const r = renderPlan(md('repo: https://git.example.com/shop/blob/main/\n', code), { sourcePath: join(dir, 'docs', 'p.md') })
     assert.deepEqual(r.warnings, [])
     const [one, two] = steps(r)
-    assert.match(one, /<div class="stepper-code"><p class="stepper-label">In the code<\/p><ul><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts"><code>src\/api\/jobs\.ts<\/code><\/a><\/li><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/a%20b%26c\.ts"><code>src\/api\/a b&amp;c\.ts<\/code><\/a><\/li><\/ul><\/div>/)
+    assert.match(one, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/a%20b%26c\.ts"><code><span class="stepper-dir">src\/api\/<\/span>a b&amp;c\.ts<\/code><\/a><\/li><\/ul><\/div>/)
     assert.doesNotMatch(one, /src\/queue/)
-    assert.match(two, /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/queue\/"><code>src\/queue\/<\/code><\/a>/)
+    assert.match(two, /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/queue\/"><code><span class="stepper-dir">src\/<\/span>queue\/<\/code><\/a>/)
     assert.doesNotMatch(two, /jobs\.ts/)
 
     const plain = renderPlan(md('', code), { sourcePath: join(dir, 'p.md') })
     assert.deepEqual(plain.warnings, [])
-    assert.match(steps(plain)[0], /<li><code>src\/api\/jobs\.ts<\/code><\/li>/)
+    assert.match(steps(plain)[0], /<li><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/li>/)
     assert.doesNotMatch(plain.html, /<a href="[^"#]*src\/api/)
 
     const bad = renderPlan(md('repo: javascript:alert(1)\n', code + '\ncode: a src/api/gone.ts\ncode: zz src/x.ts\ncode: c ../outside.ts\ncode: c /etc/passwd\ncode: c'), { sourcePath: join(dir, 'p.md') })
@@ -1864,8 +1866,8 @@ fixture('<figure + stepper lint>', (check) => {
     const r = renderPlan(page(fm, 'code: a src/api/jobs.ts\ncode: a App src/api/jobs.ts\ncode: b Libs ledger/only-there.ts'), { sourcePath: join(dir, 'p.md') })
     assert.deepEqual(r.warnings, [], 'a Libs path is not checked against this checkout')
     const [one, two] = steps(r)
-    assert.match(one, /<ul><li><span class="stepper-repo" title="https:\/\/git\.example\.com\/app\/blob\/main">App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/jobs\.ts"><code>src\/api\/jobs\.ts<\/code><\/a><\/li><\/ul>/, 'the bare path and the App path are one item')
-    assert.match(two, /<li><span class="stepper-repo" title="https:\/\/git\.example\.com\/libs\/blob\/main">Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/ledger\/only-there\.ts"><code>ledger\/only-there\.ts<\/code><\/a><\/li>/)
+    assert.match(one, /<ul><li><span class="stepper-repo" title="https:\/\/git\.example\.com\/app\/blob\/main">App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/jobs\.ts"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><\/ul>/, 'the bare path and the App path are one item')
+    assert.match(two, /<li><span class="stepper-repo" title="https:\/\/git\.example\.com\/libs\/blob\/main">Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/ledger\/only-there\.ts"><code><span class="stepper-dir">ledger\/<\/span>only-there\.ts<\/code><\/a><\/li>/)
 
     const bad = renderPlan(page(fm, 'code: a App src/gone.ts\ncode: b Libs ../x.ts\ncode: b Lib ledger/x.ts'), { sourcePath: join(dir, 'p.md') })
     has(bad, /code path "src\/gone\.ts" is not in the repo/)
@@ -1879,6 +1881,16 @@ fixture('<figure + stepper lint>', (check) => {
     const spaced = renderPlan(page(fm, 'code: a src/api/my file.ts'), { sourcePath: join(dir, 'p.md') })
     assert.deepEqual(spaced.warnings, [], 'a home path with a space is still a path when its first word is not a repo name')
     assert.match(spaced.html, /<span class="stepper-repo"[^>]*>App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/my%20file\.ts">/)
+
+    const docs = renderPlan(page(fm, 'code: a src/api/jobs.ts\ncode: b src/api/jobs.ts\ndocs: a Libs guide/jobs.md | Retries, Dead letters\ndocs: b README.md\ndocs: b ../x.md\ndocs: zz y.md\ndocs: b'), { sourcePath: join(dir, 'p.md') })
+    has(docs, /docs path "README\.md" is not in the repo/)
+    has(docs, /docs path "\.\.\/x\.md" must be relative to the repo root/)
+    has(docs, /docs: unknown part "zz"/)
+    has(docs, /"docs: b" needs a part and a path/)
+    const [d1, d2] = steps(docs)
+    assert.match(d1, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li>[^]*?jobs\.ts[^]*?<\/ul><\/div><div class="stepper-code" data-kind="docs"><p class="stepper-label">In the docs<\/p><ul><li><span class="stepper-repo"[^>]*>Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/guide\/jobs\.md"><code><span class="stepper-dir">guide\/<\/span>jobs\.md<\/code><\/a> <span class="stepper-note">Retries, Dead letters<\/span><\/li><\/ul><\/div>/)
+    assert.match(d2, /data-kind="docs"[^]*?<code>README\.md<\/code><\/a><\/li><\/ul>/, 'a doc with no note and no folder')
+    assert.doesNotMatch(d2, /guide\/jobs\.md|stepper-note/)
 
     const odd = renderPlan(page('repo: <b>"x https://git.example.com/a"onmouseover="y\n', 'code: a <b>"x src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') })
     assert.doesNotMatch(odd.html, /<b>"x|"onmouseover=/, 'repo names and URLs are escaped')
@@ -1922,6 +1934,34 @@ fixture('<figure + stepper lint>', (check) => {
     assert.match(at('own.svg').html, /<svg[^>]* role="img"/)
   })
 
+  check('state: is a named figure state; set: changes it, carried forward; data-show groups follow it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-state-'))
+    writeFileSync(join(dir, 's.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"><rect class="box" x="0" y="0" width="10" height="10"/></g><g data-show="door=open"><text x="0" y="30">open</text></g><g data-show="door=shut"><text x="0" y="30">shut</text></g><g data-show="light=on"><text x="40" y="30">on</text></g></svg>')
+    const at = (head, steps) => renderPlan(`# T\n\n\`\`\`stepper figure=s.svg\n${head}\n${steps}\`\`\`\n`, { sourcePath: join(dir, 'p.md') })
+    const r = at('state: door open shut\nstate: light off on\ncounter: n | Things', '# One\nparts: a\nkey: k\n\n# Two\nparts: a\nset: door=shut, n=1\nkey: k\n\n# Three\nparts: a\nset: light=on\nkey: k\n')
+    assert.deepEqual(r.warnings, [])
+    const vals = [...r.html.matchAll(/data-counters="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')))
+    assert.deepEqual(vals, [{ n: '0', door: 'open', light: 'off' }, { n: '1', door: 'shut', light: 'off' }, { n: '1', door: 'shut', light: 'on' }])
+    assert.match(r.html, /<g data-show="door=open" data-init data-on>/, 'the first value is the initial state, shown without script and in print')
+    assert.match(r.html, /<g data-show="door=shut">/)
+    assert.match(r.html, /<g data-show="light=on">/)
+    assert.equal((r.html.match(/stepper-counter"/g) || []).length, 1, 'a state is not drawn as a counter')
+
+    const bad = at('state: door open shut\nstate: lone x\ncounter: door | Doors', '# One\nparts: a\nset: door=ajar, nope=1\nkey: k\n')
+    has(bad, /state: lone x" needs a name and at least two values/)
+    has(bad, /"door" is both a counter and a state/)
+    has(bad, /step "One" sets door to "ajar", which is not one of: open shut/)
+    has(bad, /step "One" sets unknown counter or state "nope"/)
+    assert.equal(JSON.parse(/data-counters="([^"]*)"/.exec(bad.html)[1].replace(/&quot;/g, '"')).door, 'open', 'a value the state does not have is dropped, not carried')
+    has(bad, /data-show "light=on" names no state/)
+    writeFileSync(join(dir, 'v.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"/><g data-show="door=ajar"/><g data-show="door"/></svg>')
+    const v = renderPlan('# T\n\n```stepper figure=v.svg\nstate: door open shut\n# One\nparts: a\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    has(v, /data-show "door=ajar": door is one of: open shut/)
+    has(v, /data-show "door" needs name=value/)
+    const plain = renderPlan('# T\n\n```figure src=s.svg\nx\n```\n', { sourcePath: join(dir, 'p.md') })
+    has(plain, /figure s\.svg: data-show works only in a stepper with state:/)
+  })
+
   check('a missing file warns and keeps the description as text', () => {
     const r = one('```figure src=figures/nope.svg\nThe description survives.\n```\n')
     has(r, /figure figures\/nope.svg: cannot read file/)
@@ -1947,7 +1987,7 @@ fixture('<figure + stepper lint>', (check) => {
   check('unknown parts, unknown counters and missing key ideas are reported', () => {
     const r = stepper('counter: a | A', '# One\nparts: browser nope\nset: a=1, b=2\n\nText.')
     has(r, /step "One" names part "nope", which the figure does not have/)
-    has(r, /step "One" sets unknown counter "b"/)
+    has(r, /step "One" sets unknown counter or state "b"/)
     has(r, /step "One" has no key:/)
   })
 

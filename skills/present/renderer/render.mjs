@@ -1227,11 +1227,10 @@ function loadFigure(src, prefix, title, desc, reg, warnings) {
   if (!vb) warnings.push(`${where}: the root <svg> has no viewBox`);
   const width = vb ? parseFloat(vb[1].trim().split(/[\s,]+/)[2]) || 0 : 0;
   attrs = attrs.replace(/\s(width|height|style|role|aria-[\w-]+)\s*=\s*("[^"]*"|'[^']*')/gi, "");
-  const size = width ? ` style="min-width:${Math.round(width * 0.8)}px;max-width:${Math.round(width)}px"` : "";
   // A page link inside role="img" would be hidden from screen readers.
-  const open = `<svg${attrs} role="${links.length ? "group" : "img"}" aria-labelledby="${prefix}title" aria-describedby="${prefix}desc"${size}>`
+  const open = `<svg${attrs} role="${links.length ? "group" : "img"}" aria-labelledby="${prefix}title" aria-describedby="${prefix}desc">`
     + `<title id="${prefix}title">${esc(title || "Figure")}</title><desc id="${prefix}desc">${esc(desc)}</desc>`;
-  return { svg: open + text.slice(rootM[0].length), parts: seen, accents };
+  return { svg: open + text.slice(rootM[0].length), parts: seen, accents, size: width ? ` style="--fig-w:${Math.round(width)}px"` : "" };
 }
 
 function renderFigure(body, attrs, ctx, warnings) {
@@ -1243,7 +1242,8 @@ function renderFigure(body, attrs, ctx, warnings) {
   if (!desc) warnings.push(`figure ${attrs.src || "(no src)"}: the body (what the figure shows) is empty`);
   const fig = loadFigure(attrs.src, `fig${idx}-`, attrs.title, desc, reg, warnings);
   if (fig && fig.accents > 2) warnings.push(`figure ${attrs.src}: ${fig.accents} data-accent elements (at most 2)`);
-  let out = `<figure data-block="figure" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
+  if (fig && /\sdata-show\s*=/.test(fig.svg)) warnings.push(`figure ${attrs.src}: data-show works only in a stepper with state:`);
+  let out = `<figure data-block="figure" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}"${fig ? fig.size : ""}>`;
   if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
   out += fig ? `<div class="figure-stage">${fig.svg}</div>` : `<p class="figure-fallback">${esc(desc)}</p>`;
   return out + "</figure>";
@@ -1319,6 +1319,7 @@ function findGitRoot(dir) {
 
 function parseStepper(body, where, warnings) {
   const counters = [];
+  const states = [];
   const code = [];
   let switchLabel = null;
   const steps = [];
@@ -1335,8 +1336,13 @@ function parseStepper(body, where, warnings) {
     let m;
     if (!cur) {
       if ((m = /^counter:\s*([\w-]+)\s*\|\s*(.+)$/.exec(line))) counters.push({ name: m[1], label: m[2].trim() });
-      else if ((m = /^code:\s*(\S+)\s+(.+)$/.exec(line))) code.push({ part: m[1], path: m[2].trim() });
-      else if (/^code:/.test(line)) warnings.push(`${where}: "${line}" needs a part and a path`);
+      else if ((m = /^state:\s*(.*)$/.exec(line))) {
+        const [name, ...values] = m[1].split(/\s+/).filter(Boolean);
+        if (values.length < 2) warnings.push(`${where}: "${line}" needs a name and at least two values`);
+        else states.push({ name, values });
+      }
+      else if ((m = /^(code|docs):\s*(\S+)\s+(.+)$/.exec(line))) code.push({ kind: m[1], part: m[2], path: m[3].trim() });
+      else if (/^(code|docs):/.test(line)) warnings.push(`${where}: "${line}" needs a part and a path`);
       else if ((m = /^switch:\s*(.+)$/.exec(line))) {
         if (switchLabel) warnings.push(`${where}: more than one switch (at most 1)`);
         else switchLabel = m[1].trim();
@@ -1363,7 +1369,7 @@ function parseStepper(body, where, warnings) {
     }
     cur.narration.push(raw);
   });
-  return { counters, switchLabel, steps, code };
+  return { counters, states, switchLabel, steps, code };
 }
 
 function renderStepper(body, attrs, ctx, warnings) {
@@ -1372,7 +1378,7 @@ function renderStepper(body, attrs, ctx, warnings) {
   const where = `stepper ${attrs.title || attrs.figure || idx}`;
   const label = attrs.title || `stepper ${idx}`;
   const anchor = registerAnchor(reg, "stepper", attrs.title || `stepper-${idx}`, label, ctx.blockLines, body);
-  const { counters: allCounters, switchLabel, steps, code: allCode } = parseStepper(body, where, warnings);
+  const { counters: allCounters, states, switchLabel, steps, code: allCode } = parseStepper(body, where, warnings);
 
   if (allCounters.length > STEPPER_LIMITS.counters) warnings.push(`${where}: ${allCounters.length} counters (at most ${STEPPER_LIMITS.counters})`);
   const counters = allCounters.slice(0, STEPPER_LIMITS.counters);
@@ -1389,36 +1395,55 @@ function renderStepper(body, attrs, ctx, warnings) {
 
   const desc = seq.map((s, i) => `${i + 1}. ${s.title}`).join(" ");
   const fig = loadFigure(attrs.figure, `stp${idx}-`, attrs.title, desc, reg, warnings);
-  const names = new Set(counters.map((c) => c.name));
+  const stateOf = Object.fromEntries(states.map((st) => [st.name, st.values]));
+  for (const c of counters) if (stateOf[c.name]) warnings.push(`${where}: "${c.name}" is both a counter and a state`);
+  const names = new Set([...counters.map((c) => c.name), ...states.map((st) => st.name)]);
   for (const s of steps) {
     if (!s.key) warnings.push(`${where}: step "${s.title}" has no key:`);
-    for (const n of Object.keys(s.set)) if (!names.has(n)) warnings.push(`${where}: step "${s.title}" sets unknown counter "${n}"`);
+    for (const [n, v] of Object.entries(s.set)) {
+      if (!names.has(n)) warnings.push(`${where}: step "${s.title}" sets unknown counter or state "${n}"`);
+      else if (stateOf[n] && !stateOf[n].includes(v)) warnings.push(`${where}: step "${s.title}" sets ${n} to "${v}", which is not one of: ${stateOf[n].join(" ")}`);
+    }
     if (fig) for (const p of s.parts) if (!fig.parts.has(p)) warnings.push(`${where}: step "${s.title}" names part "${p}", which the figure does not have`);
+  }
+  // A data-show group is drawn at the state's first value (data-init, kept for print); script moves data-on.
+  if (fig) {
+    const bad = new Set();
+    fig.svg = fig.svg.replace(/(\sdata-show\s*=\s*(["']))(.*?)\2/g, (m, a, q, kv) => {
+      const [n, v] = kv.split("=");
+      if (v === undefined) bad.add(`data-show "${kv}" needs name=value`);
+      else if (!stateOf[n]) bad.add(`data-show "${kv}" names no state`);
+      else if (!stateOf[n].includes(v)) bad.add(`data-show "${kv}": ${n} is one of: ${stateOf[n].join(" ")}`);
+      return stateOf[n] && stateOf[n][0] === v ? m + " data-init data-on" : m;
+    });
+    for (const b of bad) warnings.push(`${where}: ${b}`);
   }
   // The first repo: is the page's own; only its paths can be checked on disk.
   const home = reg.repos[0];
   const code = [];
   for (const c of allCode) {
-    if (fig && !fig.parts.has(c.part)) { warnings.push(`${where}: code: unknown part "${c.part}"`); continue; }
-    const named = /^(\S+)\s+(\S.*)$/.exec(c.path);
+    if (fig && !fig.parts.has(c.part)) { warnings.push(`${where}: ${c.kind}: unknown part "${c.part}"`); continue; }
+    const bar = c.path.search(/\s\|\s/);
+    const ref = bar < 0 ? c.path : c.path.slice(0, bar).trim(), note = bar < 0 ? "" : c.path.slice(bar + 3).trim();
+    const named = /^(\S+)\s+(\S.*)$/.exec(ref);
     const hit = named && reg.repos.find((r) => r.name && r.name === named[1]);
-    const repo = hit || home, path = hit ? named[2] : c.path;
-    if (isAbsolute(path) || path.split("/").includes("..")) { warnings.push(`${where}: code path "${path}" must be relative to the repo root`); continue; }
-    if (repo === home && reg.gitRoot && !existsSync(join(reg.gitRoot, path))) warnings.push(`${where}: code path "${path}" is not in the repo (${reg.gitRoot})`);
-    code.push({ part: c.part, repo, path });
+    const repo = hit || home, path = hit ? named[2] : ref;
+    if (isAbsolute(path) || path.split("/").includes("..")) { warnings.push(`${where}: ${c.kind} path "${path}" must be relative to the repo root`); continue; }
+    if (repo === home && reg.gitRoot && !existsSync(join(reg.gitRoot, path))) warnings.push(`${where}: ${c.kind} path "${path}" is not in the repo (${reg.gitRoot})`);
+    code.push({ kind: c.kind, part: c.part, repo, path, note });
   }
-  const codeItem = ({ repo, path }) => {
+  const codeItem = ({ repo, path, note }) => {
     const word = repo && repo.name ? `<span class="stepper-repo" title="${esc(repo.url)}">${esc(repo.name)}</span> ` : "";
-    const link = repo
-      ? `<a href="${esc(repo.url + "/" + path.split("/").map(encodeURIComponent).join("/"))}"><code>${esc(path)}</code></a>`
-      : `<code>${esc(path)}</code>`;
-    return `<li>${word}${link}</li>`;
+    const [, dir = "", leaf] = /^(.*\/)?([^/]+\/?)$/.exec(path) || [, "", path];
+    const shown = `<code>${dir ? `<span class="stepper-dir">${esc(dir)}</span>` : ""}${esc(leaf)}</code>`;
+    const link = repo ? `<a href="${esc(repo.url + "/" + path.split("/").map(encodeURIComponent).join("/"))}">${shown}</a>` : shown;
+    return `<li>${word}${link}${note ? ` <span class="stepper-note">${esc(note)}</span>` : ""}</li>`;
   };
 
   // Counter values per step, carried forward; the held step starts from the
   // values just before the first step that needs the switch.
-  const pick = (set) => Object.fromEntries(Object.entries(set).filter(([k]) => names.has(k)));
-  const vals = Object.fromEntries(counters.map((c) => [c.name, "0"]));
+  const pick = (set) => Object.fromEntries(Object.entries(set).filter(([k, v]) => names.has(k) && (!stateOf[k] || stateOf[k].includes(v))));
+  const vals = Object.fromEntries([...counters.map((c) => [c.name, "0"]), ...states.map((st) => [st.name, st.values[0]])]);
   let heldBase = null;
   seq.forEach((s, i) => {
     if (i === firstNeed) heldBase = { ...vals };
@@ -1436,12 +1461,14 @@ function renderStepper(body, attrs, ctx, warnings) {
     if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
     if (s.key) out += `<div class="stepper-key"><p class="stepper-label">Key idea</p><p>${inlineMd(s.key)}</p></div>`;
     if (s.changed.length) out += `<div class="stepper-changed"><p class="stepper-label">What changed</p><ul>${s.changed.map((c) => `<li>${inlineMd(c)}</li>`).join("")}</ul></div>`;
-    const items = [...new Set(code.filter((c) => s.parts.includes(c.part)).map(codeItem))];
-    if (items.length) out += `<div class="stepper-code"><p class="stepper-label">In the code</p><ul>${items.join("")}</ul></div>`;
+    for (const [kind, label] of [["code", "In the code"], ["docs", "In the docs"]]) {
+      const items = [...new Set(code.filter((c) => c.kind === kind && s.parts.includes(c.part)).map(codeItem))];
+      if (items.length) out += `<div class="stepper-code" data-kind="${kind}"><p class="stepper-label">${label}</p><ul>${items.join("")}</ul></div>`;
+    }
     return out + `</${tag}>`;
   };
 
-  let out = `<figure data-block="stepper" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
+  let out = `<figure data-block="stepper" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}"${fig ? fig.size : ""}>`;
   if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
   out += `<div class="stepper-grid"><div class="stepper-main">`;
   out += fig ? `<div class="stepper-stage">${fig.svg}</div>` : "";

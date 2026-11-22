@@ -29,7 +29,7 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
   hand-drawn diagrams. The renderer's `--theme mono|manual` flag overrides the
   key. An unknown value warns and falls back to `mono`. The output `<html>`
   carries `data-pf-theme="mono|manual"`.
-- `repo` is the URL that a stepper's `code:` paths are appended to, to make
+- `repo` is the URL that a stepper's `code:` and `docs:` paths are appended to, to make
   them links (a file URL base such as `.../blob/main`). It must be http(s), or
   it warns and the paths stay plain text. A page that cites more than one repo
   repeats the key with a short name first, `repo: Backend https://...`, one
@@ -366,8 +366,9 @@ The file contract is linted at render time. Each breach is a render warning.
 
 - The root is `<svg>` with a `viewBox`; its `width`/`height` are dropped and the
   stage sizes it: at most the viewBox width (draw at the size it should
-  appear) and never narrower than 0.8 of it. A narrower screen scrolls the
-  stage sideways instead of shrinking the text.
+  appear; a stepper may grow it to 1.25x) and never narrower than 0.8 of it.
+  A narrower screen scrolls the stage sideways instead of shrinking the text.
+  The `<figure>` carries the drawn width as `style="--fig-w:720px"`.
 - Colour comes from tokens only. A paint value (`fill`, `stroke`, `stop-color`,
   or the same inside `style`) is `none`, `currentColor`, `transparent`,
   `inherit`, `var(--...)` or `url(#...)`. The defaults are ink strokes and ink
@@ -451,12 +452,22 @@ Lines before the first `#` set up the stepper:
 
 - `counter: name | Label`, at most three. Every counter starts at `0`.
 - `switch: Label`, at most one. It starts on. Only the header declares it.
+- `state: name value value ...` names a figure state and its values; the first
+  is the initial one. A step changes it with `set: name=value`, carried
+  forward like a counter. In the SVG, a group with `data-show="name=value"` is
+  shown only while the state has that value (it fades in and out), so draw
+  each position or look once per value. A state is not shown as a counter.
 - `code: part path` points a part at its representative file or directory,
   relative to the repo root. Repeat the line for more paths. Each step lists the
   paths of its own parts under "In the code", in the narration rail (never
   inside the figure), linked when the frontmatter sets `repo:`. With named
   repos, `code: part Name path` cites a path in that repo; a path with no name
   is in the first repo. Each item then shows its repo name before the path.
+  The directory part is drawn faint and the file name in full ink. A short
+  note may follow the path after ` | `: `code: queue src/queue.ts | enqueue, drain`.
+- `docs: part path` is the same for a document (a design doc, a runbook),
+  listed under "In the docs". Put the section names in the note:
+  `docs: queue Docs guide/jobs.md | Retries, Dead letters`.
 
 Each `# title` starts a step. Its setting lines come first, in any order;
 everything after them is the narration, in Markdown.
@@ -464,8 +475,9 @@ everything after them is the narration, in Markdown.
 - `parts:` the `data-part` names this step is about, separated by spaces.
 - `key:` the key idea, one sentence. Required.
 - `changed:` one item of "what changed"; repeat the line for more.
-- `set: name=value, name=value` new counter values. Values are text, shown as
-  written. A counter not set keeps its value from the step before.
+- `set: name=value, name=value` new counter or state values. Counter values are
+  text, shown as written; a state value must be one of its values. A counter or
+  state not set keeps its value from the step before.
 - `needs: switch` marks a step that only happens with the switch on.
 - `held`, alone on a line, marks the held step: it is shown in place of any
   `needs: switch` step while the switch is off. At most one; it is not in the
@@ -482,23 +494,31 @@ its past parts are those named by the steps before that one, and its counters
 start from their values there, then apply its own `set:`.
 
 Lint warnings: the figure is missing (the steps still render); a `parts:` name
-the figure does not have; a `set:` name that is not a counter; a step with no
+the figure does not have; a `set:` name that is not a counter or state, or a state value it does not
+have; a `state:` line with fewer than two values, or a name that is also a
+counter; a `data-show` naming a state or value the header does not declare,
+or used in a plain `figure`; a step with no
 `key:`; `needs: switch` or `held` with no switch in the header; a switch with
 no held step, or a held step with no `needs: switch` step; more than three counters, one switch, one held step, or ten
-steps; a `code:` line without a path, for a part the figure does not have, or
+steps; a `code:` or `docs:` line without a path, for a part the figure does not have, or
 with an absolute or `..` path (dropped); more than one `repo:` without names;
-and, when the page sits in a git repo, a `code:` path in the first repo that
+and, when the page sits in a git repo, a `code:` or `docs:` path in the first repo that
 does not exist from the repo root (kept, so a stale page says so on its next
 render). Paths in other repos are not checked.
 
 **Behaviour.** Without script, and in print, every step is laid out in order
-under the figure, which shows all parts in ink. With script, the stepper shows
+under the figure, which shows all parts in ink and each state at its first
+value. With script, the stepper shows
 one step at a time with a step bar (one button per step, numbered), previous
 and next buttons, the counters under the figure, and the switch. The
 arrow keys move between steps while focus is inside the stepper. The narration
 rail is `aria-live="polite"`. Part changes use the motion tokens; with
-`prefers-reduced-motion` they are instant. On a wide stage the rail sits right
-of the figure; on a narrow one it sits below, and the stage (same minimum
+`prefers-reduced-motion` they are instant. On a wide screen a stepper leaves
+the 1000px prose column: it grows as far as its figure at 1.25x plus a rail of
+up to 360px need, within a 1640px page with 24px sides and clear of the side
+nav. The figure column is sticky and its drawing is capped so it and the
+controls fit in the window. Print keeps the stepper in the column. On a wide
+stage the rail sits right of the figure; on a narrow one it sits below, and the stage (same minimum
 width as `figure`) scrolls to keep the current parts in view. While the switch is off, steps that need it are dashed
 in the step bar.
 

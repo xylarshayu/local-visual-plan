@@ -149,6 +149,7 @@
       var parts = Array.prototype.slice.call(fig.querySelectorAll(".stepper-stage [data-part]"));
       var bar = Array.prototype.slice.call(fig.querySelectorAll(".stepper-bar button"));
       var counters = Array.prototype.slice.call(fig.querySelectorAll("[data-counter]"));
+      var shows = Array.prototype.slice.call(fig.querySelectorAll(".stepper-stage [data-show]"));
       var sw = fig.querySelector(".stepper-switch");
       stage.querySelectorAll("path[data-flow]").forEach(function (line) {
         var pulse = line.cloneNode(false);
@@ -179,6 +180,10 @@
           var b = c.querySelector("b"), v = vals[c.getAttribute("data-counter")];
           c.classList.toggle("is-changed", b.textContent !== v);
           b.textContent = v;
+        });
+        shows.forEach(function (g) {
+          var kv = g.getAttribute("data-show"), at = kv.indexOf("=");
+          g.toggleAttribute("data-on", vals[kv.slice(0, at)] === kv.slice(at + 1));
         });
         steps.concat(held ? [held] : []).forEach(function (s) { s.classList.toggle("is-current", s === view); });
         bar.forEach(function (b, n) {

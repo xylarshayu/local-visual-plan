@@ -646,8 +646,11 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 .figure-stage, .stepper-stage { overflow-x: auto; padding: 8px 0; }
 :is(.figure-stage, .stepper-stage) > svg {
   display: block; width: 100%; height: auto;
+  min-width: calc(var(--fig-w) * 0.8); max-width: var(--fig-w);
   color: var(--fg); font-family: var(--sans); font-size: 13px;
 }
+/* A stepper figure may grow to 1.25x its drawing. */
+.stepper-stage > svg { max-width: calc(var(--fig-w) * 1.25); }
 :is(.figure-stage, .stepper-stage) svg :is(rect, circle, ellipse, path, line, polyline, polygon) {
   fill: none; stroke: currentColor; stroke-width: 1.25; vector-effect: non-scaling-stroke;
 }
@@ -655,6 +658,7 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 :is(.figure-stage, .stepper-stage) svg .box { fill: var(--bg); }
 :is(.figure-stage, .stepper-stage) svg .solid { fill: currentColor; }
 :is(.figure-stage, .stepper-stage) svg .muted { color: var(--fg-muted); }
+:is(.figure-stage, .stepper-stage) svg .mono { font-family: var(--mono); }
 :is(.figure-stage, .stepper-stage) svg a { color: var(--accent); text-decoration: underline; }
 :is(.figure-stage, .stepper-stage) svg a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(.figure-stage, .stepper-stage) svg [data-accent],
@@ -668,6 +672,9 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 /* A data-lift part (a layer of an isometric stack) rises while it is current; the layers drawn over it are ghosted. */
 .stepper-stage svg [data-lift][data-state=current] { transform: translateY(-20px); }
 .stepper-stage svg [data-lift][data-state=current] ~ [data-lift] { opacity: 0.16; }
+/* A data-show group is drawn only while its state has that value. */
+.stepper-stage svg [data-show] { transition: opacity var(--dur-2) var(--ease), visibility var(--dur-2); }
+.stepper-stage svg [data-show]:not([data-on]) { opacity: 0; visibility: hidden; }
 /* A 14-unit bead runs along each data-flow line of a current part, start to end, at one speed, three times, then rests past the end. */
 .stepper-stage svg .flow-pulse { display: none; }
 .stepper-stage svg [data-state=current] .flow-pulse {
@@ -678,11 +685,19 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 @keyframes pf-flow { from { stroke-dashoffset: 14; } to { stroke-dashoffset: calc(var(--len) * -1px); } }
 .figure-fallback { color: var(--fg-muted); }
 
-figure[data-block=stepper] { container-type: inline-size; }
+/* A stepper breaks out of the prose column as far as its figure (at 1.25x) and rail need: at most a 1640px page with 24px sides, clear of the side nav. */
+body { --nav-w: 0px; }
+figure[data-block=stepper] {
+  container-type: inline-size;
+  --wide: max(100%, min(1592px, 100vw - var(--nav-w) - 48px, var(--fig-w) * 1.25 + 392px));
+  width: var(--wide); margin-inline: calc((100% - var(--wide)) / 2);
+}
 .stepper-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
 @container (min-width: 820px) {
-  .stepper-grid { grid-template-columns: minmax(0, 1fr) 280px; gap: 32px; align-items: start; }
+  .stepper-grid { grid-template-columns: minmax(0, 1fr) clamp(280px, 28cqw, 360px); gap: 32px; align-items: start; }
   .stepper-main { position: sticky; top: 64px; }
+  /* Sticky, so the figure and its controls fit in the window. */
+  .stepper-stage > svg { max-height: calc(100vh - 200px); }
 }
 .stepper-counters { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 8px 0 0; }
 .stepper-counter { margin: 0; font-size: var(--fs-sm); color: var(--fg-muted); }
@@ -719,6 +734,7 @@ figure[data-block=stepper] { container-type: inline-size; }
 .stepper-code li + li { margin-top: 4px; }
 .stepper-code code { overflow-wrap: anywhere; }
 .stepper-repo { font-weight: 600; color: var(--fg-muted); }
+.stepper-dir, .stepper-note { color: var(--fg-muted); }
 .stepper-label { font-size: var(--fs-xs); font-weight: 600; color: var(--fg-muted); margin-bottom: 4px !important; }
 /* Without script every step is laid out; live, only the current one shows. */
 figure[data-block=stepper]:not(.is-live) :is(.stepper-counters, .stepper-controls) { display: none; }
@@ -728,7 +744,7 @@ figure[data-block=stepper].is-live .stepper-step { margin-top: 0; }
   .stepper-bar { order: -1; flex-basis: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stepper-stage svg [data-part], .stepper-counter b, .stepper-track::after { transition: none; }
+  .stepper-stage svg :is([data-part], [data-show]), .stepper-counter b, .stepper-track::after { transition: none; }
   .stepper-stage svg [data-state] .flow-pulse { display: none; }
 }
 
@@ -1265,7 +1281,7 @@ details.json-node[open] > .json-summary::before { content: "▾"; }
 }
 
 @media (min-width: 900px) {
-  body[data-has-chapters] { padding-left: 240px; }
+  body[data-has-chapters] { padding-left: 240px; --nav-w: 240px; }
   body[data-has-chapters] .pf-sidenav {
     position: fixed;
     top: 0;
@@ -1383,7 +1399,7 @@ pre[data-block=unknown]::before {
 /* ----- print ------------------------------------------------------------- */
 @media print {
   :root { --bg: #fff; --bg-elev: #fff; }
-  :is(.figure-stage, .stepper-stage) > svg { min-width: 0 !important; }
+  :is(.figure-stage, .stepper-stage) > svg { min-width: 0 !important; max-height: none; }
   figure[data-block=stepper] :is(.stepper-counters, .stepper-controls) { display: none !important; }
   figure[data-block=stepper].is-live .stepper-step { display: block !important; margin-top: 24px; }
   figure[data-block=stepper] .stepper-grid { grid-template-columns: minmax(0, 1fr) !important; }
@@ -1393,6 +1409,8 @@ pre[data-block=unknown]::before {
   .stepper-stage svg [data-state] .flow-pulse { display: none; }
   .stepper-stage svg [data-state] .box { fill: var(--bg); }
   .stepper-stage svg [data-state][data-lift] { transform: none; opacity: 1 !important; }
+  .stepper-stage svg [data-show][data-init] { opacity: 1; visibility: visible; }
+  .stepper-stage svg [data-show]:not([data-init]) { opacity: 0; visibility: hidden; }
   .embed-stage iframe, .embed-run { display: none !important; }
   .embed-stage.is-running .embed-poster { display: block !important; }
   body, body[data-has-chapters] { background: #fff; font-size: 10.5pt; padding: 0; }

@@ -80,7 +80,8 @@ emphasis, never the only copy of a fact.
 
 - Start from a house figure (below) or a blank `viewBox`. Draw at the size it
   should appear: one user unit is one pixel, a figure never grows past its
-  viewBox width, and 720 units is a comfortable width.
+  viewBox width (a stepper's past 1.25x), and 720 units is a comfortable
+  width. Names at 14 and labels at 12 units read well.
 - One ink. Hierarchy is opacity (`data-role`), meaning is dash pattern, colour
   is only accent (look here) and add/del (this changed). The opacity roles are
   adapted from Plotter (Pasquale Vitiello, MIT).
@@ -94,6 +95,12 @@ emphasis, never the only copy of a fact.
   one rise out of the stack as the stepper walks it.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
   colour.
+- An edge label may be the real thing it carries, a route or a message
+  (`POST /v1/jobs`). Give its `<text>` `class="mono"`.
+- When a step changes what the figure looks like (a part moves, a lid opens),
+  declare a `state:` in the stepper and draw each look once in a group with
+  `data-show="name=value"`. The stepper fades between them. Keep it to the
+  one change the story turns on.
 - A part that is really several things (a pool of workers, a set of services)
   is drawn as a three-layer card: the box plus two `class="box"` copies offset
   6 units up and right, back one first, all inside the part's group. When the

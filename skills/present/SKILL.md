@@ -51,7 +51,7 @@ page" — is this skill, directly.
   SVG file you draw (layer stacks, trust boundaries, swimlanes, exploded
   isometric views); a `stepper` walks the reader through a figure a step at a time,
   with a key idea, "what changed" and live counters per step. When the page is
-  about a codebase, point each part at its code (`code: part path`), so readers
+  about a codebase, point each part at its code (`code: part path`) and docs (`docs: part path`), so readers
   can jump from the picture to the file. Facts stay in the markdown; the SVG
   holds only geometry. `references/figures.md` says which
   pattern and starter figure to use and how to draw one that passes the lint.

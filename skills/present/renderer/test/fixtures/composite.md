@@ -12,9 +12,11 @@ code: w-images src/workers/images.ts
 code: w-email src/workers/email.ts
 code: w-search src/workers/search.ts
 code: store src/store/
+state: queue empty one
 
 # A request becomes a job
 parts: api e-enqueue queue
+set: queue=one
 key: The API answers at once; the work happens later.
 changed: One job waits in the queue.
 
@@ -22,6 +24,7 @@ The API checks the request and puts a job on the queue.
 
 # A worker claims it
 parts: e-claim workers
+set: queue=empty
 key: Workers pull jobs; nothing pushes work at them.
 changed: The job is claimed.
 
