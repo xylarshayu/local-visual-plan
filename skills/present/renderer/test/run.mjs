@@ -1714,6 +1714,10 @@ fixture('embed.md', (check) => {
 
   check('renders with no warnings', () => assert.deepEqual(r.warnings, []))
 
+  check('the page forbids frames from loading URLs (an embed cannot navigate)', () => {
+    assert.match(r.html, /<meta http-equiv="Content-Security-Policy" content="frame-src 'none'" \/>/)
+  })
+
   check('the poster is inlined and alt-texted by the body; Run starts hidden for no-script', () => {
     assert.match(fig, /<img class="embed-poster" src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" alt="Drag the \*\*length\*\* slider: a longer pendulum swings more slowly\.">/)
     assert.match(fig, /<button type="button" class="embed-run" aria-label="Run Pendulum" hidden>Run<\/button>/)

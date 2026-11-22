@@ -510,19 +510,20 @@ embed reloads when the theme changes.
 
 **Safety.** Run builds an `<iframe sandbox="allow-scripts">` from the file
 (`srcdoc`), prefixed with a Content Security Policy that allows inline script
-and style and `data:`/`blob:` media, and nothing else. So the embed:
+and style and `data:`/`blob:` media, and nothing else. Every page also carries
+`frame-src 'none'`, so no frame can load a URL. So the embed:
 
 - runs in an opaque origin: it cannot read the page, its notes, storage or
   cookies, open windows, submit forms or navigate the page;
 - cannot load or send anything over HTTP: `fetch`, XHR, WebSocket, beacons,
-  remote scripts, styles, images and fonts are all blocked;
-- is stopped (poster back, a notice under it) if it navigates its own frame.
+  remote scripts, styles, images and fonts are all blocked, and so is
+  navigating its own frame anywhere.
 
-Two channels remain, because no CSP closes them: one request when the frame
-navigates itself (sent before the stop), and WebRTC (STUN) traffic. Neither
-can carry anything from the page, only what is in the embed file. Treat an
-embed file like the rest of the page's source, and do not embed code you
-have not read. A remote reference in the file is a render warning.
+One channel remains, because no CSP closes it: WebRTC (STUN) traffic. It can
+carry what is in the embed file and anything the reader types into the embed,
+and it reveals that Run was pressed and from where. Treat an embed file like
+the rest of the page's source, and do not embed code you have not read. A
+remote reference in the file is a render warning.
 
 Lint warnings: missing or remote `src`, missing or unsupported `poster`, an
 empty body, more than two embeds, a file over 2 MB, a remote reference.

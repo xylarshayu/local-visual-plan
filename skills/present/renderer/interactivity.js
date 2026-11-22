@@ -321,34 +321,13 @@
     return "<style>:root{" + decl.join(";") + "}</style>";
   }
 
-  function stopEmbed(stage, msg) {
-    var f = stage.querySelector("iframe");
-    if (f) f.remove();
-    stage.classList.remove("is-running");
-    var p = stage.parentNode.querySelector(".embed-stopped");
-    if (!p) {
-      p = document.createElement("p");
-      p.className = "embed-stopped";
-      p.setAttribute("role", "status");
-      stage.after(p);
-    }
-    p.textContent = msg;
-  }
-
   function runEmbed(stage) {
     var old = stage.querySelector("iframe");
     if (old) old.remove();
-    var stopped = stage.parentNode.querySelector(".embed-stopped");
-    if (stopped) stopped.remove();
     var f = document.createElement("iframe");
     f.setAttribute("sandbox", "allow-scripts");
     var cap = stage.parentNode.querySelector("figcaption");
     f.title = cap ? cap.textContent : "Embed";
-    var loads = 0;
-    // srcdoc loads once; a second load means the embed navigated itself away.
-    f.addEventListener("load", function () {
-      if (++loads > 1) stopEmbed(stage, "Stopped: the embed tried to load another page.");
-    });
     var tokens = embedTokens();
     f.srcdoc = stage.dataset.srcdoc.replace("<!--pf-tokens-->", function () { return tokens; });
     stage.append(f);

@@ -287,7 +287,11 @@ await check('no script and print show the poster only', async () => {
 const { createServer } = await import('node:http')
 const { createSocket } = await import('node:dgram')
 const hits = []
-const server = createServer((req, res) => { hits.push(req.url); res.end('x') })
+const server = createServer((req, res) => {
+  hits.push(req.url)
+  if (req.url === '/hang') res.write('<img src="/never"><script>fetch("/followup")</script>')
+  else if (req.url !== '/never') res.end('x')
+})
 await new Promise((r) => server.listen(0, '127.0.0.1', r))
 const udp = createSocket('udp4')
 const udpHits = []
@@ -296,7 +300,7 @@ await new Promise((r) => udp.bind(0, '127.0.0.1', r))
 const base = `http://127.0.0.1:${server.address().port}`
 const dir = mkdtempSync(join(tmpdir(), 'pf-embed-'))
 writeFileSync(join(dir, 'poster.svg'), readFileSync(join(here, 'fixtures', 'embeds', 'pendulum.svg')))
-const hostile = (navigate) => `<!doctype html><html><head>
+const hostile = () => `<!doctype html><html><head>
 <link rel="stylesheet" href="${base}/link-css"><link rel="prefetch" href="${base}/prefetch">
 <style>body { background: url(${base}/css-url) }</style>
 <script src="${base}/script-src"></script></head><body>
@@ -319,19 +323,19 @@ const hostile = (navigate) => `<!doctype html><html><head>
     const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:127.0.0.1:${udp.address().port}' }] })
     pc.createDataChannel('d'); pc.createOffer().then((o) => pc.setLocalDescription(o)); return 'created'
   })
-  setTimeout(() => { parent.postMessage(r, '*'); ${navigate ? `location.href = '${base}/self-nav'` : ''} }, 1500)
+  setTimeout(() => parent.postMessage(r, '*'), 1500)
 </script></body></html>`
-const hostilePage = (navigate) => {
-  writeFileSync(join(dir, 'h.html'), hostile(navigate))
-  const md = '```embed src=h.html poster=poster.svg title=Hostile\nx\n```\n'
-  const file = join(dir, `page-${navigate}.html`)
+const hostilePage = (html, name) => {
+  writeFileSync(join(dir, `${name}.html`), html)
+  const md = '```embed src=' + name + '.html poster=poster.svg title=Hostile\nx\n```\n'
+  const file = join(dir, `page-${name}.html`)
   writeFileSync(file, renderPlan(md, { sourcePath: join(dir, 'p.md') }).html)
   return file
 }
 
 await check('a hostile embed reaches nothing over HTTP and cannot touch the page', async () => {
   hits.length = 0
-  const { p, ctx } = await open({}, hostilePage(false))
+  const { p, ctx } = await open({}, hostilePage(hostile(), 'hostile'))
   const report = p.evaluate(() => new Promise((res) => addEventListener('message', (e) => res(e.data), { once: true })))
   await p.click('.embed-run')
   const r = await report
@@ -347,15 +351,22 @@ await check('a hostile embed reaches nothing over HTTP and cannot touch the page
   await ctx.close()
 })
 
-await check('an embed that navigates itself is torn down after its first load', async () => {
-  hits.length = 0
-  const { p, ctx } = await open({}, hostilePage(true))
-  await p.click('.embed-run')
-  await p.waitForSelector('.embed-stopped', { timeout: 5000 })
-  assert.equal(await p.locator('.embed-stage iframe').count(), 0)
-  assert.equal(await p.isVisible('.embed-poster'), true)
-  console.log(`          (requests from the self-navigation: ${JSON.stringify(hits)})`)
-  await ctx.close()
+await check('an embed cannot navigate its own frame anywhere (the page sets frame-src none)', async () => {
+  const navs = {
+    inline: `<script>location.href = '${base}/nav-inline'</script>`,
+    delayed: `<p id="x">x</p><script>setTimeout(() => { location.href = '${base}/nav-delayed' }, 200)</script>`,
+    refresh: `<meta http-equiv="refresh" content="0;url=${base}/nav-refresh">`,
+    hanging: `<script>setTimeout(() => { location.href = '${base}/hang' }, 200)</script>`,
+  }
+  for (const [name, html] of Object.entries(navs)) {
+    hits.length = 0
+    const { p, ctx } = await open({}, hostilePage(html, name))
+    await p.click('.embed-run')
+    await p.waitForTimeout(1200)
+    assert.deepEqual(hits, [], `${name}: requests that got out`)
+    assert.equal(await p.locator('.embed-stage iframe').count(), 1, name)
+    await ctx.close()
+  }
 })
 
 server.close(); udp.close()

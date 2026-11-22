@@ -730,7 +730,6 @@ figure[data-block=embed] > figcaption { padding: 0 0 8px; }
 }
 .embed-run:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .embed-stage.is-running :is(.embed-poster, .embed-run) { display: none; }
-.embed-stopped { color: var(--neg); font-size: var(--fs-sm); margin: 8px 0 0; }
 .embed-note { margin-top: 8px; }
 .embed-note > :last-child { margin-bottom: 0; }
 
