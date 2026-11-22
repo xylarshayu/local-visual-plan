@@ -194,6 +194,12 @@ export function checkDiagrams(dom) {
 function measureFigures() {
   const out = [];
   const box = (r) => r.width > 0 && r.height > 0;
+  // A label sits on a shape only when its start, middle or end is inside the fill, not just inside the bounding box (an isometric pad's box reaches far below it).
+  const on = (el, r, cy) => {
+    const m = el.getScreenCTM?.(), inv = m?.inverse();
+    if (!inv || !el.isPointInFill) return true;
+    return [r.left + 1, (r.left + r.right) / 2, r.right - 1].some((cx) => el.isPointInFill(new DOMPoint(cx, cy).matrixTransform(inv)));
+  };
   document.querySelectorAll('figure[data-block="figure"], figure[data-block="stepper"]').forEach((fig, i) => {
     const svg = fig.querySelector("svg");
     if (!svg) return;
@@ -215,6 +221,7 @@ function measureFigures() {
         if (!part.contains(el)) continue;
         const r = el.getBoundingClientRect();
         if (cy < r.top || cy > r.bottom || r.right <= x.r.left || r.left >= x.r.right) continue;
+        if (!on(el, x.r, cy)) continue;
         if (!best || r.width * r.height < best.r.width * best.r.height) best = { r, pad: getComputedStyle(el).stroke === "none" ? -1 : 2 };
       }
       if (best && (x.r.left < best.r.left + best.pad || x.r.right > best.r.right - best.pad)) out.push(`${name}: label "${x.s}" touches or spills out of its box`);

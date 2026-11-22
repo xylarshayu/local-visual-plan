@@ -891,7 +891,7 @@ await check('an embed cannot navigate its own frame anywhere (the page sets fram
   }
 })
 
-await check('check.mjs reports labels that spill or overlap and text drawn too small, not hidden or unoutlined ones', async () => {
+await check('check.mjs reports labels that spill or overlap and text drawn too small, not hidden or unoutlined ones, nor one beside a pad inside its bounding box', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'pf-layout-'))
   mkdirSync(join(dir, 'figures'))
   writeFileSync(join(dir, 'figures', 'layout.svg'), '<svg viewBox="0 0 360 120">'
@@ -899,6 +899,7 @@ await check('check.mjs reports labels that spill or overlap and text drawn too s
     + '<g data-part="fits"><rect class="box" x="0" y="60" width="160" height="40"/><text x="12" y="84">Fits</text></g>'
     + '<g data-part="tight"><rect class="box" x="180" y="60" width="40" height="40"/><text x="181" y="84">Tight</text></g>'
     + '<g data-part="bare"><rect class="box" style="stroke:none" x="250" y="60" width="40" height="40"/><text x="251" y="84">Bare</text></g>'
+    + '<g data-part="pad"><polygon class="box" points="300,0 360,30 300,60 240,30"/><text x="244" y="56">Below</text></g>'
     + '<text x="200" y="24">Left</text><text x="210" y="24">Right</text></svg>')
   writeFileSync(join(dir, 'figures', 'show.svg'), '<svg viewBox="0 0 360 60"><g data-part="a"><rect class="box" x="0" y="0" width="160" height="40"/><text x="12" y="24">Shown</text></g>'
     + '<g data-show="switch=off"><text x="20" y="24">Hidden over it</text></g>'
