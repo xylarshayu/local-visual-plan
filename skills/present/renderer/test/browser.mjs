@@ -80,13 +80,13 @@ const token = (p, name) => p.evaluate((n) => {
 const near = (a, b, tol = 6) => a.every((v, i) => Math.abs(v - b[i]) <= tol)
 
 const browser = await chromium.launch()
-async function open(opts = {}) {
+async function open(opts = {}, file = page) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ...opts })
   const p = await ctx.newPage()
   const errors = []
   p.on('pageerror', (e) => errors.push(e.message))
-  await p.goto('file://' + page)
-  await p.waitForSelector('figure[data-block=stepper]')
+  await p.goto('file://' + file)
+  await p.waitForSelector('figure[data-block]')
   return { p, ctx, errors }
 }
 
@@ -231,6 +231,134 @@ await check('figure: text renders at its drawn size and the dark theme repaints 
   await ctx.close()
 })
 
+console.log('\n# embed in a browser')
+
+const embedFixture = join(here, 'fixtures', 'embed.md')
+const embedPage = join(out, 'embed.html')
+writeFileSync(embedPage, renderPlan(readFileSync(embedFixture, 'utf8'), { sourcePath: embedFixture }).html)
+const frame = async (p) => (await (await p.waitForSelector('.embed-stage iframe')).contentFrame())
+
+await check('poster first; Run swaps in a sandboxed frame that gets the page tokens', async () => {
+  const { p, ctx, errors } = await open({}, embedPage)
+  assert.equal(await p.isVisible('.embed-poster'), true)
+  assert.equal(await p.locator('.embed-stage iframe').count(), 0, 'nothing runs before Run')
+  await p.click('.embed-run')
+  assert.equal(await p.isVisible('.embed-poster'), false)
+  assert.equal(await p.getAttribute('.embed-stage iframe', 'sandbox'), 'allow-scripts')
+  assert.equal(await p.evaluate(() => document.querySelector('.embed-stage iframe').getBoundingClientRect().height), 300)
+  const f = await frame(p)
+  await f.waitForSelector('#out')
+  await f.fill('#len', '60')
+  assert.equal(await f.textContent('#out'), '60', 'the embed script runs')
+  assert.equal(await f.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()), await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()))
+  await p.locator('figure[data-block=embed]').screenshot({ path: join(out, 'embed-running.png') })
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
+await check('a theme change reloads a running embed with the new tokens', async () => {
+  const { p, ctx } = await open({}, embedPage)
+  await p.click('.embed-run')
+  await (await frame(p)).waitForSelector('#out')
+  await p.click('[data-theme-toggle]')
+  await p.waitForTimeout(200)
+  const f = await frame(p)
+  await f.waitForSelector('#out')
+  const bg = await f.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim())
+  assert.equal(bg, await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()))
+  assert.equal(await p.getAttribute('html', 'data-theme'), 'dark')
+  await ctx.close()
+})
+
+await check('no script and print show the poster only', async () => {
+  const nojs = await open({ javaScriptEnabled: false }, embedPage)
+  assert.equal(await nojs.p.isVisible('.embed-poster'), true)
+  assert.equal(await nojs.p.isVisible('.embed-run'), false)
+  await nojs.ctx.close()
+  const { p, ctx } = await open({}, embedPage)
+  await p.click('.embed-run')
+  await p.emulateMedia({ media: 'print' })
+  assert.equal(await p.isVisible('.embed-poster'), true)
+  assert.equal(await p.isVisible('.embed-stage iframe'), false)
+  await ctx.close()
+})
+
+// A hostile embed against a local HTTP and UDP listener: count what reaches them.
+const { createServer } = await import('node:http')
+const { createSocket } = await import('node:dgram')
+const hits = []
+const server = createServer((req, res) => { hits.push(req.url); res.end('x') })
+await new Promise((r) => server.listen(0, '127.0.0.1', r))
+const udp = createSocket('udp4')
+const udpHits = []
+udp.on('message', () => udpHits.push(1))
+await new Promise((r) => udp.bind(0, '127.0.0.1', r))
+const base = `http://127.0.0.1:${server.address().port}`
+const dir = mkdtempSync(join(tmpdir(), 'pf-embed-'))
+writeFileSync(join(dir, 'poster.svg'), readFileSync(join(here, 'fixtures', 'embeds', 'pendulum.svg')))
+const hostile = (navigate) => `<!doctype html><html><head>
+<link rel="stylesheet" href="${base}/link-css"><link rel="prefetch" href="${base}/prefetch">
+<style>body { background: url(${base}/css-url) }</style>
+<script src="${base}/script-src"></script></head><body>
+<img src="${base}/img-tag"><form action="${base}/form" method="post"><button>x</button></form>
+<script>
+  const r = {}
+  const tryIt = (k, f) => { try { r[k] = String(f()) } catch (e) { r[k] = 'threw' } }
+  tryIt('parentDoc', () => parent.document.title)
+  tryIt('localStorage', () => localStorage.length)
+  tryIt('cookie', () => document.cookie)
+  tryIt('open', () => window.open('${base}/popup'))
+  tryIt('topNav', () => { top.location = '${base}/top-nav'; return 'set' })
+  tryIt('form', () => { document.forms[0].submit(); return 'submitted' })
+  tryIt('beacon', () => navigator.sendBeacon('${base}/beacon', 'x'))
+  tryIt('ws', () => new WebSocket('${base.replace('http', 'ws')}/ws'))
+  new Image().src = '${base}/img-js'
+  const x = new XMLHttpRequest(); tryIt('xhr', () => { x.open('GET', '${base}/xhr'); x.send(); return 'sent' })
+  fetch('${base}/fetch').then(() => { r.fetch = 'ok' }, () => { r.fetch = 'blocked' })
+  tryIt('rtc', () => {
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:127.0.0.1:${udp.address().port}' }] })
+    pc.createDataChannel('d'); pc.createOffer().then((o) => pc.setLocalDescription(o)); return 'created'
+  })
+  setTimeout(() => { parent.postMessage(r, '*'); ${navigate ? `location.href = '${base}/self-nav'` : ''} }, 1500)
+</script></body></html>`
+const hostilePage = (navigate) => {
+  writeFileSync(join(dir, 'h.html'), hostile(navigate))
+  const md = '```embed src=h.html poster=poster.svg title=Hostile\nx\n```\n'
+  const file = join(dir, `page-${navigate}.html`)
+  writeFileSync(file, renderPlan(md, { sourcePath: join(dir, 'p.md') }).html)
+  return file
+}
+
+await check('a hostile embed reaches nothing over HTTP and cannot touch the page', async () => {
+  hits.length = 0
+  const { p, ctx } = await open({}, hostilePage(false))
+  const report = p.evaluate(() => new Promise((res) => addEventListener('message', (e) => res(e.data), { once: true })))
+  await p.click('.embed-run')
+  const r = await report
+  await p.waitForTimeout(1500)
+  assert.deepEqual(hits, [], 'HTTP requests that got out')
+  assert.equal(r.parentDoc, 'threw')
+  assert.equal(r.localStorage, 'threw')
+  assert.equal(r.cookie, 'threw')
+  assert.equal(r.open, 'null')
+  assert.equal(r.fetch, 'blocked')
+  assert.equal(await p.locator('.embed-stage iframe').count(), 1, 'still running: no navigation happened')
+  console.log(`          (WebRTC STUN packets that got out: ${udpHits.length}; report ${JSON.stringify(r)})`)
+  await ctx.close()
+})
+
+await check('an embed that navigates itself is torn down after its first load', async () => {
+  hits.length = 0
+  const { p, ctx } = await open({}, hostilePage(true))
+  await p.click('.embed-run')
+  await p.waitForSelector('.embed-stopped', { timeout: 5000 })
+  assert.equal(await p.locator('.embed-stage iframe').count(), 0)
+  assert.equal(await p.isVisible('.embed-poster'), true)
+  console.log(`          (requests from the self-navigation: ${JSON.stringify(hits)})`)
+  await ctx.close()
+})
+
+server.close(); udp.close()
 await browser.close()
 console.log(`\nshots: ${out}\nTotal: ${passed} passed, ${failed} failed`)
 console.log(failed ? 'RESULT: FAIL' : 'RESULT: PASS')

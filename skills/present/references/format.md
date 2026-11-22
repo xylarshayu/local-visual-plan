@@ -479,6 +479,59 @@ narration, a `.stepper-key` and a `ul.stepper-changed`; the held step is an
 `<aside class="stepper-held">` with the same shape. Each step is its own
 feedback anchor.
 
+### `embed`: a sandboxed interactive page
+
+The last resort, for an interaction no figure or stepper can show (a
+simulation, a 3D object you turn). At most two per page.
+
+````
+```embed src=embeds/pendulum.html poster=embeds/pendulum.png title="Pendulum" height=300
+Drag the length slider: a longer pendulum swings more slowly.
+```
+````
+
+- `src` (required): a self-contained local `.html` file, relative to `plan.md`,
+  at most 2 MB. Inline its scripts, styles, images and fonts (`data:` URLs);
+  the embed has no network. A URL is refused.
+- `poster` (required): an image of the embed (`.svg`, `.png`, `.jpg`,
+  `.webp`), inlined. Print, no-script and any reader who never presses Run
+  see only the poster, so capture it in the state that teaches. Without a
+  poster nothing is embedded; only the body renders.
+- `height` (optional): the running frame's height in pixels, default `420`.
+- Body (required): what to try and what it shows, as markdown. It is also the
+  poster's alt text.
+
+No fact lives only inside an embed: tools that keep the page current cannot
+read one. Anything the reader must know is in the body or the prose.
+
+The page's tokens (`--bg`, `--fg`, `--fg-muted`, `--accent`, `--sans`, ...)
+are set on the embed's `:root`, so `var(--fg)` follows the page, and a running
+embed reloads when the theme changes.
+
+**Safety.** Run builds an `<iframe sandbox="allow-scripts">` from the file
+(`srcdoc`), prefixed with a Content Security Policy that allows inline script
+and style and `data:`/`blob:` media, and nothing else. So the embed:
+
+- runs in an opaque origin: it cannot read the page, its notes, storage or
+  cookies, open windows, submit forms or navigate the page;
+- cannot load or send anything over HTTP: `fetch`, XHR, WebSocket, beacons,
+  remote scripts, styles, images and fonts are all blocked;
+- is stopped (poster back, a notice under it) if it navigates its own frame.
+
+Two channels remain, because no CSP closes them: one request when the frame
+navigates itself (sent before the stop), and WebRTC (STUN) traffic. Neither
+can carry anything from the page, only what is in the embed file. Treat an
+embed file like the rest of the page's source, and do not embed code you
+have not read. A remote reference in the file is a render warning.
+
+Lint warnings: missing or remote `src`, missing or unsupported `poster`, an
+empty body, more than two embeds, a file over 2 MB, a remote reference.
+
+**Output:** `<figure data-block="embed">` with an optional `<figcaption>`, a
+`.embed-stage` holding the poster `<img>`, a `button.embed-run` (hidden until
+script runs) and the file, escaped, in `data-srcdoc`; then the body in
+`.embed-note`.
+
 ## Chapters (side-nav sections)
 
 An opt-in top-level directive that splits the document into navigable sections

@@ -53,6 +53,8 @@ page" — is this skill, directly.
   with a key idea, "what changed" and live counters per step. Facts stay in the
   markdown; the SVG holds only geometry. `references/figures.md` says which
   pattern and starter figure to use and how to draw one that passes the lint.
+  An `embed` (a sandboxed local HTML file behind a poster) is the last rung,
+  for an interaction nothing else can show.
 - **Callouts for decisions and warnings.** A `callout tone=decision|warning|risk`
   keeps a load-bearing aside from getting lost in paragraph text.
 - **`data-model` / `api-endpoint` for schema and API shapes** (see below) —

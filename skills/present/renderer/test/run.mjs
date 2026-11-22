@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { renderPlan, extractIsland, extractPrevVersion } from '../render.mjs'
+import { renderPlan, extractIsland, extractPrevVersion, EMBED_CSP } from '../render.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = join(__dirname, 'fixtures')
@@ -1141,7 +1141,7 @@ fixture('<coverage>', (check) => {
   const onDisk = readdirSync(FIXTURES)
     .filter((f) => f.endsWith('.md'))
     .sort()
-  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'stepper.md', 'task-list.md', 'unknown-block.md'].sort()
+  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'embed.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'stepper.md', 'task-list.md', 'unknown-block.md'].sort()
   check('every fixture file on disk is covered by a test block', () => {
     assert.deepEqual(
       onDisk,
@@ -1705,6 +1705,35 @@ fixture('stepper.md', (check) => {
   })
 })
 
+fixture('embed.md', (check) => {
+  const sourcePath = join(FIXTURES, 'embed.md')
+  const r = renderPlan(read('embed.md'), { sourcePath })
+  const fig = /<figure data-block="embed"[\s\S]*?<\/figure>/.exec(r.html)?.[0] ?? ''
+  const unesc = (v) => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+  const srcdoc = unesc(/data-srcdoc="([^"]*)"/.exec(fig)?.[1] ?? '')
+
+  check('renders with no warnings', () => assert.deepEqual(r.warnings, []))
+
+  check('the poster is inlined and alt-texted by the body; Run starts hidden for no-script', () => {
+    assert.match(fig, /<img class="embed-poster" src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" alt="Drag the \*\*length\*\* slider: a longer pendulum swings more slowly\.">/)
+    assert.match(fig, /<button type="button" class="embed-run" aria-label="Run Pendulum" hidden>Run<\/button>/)
+    assert.match(fig, /--embed-h:300px/)
+  })
+
+  check('the file rides escaped in data-srcdoc, behind a no-network CSP', () => {
+    assert.ok(srcdoc.startsWith(`<!doctype html><meta http-equiv="Content-Security-Policy" content="${EMBED_CSP}"><!--pf-tokens--><!doctype html>`))
+    assert.ok(srcdoc.includes(read('embeds/pendulum.html')))
+    assert.match(EMBED_CSP, /default-src 'none'/)
+    assert.doesNotMatch(EMBED_CSP, /connect-src|https?:|\*/)
+    assert.doesNotMatch(fig.replace(/data-srcdoc="[^"]*"/, ''), /<script|<canvas/, 'nothing from the file is live in the page')
+  })
+
+  check('the body renders as markdown under the stage, and is a pf anchor', () => {
+    assert.match(fig, /<div class="embed-note"><p>Drag the <strong>length<\/strong> slider/)
+    assert.match(fig, /data-pf-anchor="embed:pendulum"/)
+  })
+})
+
 fixture('<figure + stepper lint>', (check) => {
   const sourcePath = join(FIXTURES, 'x.md')
   const one = (md) => renderPlan(md, { sourcePath })
@@ -1744,6 +1773,26 @@ fixture('<figure + stepper lint>', (check) => {
       assert.deepEqual(r.warnings, [], f)
       for (const p of parts) assert.match(r.html, new RegExp(`data-part="${p}"`), `${f}: ${p}`)
     }
+  })
+
+  check('embed lint: URL src, missing poster, remote refs, size and count', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-embed-'))
+    writeFileSync(join(dir, 'e.html'), '<script src="https://cdn.example.com/x.js"></script>')
+    writeFileSync(join(dir, 'big.html'), 'x'.repeat(2 * 1024 * 1024 + 1))
+    writeFileSync(join(dir, 'p.png'), 'png')
+    const at = (md) => renderPlan(md, { sourcePath: join(dir, 'p.md') })
+    const e = (a, body = 'x') => '```embed ' + a + '\n' + body + '\n```\n'
+    has(at(e('src=https://example.com/a.html poster=p.png')), /src must be a local file, not a URL/)
+    const noPoster = at(e('src=e.html'))
+    has(noPoster, /missing poster; only the body is shown/)
+    assert.doesNotMatch(/<figure data-block="embed"[\s\S]*?<\/figure>/.exec(noPoster.html)[0], /embed-stage|data-srcdoc/)
+    has(at(e('src=e.html poster=p.png')), /remote reference "https:\/\/cdn.example.com" will be blocked/)
+    const big = at(e('src=big.html poster=p.png'))
+    has(big, /file is over 2 MB/)
+    assert.doesNotMatch(big.html, /data-srcdoc=/)
+    has(at(e('src=e.html poster=p.gif')), /poster must be/)
+    has(at(e('src=e.html poster=p.png', '')), /body \(what to try and what it shows\) is empty/)
+    has(at(e('src=e.html poster=p.png').repeat(3)), /more than 2 embeds/)
   })
 
   check('a missing file warns and keeps the description as text', () => {

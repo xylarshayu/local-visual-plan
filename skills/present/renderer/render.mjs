@@ -291,7 +291,7 @@ function sanitizeReplies(raw, warnings) {
 
 const KNOWN_BLOCKS = new Set([
   "steps", "filetree", "diff", "code", "diagram", "wireframe", "questions", "callout",
-  "data-model", "api-endpoint", "figure", "stepper",
+  "data-model", "api-endpoint", "figure", "stepper", "embed",
 ]);
 
 // Parse `type key=value key="quoted value"` into { type, attrs }.
@@ -1245,6 +1245,61 @@ function renderFigure(body, attrs, ctx, warnings) {
   return out + "</figure>";
 }
 
+// The embed runs in an opaque-origin sandbox; this CSP also denies it every fetch.
+export const EMBED_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+  "img-src data: blob:; font-src data:; media-src data: blob:; base-uri 'none'; form-action 'none'";
+const EMBED_MAX_BYTES = 2 * 1024 * 1024;
+const POSTER_TYPES = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+
+function renderEmbed(body, attrs, ctx, warnings) {
+  const reg = ctx.reg;
+  const idx = nextTypeIndex(reg, "embed");
+  const where = `embed ${attrs.src || "(no src)"}`;
+  const anchor = registerAnchor(reg, "embed", attrs.title || attrs.src || `embed-${idx}`, attrs.title || `embed ${idx}`, ctx.blockLines, body);
+  const note = body.trim();
+  if (!note) warnings.push(`${where}: the body (what to try and what it shows) is empty`);
+  if (idx === 3) warnings.push("more than 2 embeds on the page (at most 2)");
+
+  let poster = null;
+  if (!attrs.poster) warnings.push(`${where}: missing poster; only the body is shown`);
+  else {
+    const type = POSTER_TYPES[attrs.poster.split(".").pop().toLowerCase()];
+    if (!type) warnings.push(`${where}: poster must be .svg, .png, .jpg or .webp`);
+    else {
+      try { poster = `data:${type};base64,${readFileSync(resolve(reg.baseDir, attrs.poster)).toString("base64")}`; }
+      catch { warnings.push(`${where}: cannot read poster ${attrs.poster}`); }
+    }
+  }
+
+  let doc = null;
+  if (!attrs.src) warnings.push(`${where}: missing src`);
+  else if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(attrs.src)) warnings.push(`${where}: src must be a local file, not a URL`);
+  else {
+    let file = null;
+    try { file = readFileSync(resolve(reg.baseDir, attrs.src)); }
+    catch { warnings.push(`${where}: cannot read file`); }
+    if (file && file.length > EMBED_MAX_BYTES) warnings.push(`${where}: file is over 2 MB`);
+    else if (file) {
+      const text = file.toString("utf8");
+      const remote = /(?:https?:)?\/\/[\w-]+(?:\.[\w-]+)+/i.exec(text);
+      if (remote) warnings.push(`${where}: remote reference "${remote[0]}" will be blocked (an embed has no network)`);
+      doc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="${EMBED_CSP}"><!--pf-tokens-->${text}`;
+    }
+  }
+
+  const height = Math.min(1200, Math.max(120, parseInt(attrs.height, 10) || 420));
+  let out = `<figure data-block="embed" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
+  if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
+  if (poster) {
+    out += `<div class="embed-stage" style="--embed-h:${height}px"${doc ? ` data-srcdoc="${esc(doc)}"` : ""}>`;
+    out += `<img class="embed-poster" src="${poster}" alt="${esc(note.replace(/\s+/g, " "))}">`;
+    if (doc) out += `<button type="button" class="embed-run" aria-label="Run ${esc(attrs.title || "the embed")}" hidden>Run</button>`;
+    out += "</div>";
+  }
+  if (note) out += `<div class="embed-note">${neutralizeRemoteRefs(marked.parse(note))}</div>`;
+  return out + "</figure>";
+}
+
 const inlineMd = (s) => neutralizeRemoteRefs(marked.parseInline(s));
 
 const STEPPER_LIMITS = { counters: 3, steps: 10 };
@@ -1389,6 +1444,7 @@ function renderBlock(type, attrs, body, lean, warnings, ctx) {
     case "api-endpoint": return renderApiEndpoint(body, attrs, ctx);
     case "figure": return renderFigure(body, attrs, ctx, warnings);
     case "stepper": return renderStepper(body, attrs, ctx, warnings);
+    case "embed": return renderEmbed(body, attrs, ctx, warnings);
     default:
       warnings.push(`unknown block type: ${type}`);
       return renderUnknown(type, body);

@@ -1,7 +1,7 @@
-# Figures and steppers: when and how
+# Figures, steppers and embeds: when and how
 
-Loaded on demand. The syntax and output contract for `figure` and `stepper`
-live in `format.md`; this file is about choosing between them and
+Loaded on demand. The syntax and output contract for `figure`, `stepper` and
+`embed` live in `format.md`; this file is about choosing between them and
 drawing well.
 
 ## Facts in markdown, geometry in the figure
@@ -28,6 +28,9 @@ rung.
    central idea.
 5. **Section or exploded figure.** A physical object whose inside matters.
    Flat section first; exploded only when the stacking order is the point.
+6. **Embed.** An interaction nothing above can show: a simulation, a
+   parameter the reader turns. Always with a poster and a body that say what
+   it shows; at most two per page.
 
 ## Pick the behaviour before the layout
 

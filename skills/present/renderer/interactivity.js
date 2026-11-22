@@ -310,11 +310,70 @@
   }
 
   /* ----- Boot ----------------------------------------------------------- */
+  /* ----- Embeds: poster first, a sandboxed iframe on Run -------------- */
+  var EMBED_TOKENS = ["--bg", "--bg-sunken", "--fg", "--fg-muted", "--fg-faint", "--border",
+    "--accent", "--accent-fg", "--accent-soft", "--pos", "--neg", "--sans", "--mono"];
+
+  function embedTokens() {
+    var cs = getComputedStyle(root);
+    var decl = EMBED_TOKENS.map(function (t) { return t + ":" + cs.getPropertyValue(t).trim(); });
+    decl.push("color-scheme:" + (root.getAttribute("data-theme") === "dark" ? "dark" : "light"));
+    return "<style>:root{" + decl.join(";") + "}</style>";
+  }
+
+  function stopEmbed(stage, msg) {
+    var f = stage.querySelector("iframe");
+    if (f) f.remove();
+    stage.classList.remove("is-running");
+    var p = stage.parentNode.querySelector(".embed-stopped");
+    if (!p) {
+      p = document.createElement("p");
+      p.className = "embed-stopped";
+      p.setAttribute("role", "status");
+      stage.after(p);
+    }
+    p.textContent = msg;
+  }
+
+  function runEmbed(stage) {
+    var old = stage.querySelector("iframe");
+    if (old) old.remove();
+    var stopped = stage.parentNode.querySelector(".embed-stopped");
+    if (stopped) stopped.remove();
+    var f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-scripts");
+    var cap = stage.parentNode.querySelector("figcaption");
+    f.title = cap ? cap.textContent : "Embed";
+    var loads = 0;
+    // srcdoc loads once; a second load means the embed navigated itself away.
+    f.addEventListener("load", function () {
+      if (++loads > 1) stopEmbed(stage, "Stopped: the embed tried to load another page.");
+    });
+    var tokens = embedTokens();
+    f.srcdoc = stage.dataset.srcdoc.replace("<!--pf-tokens-->", function () { return tokens; });
+    stage.append(f);
+    stage.classList.add("is-running");
+  }
+
+  function initEmbeds() {
+    var stages = document.querySelectorAll(".embed-stage[data-srcdoc]");
+    stages.forEach(function (stage) {
+      var run = stage.querySelector(".embed-run");
+      run.hidden = false;
+      run.addEventListener("click", function () { runEmbed(stage); });
+    });
+    if (!stages.length) return;
+    new MutationObserver(function () {
+      document.querySelectorAll(".embed-stage.is-running").forEach(runEmbed);
+    }).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
   function boot() {
     initTabs();
     initScrollspy();
     initTopbarTitle();
     initSteppers();
+    initEmbeds();
     renderMermaid(root.getAttribute("data-theme") || "light");
   }
 
