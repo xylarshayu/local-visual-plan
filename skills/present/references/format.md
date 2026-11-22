@@ -487,7 +487,8 @@ Lines before the first `#` set up the stepper:
   forward like a counter. In the SVG, a group with `data-show="name=value"` is
   shown only while the state has that value (it fades in and out), so draw
   each position or look once per value. A state is not shown as a counter,
-  but text in a value that just came on turns accent, as a changed counter does.
+  but when a number value (a count drawn in the figure) just came on, its text
+  turns accent, as a changed counter does.
 - `code: part path` points a part at its representative file or directory,
   relative to the repo root. Repeat the line for more paths. Each step lists the
   paths of its own parts under "In the code", in the narration rail (never

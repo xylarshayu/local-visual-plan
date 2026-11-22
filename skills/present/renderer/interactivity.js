@@ -192,8 +192,8 @@
           var kv = g.getAttribute("data-show"), at = kv.indexOf("=");
           var was = g.hasAttribute("data-on"), now = vals[kv.slice(0, at)] === kv.slice(at + 1);
           g.toggleAttribute("data-on", now);
-          // A state value that just came on is marked like a changed counter; the switch itself is not.
-          g.classList.toggle("is-changed", now && !was && kv.slice(0, at) !== "switch");
+          // A count drawn in the figure (a number value) that just came on is marked like a changed counter.
+          g.classList.toggle("is-changed", now && !was && /^-?\d+(\.\d+)?$/.test(kv.slice(at + 1)));
         });
         fig.classList.toggle("is-off", !on);
         steps.concat(asides).forEach(function (s) { s.classList.toggle("is-current", s === view); });
