@@ -416,8 +416,10 @@ The file contract is linted at render time. Each breach is a render warning.
 - `data-lift` on a part (a layer of an isometric stack) makes it rise 20
   units while it is current in a stepper, and ghosts the `data-lift` layers
   drawn after it (the ones over it), so the stack shows which layer the step
-  is about. Draw the stack bottom layer first. It does nothing in a plain
-  `figure` or in print.
+  is about. Draw the stack bottom layer first. When a layer holds parts of
+  its own (tiles side by side on one level), put `data-lift` on a group around
+  them instead: the group rises while any part in it is current, and its parts
+  never ghost each other. It does nothing in a plain `figure` or in print.
 - `data-rise` on a part (a building on an axonometric plan) makes it rise 12
   units while it is current in a stepper; nothing is ghosted. It does nothing
   in a plain `figure` or in print.

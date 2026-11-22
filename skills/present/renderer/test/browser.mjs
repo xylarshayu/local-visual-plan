@@ -542,6 +542,32 @@ await check('a data-lift layer rises only while current, the layers over it are 
   await ctx.close()
 })
 
+await check('a data-lift group around one level\'s parts rises while any of them is current; they do not ghost each other, the level over them is ghosted', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pf-level-'))
+  const slab = (y) => `<rect class="box" x="0" y="${y}" width="200" height="40"/>`
+  writeFileSync(join(dir, 'f.svg'), `<svg viewBox="0 0 200 140"><g data-part="base" data-lift="">${slab(96)}</g><g data-lift="">${slab(48)}<g data-part="a"><rect class="box" x="8" y="52" width="40" height="32"/></g><g data-part="b"><rect class="box" x="56" y="52" width="40" height="32"/></g></g><g data-part="top" data-lift="">${slab(0)}</g></svg>`)
+  writeFileSync(join(dir, 'l.html'), renderPlan('# T\n\n```stepper figure=f.svg\n# A\nparts: a\nkey: k\n\n# B\nparts: b\nkey: k\n\n# Base\nparts: base\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') }).html)
+  const { p, ctx, errors } = await open({}, join(dir, 'l.html'))
+  const look = () => p.evaluate(async () => {
+    const f = document.querySelector('figure[data-block=stepper]')
+    await Promise.all(f.getAnimations({ subtree: true }).map((a) => a.finished))
+    const cs = (q) => getComputedStyle(f.querySelector(q))
+    return { level: cs('.stepper-stage svg > g:nth-of-type(2)').transform, levelOpacity: cs('.stepper-stage svg > g:nth-of-type(2)').opacity, a: cs('[data-part=a]').opacity, b: cs('[data-part=b]').opacity, top: cs('[data-part=top]').opacity, base: cs('[data-part=base]').transform }
+  })
+  const up = 'matrix(1, 0, 0, 1, 0, -20)'
+  await p.waitForFunction(() => getComputedStyle(document.querySelector('.stepper-stage svg > g:nth-of-type(2)')).transform !== 'none')
+  assert.deepEqual(await look(), { level: up, levelOpacity: '1', a: '1', b: '0.32', top: '0.16', base: 'none' }, 'a is current: its level rises, b is only future-faint, the top layer is ghosted')
+  await p.click('.stepper-next')
+  assert.deepEqual(await look(), { level: up, levelOpacity: '1', a: '1', b: '1', top: '0.16', base: 'none' }, 'b is current: same level, a (past) is not ghosted')
+  await p.click('.stepper-next')
+  assert.deepEqual(await look(), { level: 'none', levelOpacity: '0.16', a: '1', b: '1', top: '0.16', base: up }, 'a plain lift part still works as before')
+  await p.emulateMedia({ media: 'print' })
+  const flat = await look()
+  assert.ok(flat.level === 'none' && flat.base === 'none' && flat.levelOpacity === '1' && flat.top === '1', JSON.stringify(flat))
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
 await check('switch off shows an off: step in place of the one step it names, with its own state', async () => {
   const { p, ctx, errors } = await open({}, composite)
   const fig = p.locator('figure[data-block=stepper]').first()

@@ -675,9 +675,9 @@ figure[data-block=stepper] > figcaption { padding: 0 0 8px; }
 .stepper-stage svg [data-state=future] { opacity: 0.32; }
 .stepper-stage svg [data-state=future][data-future=hidden] { visibility: hidden; }
 .stepper-stage svg [data-part] { transition: opacity var(--dur-2) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-2) var(--ease); }
-/* A data-lift part (a layer of an isometric stack) rises while it is current; the layers drawn over it are ghosted. */
-.stepper-stage svg [data-lift][data-state=current] { transform: translateY(-20px); }
-.stepper-stage svg [data-lift][data-state=current] ~ [data-lift] { opacity: 0.16; }
+/* A data-lift layer (of an isometric stack) rises while it, or a part drawn on it, is current; the layers drawn over it are ghosted. */
+.stepper-stage svg [data-lift]:is([data-state=current], :has([data-state=current])) { transform: translateY(-20px); }
+.stepper-stage svg [data-lift]:is([data-state=current], :has([data-state=current])) ~ [data-lift] { opacity: 0.16; }
 /* A data-rise part (a building on an axonometric plan) rises while current; nothing is ghosted. */
 .stepper-stage svg [data-rise][data-state=current] { transform: translateY(-12px); }
 /* A part a step names is a shortcut to that step: a hint of accent on hover, and a plan building lifts a little. */
@@ -1439,7 +1439,7 @@ pre[data-block=unknown]::before {
   .stepper-stage svg [data-state][data-future] { visibility: visible; }
   .stepper-stage svg [data-state] .flow-pulse { display: none; }
   .stepper-stage svg [data-state] .box { fill: var(--bg); }
-  .stepper-stage svg [data-state]:is([data-lift], [data-rise]) { transform: none; opacity: 1 !important; }
+  .stepper-stage svg :is([data-lift], [data-rise]) { transform: none !important; opacity: 1 !important; }
   .stepper-stage svg [data-show][data-init] { opacity: 1; visibility: visible; }
   .stepper-stage svg [data-show]:not([data-init]) { opacity: 0; visibility: hidden; }
   .embed-stage iframe, .embed-run { display: none !important; }
