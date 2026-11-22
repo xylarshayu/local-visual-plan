@@ -400,6 +400,31 @@ fixture('all-blocks.md', (check) => {
     assert.equal(anchorMap(h2).source, '/abs/path/plan.md')
   })
 
+  check('inside a git repo, "source" is repo-relative and no local path ships in the page', () => {
+    const { html: h2 } = renderPlan(src, { sourcePath: join(FIXTURES, 'all-blocks.md') })
+    assert.equal(anchorMap(h2).source, 'skills/present/renderer/test/fixtures/all-blocks.md')
+    assert.ok(!h2.includes(FIXTURES), 'the absolute fixtures path is nowhere in the page')
+  })
+
+  check('with no frontmatter title, a leading # H1 is the title, printed once, line numbers kept', () => {
+    const md = '\n# Sync, end to end\n\nIntro.\n\n```callout\nBody.\n```\n'
+    const { html: h2, slug } = renderPlan(md)
+    assert.equal(slug, 'sync-end-to-end')
+    assert.equal(anchorMap(h2).title, 'Sync, end to end')
+    assert.deepEqual(h2.match(/<h1\b[^>]*>[^<]*/g), ['<h1 class="plan-title">Sync, end to end'], 'one h1: the page title, not the body H1 again')
+    assert.deepEqual(anchorMap(h2).anchors['callout:info-1'].lines, [6, 8], 'a block after the H1 keeps its source lines')
+    const kept = renderPlan('---\ntitle: Front\n---\n# Body H1\n')
+    assert.equal(anchorMap(kept.html).title, 'Front')
+    assert.match(kept.html, /<h1[^>]*>Body H1<\/h1>/, 'with a frontmatter title the H1 stays in the body')
+    assert.equal(anchorMap(renderPlan('Intro.\n\n# Later H1\n').html).title, 'Untitled plan', 'only a leading H1 is the title')
+  })
+
+  check('a relative link to a sibling .md becomes .html; other links are left alone', () => {
+    const { html: h2 } = renderPlan('---\ntitle: T\n---\n[a](ch2.md) [b](./ch3.md#sync) [c](../other/ch4.md) [d](docs/x.md) [e](https://x.org/r.md) [f](notes.mdx)\n')
+    const hrefs = [...h2.matchAll(/<a\b[^>]*?(?:href|data-external-href)="([^"]*)"/g)].map((m) => m[1]).filter((h) => !h.startsWith('#'))
+    assert.deepEqual(hrefs, ['ch2.html', 'ch3.html#sync', '../other/ch4.md', 'docs/x.md', 'x.org/r.md', 'notes.mdx'])
+  })
+
   check('a top-level block\'s line range is exact (steps block, counted by hand)', () => {
     const map = anchorMap(html)
     // In all-blocks.md the first steps block is:
@@ -1992,7 +2017,7 @@ fixture('<figure + stepper lint>', (check) => {
   })
 
   check('switch lints: no held step, held without switch, held without needs', () => {
-    has(stepper('switch: Net', '# One\nkey: k\nneeds: switch'), /a switch with no held step/)
+    has(stepper('switch: Net', '# One\nkey: k\nneeds: switch'), /a switch with no held or off: step/)
     has(stepper('', '# One\nkey: k\n# Off\nheld\nkey: k'), /"needs: switch" or "held" without a switch/)
     has(stepper('switch: Net', '# One\nkey: k\n# Off\nheld\nkey: k'), /a held step but no step has "needs: switch"/)
   })
@@ -2011,6 +2036,21 @@ fixture('<figure + stepper lint>', (check) => {
       '# One\nkey: k\nset: a=1\n# Two\nkey: k\nneeds: switch\nset: a=2\n# Three\nkey: k\nset: a=3\n# Off\nheld\nkey: k')
     const vals = [...r.html.matchAll(/data-counters="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')).a)
     assert.deepEqual(vals, ['1', '2', '3', '1'])
+  })
+
+  check('an off: step stands in for one step: from the values before it, out of the bar, linted', () => {
+    const r = stepper('counter: a | A\nswitch: Net',
+      '# One\nkey: k\nset: a=1\n# Two\nkey: k\nset: a=2\n# Three\nkey: k\nset: a=3\n# Two, offline\noff: Two\nparts: browser\nkey: k')
+    assert.deepEqual(r.warnings, [])
+    const vals = [...r.html.matchAll(/data-counters="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')).a)
+    assert.deepEqual(vals, ['1', '2', '3', '1'])
+    assert.equal((r.html.match(/data-step="/g) || []).length, 3, 'not in the step bar')
+    assert.match(r.html, /<aside class="stepper-step stepper-off" [^>]*data-parts="browser"[^>]* data-off-for="1"><p class="stepper-where">Net off<\/p><h3>Two, offline<\/h3>/)
+    const head = '# One\nkey: k\n'
+    has(stepper('switch: Net', head + '# X\noff: Nope\nkey: k'), /"off: Nope" names no step/)
+    has(stepper('switch: Net', head + '# X\noff: One\nkey: k\n# Y\noff: One\nkey: k'), /more than one off: step for "One"/)
+    has(stepper('', head + '# X\noff: One\nkey: k'), /"off: One" without a switch in the header/)
+    has(stepper('switch: Net', head + '# X\noff: One\nkey: k\nset: a=1'), /step "X" sets unknown counter or state "a"/)
   })
 
   check('a missing stepper figure warns and still lays out the steps', () => {

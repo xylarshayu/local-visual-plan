@@ -727,7 +727,7 @@ figure[data-block=stepper] {
 .stepper-switch[aria-checked=true] .stepper-track { background: var(--accent); }
 .stepper-switch[aria-checked=true] .stepper-track::after { left: 14px; }
 .stepper-steps { list-style: none; margin: 0; padding: 0; }
-.stepper-step + .stepper-step, .stepper-held { margin-top: 32px; }
+.stepper-step + .stepper-step, :is(.stepper-held, .stepper-off) { margin-top: 32px; }
 .stepper-step h3 { margin: 0 0 8px; }
 .stepper-step > p { margin: 0 0 12px; }
 .stepper-where { font-size: var(--fs-xs); color: var(--fg-faint); }

@@ -13,6 +13,7 @@ code: w-email src/workers/email.ts
 code: w-search src/workers/search.ts
 code: store src/store/
 state: queue empty one
+switch: Store
 
 # A request becomes a job
 parts: api e-enqueue queue
@@ -43,6 +44,15 @@ key: The store write is the commit point.
 changed: The result is saved.
 
 The worker writes the result and marks the job done.
+
+# The job goes back
+off: The result is stored
+parts: e-write store
+set: queue=one
+key: An unreachable store loses nothing; the job is retried.
+changed: The job waits in the queue again.
+
+The write fails, so the worker returns the job to the queue.
 ```
 
 ```stepper figure=figures/workers-exploded.svg title="Inside the workers"

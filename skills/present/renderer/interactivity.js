@@ -145,6 +145,9 @@
       var steps = Array.prototype.slice.call(fig.querySelectorAll(".stepper-steps > li"));
       if (!steps.length) return;
       var held = fig.querySelector(".stepper-held");
+      var asides = Array.prototype.slice.call(fig.querySelectorAll(".stepper-held, .stepper-off"));
+      var offs = {};
+      asides.forEach(function (a) { if (a.hasAttribute("data-off-for")) offs[a.getAttribute("data-off-for")] = a; });
       var stage = fig.querySelector(".stepper-stage");
       var parts = Array.prototype.slice.call(fig.querySelectorAll(".stepper-stage [data-part]"));
       var bar = Array.prototype.slice.call(fig.querySelectorAll(".stepper-bar button"));
@@ -161,15 +164,15 @@
       });
       var words = function (el) { return (el.getAttribute("data-parts") || "").split(" ").filter(Boolean); };
       var named = {};
-      steps.concat(held ? [held] : []).forEach(function (s) { words(s).forEach(function (w) { named[w] = 1; }); });
+      steps.concat(asides).forEach(function (s) { words(s).forEach(function (w) { named[w] = 1; }); });
       var firstNeed = steps.findIndex(function (s) { return s.hasAttribute("data-needs"); });
       var i = 0, on = true;
 
       function render() {
-        var isHeld = !!held && !on && steps[i].hasAttribute("data-needs");
-        var view = isHeld ? held : steps[i];
+        var alt = on ? null : offs[i] || (held && steps[i].hasAttribute("data-needs") ? held : null);
+        var view = alt || steps[i];
         var seen = {}, cur = {};
-        steps.slice(0, isHeld ? firstNeed : i).forEach(function (s) { words(s).forEach(function (w) { seen[w] = 1; }); });
+        steps.slice(0, alt && alt === held ? firstNeed : i).forEach(function (s) { words(s).forEach(function (w) { seen[w] = 1; }); });
         words(view).forEach(function (w) { cur[w] = 1; });
         parts.forEach(function (p) {
           var n = p.getAttribute("data-part");
@@ -185,7 +188,7 @@
           var kv = g.getAttribute("data-show"), at = kv.indexOf("=");
           g.toggleAttribute("data-on", vals[kv.slice(0, at)] === kv.slice(at + 1));
         });
-        steps.concat(held ? [held] : []).forEach(function (s) { s.classList.toggle("is-current", s === view); });
+        steps.concat(asides).forEach(function (s) { s.classList.toggle("is-current", s === view); });
         bar.forEach(function (b, n) {
           if (n === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
           b.classList.toggle("is-past", n < i);

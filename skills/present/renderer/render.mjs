@@ -13,7 +13,7 @@
 //   node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open]
 
 import { readFileSync, writeFileSync, mkdirSync, accessSync, constants, existsSync } from "node:fs";
-import { dirname, resolve, join, isAbsolute } from "node:path";
+import { dirname, resolve, join, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { marked } from "./vendor/marked.esm.js";
@@ -66,6 +66,13 @@ function parseFrontmatter(src) {
     }
     body = src.slice(m[0].length);
     bodyOffset = (m[0].match(/\n/g) || []).length;
+  }
+  // With no title, a leading `# H1` is the title. Its line is blanked, not removed, so line numbers hold.
+  if (!fm.title) {
+    const lines = body.split("\n");
+    const i = lines.findIndex((l) => l.trim());
+    const h = i >= 0 && /^#[ \t]+(.+?)(?:[ \t]+#+)?\s*$/.exec(lines[i]);
+    if (h) { fm.title = h[1]; lines[i] = ""; body = lines.join("\n"); }
   }
   return { frontmatter: fm, body, bodyOffset };
 }
@@ -1328,7 +1335,7 @@ function parseStepper(body, where, warnings) {
     const line = raw.trim();
     const h = /^#\s+(.*)$/.exec(line);
     if (h) {
-      cur = { title: h[1].trim(), parts: [], key: "", changed: [], set: {}, needs: false, held: false,
+      cur = { title: h[1].trim(), parts: [], key: "", changed: [], set: {}, needs: false, held: false, off: "",
         narration: [], inBody: false, startIdx: idx, endIdx: idx };
       steps.push(cur);
       return;
@@ -1365,6 +1372,7 @@ function parseStepper(body, where, warnings) {
       }
       if (line === "needs: switch") { cur.needs = true; return; }
       if (line === "held") { cur.held = true; return; }
+      if ((m = /^off:\s*(.+)$/.exec(line))) { cur.off = m[1].trim(); return; }
       cur.inBody = true;
     }
     cur.narration.push(raw);
@@ -1385,12 +1393,21 @@ function renderStepper(body, attrs, ctx, warnings) {
   const helds = steps.filter((s) => s.held);
   if (helds.length > 1) warnings.push(`${where}: more than one held step (at most 1)`);
   const held = helds[0] || null;
-  const seq = steps.filter((s) => s !== held);
+  const seq = steps.filter((s) => s !== held && !s.off);
   if (!seq.length) warnings.push(`${where}: no steps`);
   if (seq.length > STEPPER_LIMITS.steps) warnings.push(`${where}: ${seq.length} steps (at most ${STEPPER_LIMITS.steps})`);
   const firstNeed = seq.findIndex((s) => s.needs);
   if (!switchLabel && (held || firstNeed >= 0)) warnings.push(`${where}: "needs: switch" or "held" without a switch in the header`);
-  if (switchLabel && !held) warnings.push(`${where}: a switch with no held step`);
+  // An off: step stands in for the step it names while the switch is off.
+  const offFor = new Map();
+  for (const s of steps.filter((x) => x.off && x !== held)) {
+    const t = seq.findIndex((x) => x.title === s.off);
+    if (!switchLabel) warnings.push(`${where}: "off: ${s.off}" without a switch in the header`);
+    if (t < 0) warnings.push(`${where}: "off: ${s.off}" names no step`);
+    else if (offFor.has(t)) warnings.push(`${where}: more than one off: step for "${s.off}"`);
+    else offFor.set(t, s);
+  }
+  if (switchLabel && !held && !offFor.size) warnings.push(`${where}: a switch with no held or off: step`);
   if (held && firstNeed < 0) warnings.push(`${where}: a held step but no step has "needs: switch"`);
 
   const desc = seq.map((s, i) => `${i + 1}. ${s.title}`).join(" ");
@@ -1440,22 +1457,23 @@ function renderStepper(body, attrs, ctx, warnings) {
     return `<li>${word}${link}${note ? ` <span class="stepper-note">${esc(note)}</span>` : ""}</li>`;
   };
 
-  // Counter values per step, carried forward; the held step starts from the
-  // values just before the first step that needs the switch.
+  // Counter values per step, carried forward. The held step starts from the values
+  // before the first step that needs the switch, an off: step from those before its step.
   const pick = (set) => Object.fromEntries(Object.entries(set).filter(([k, v]) => names.has(k) && (!stateOf[k] || stateOf[k].includes(v))));
   const vals = Object.fromEntries([...counters.map((c) => [c.name, "0"]), ...states.map((st) => [st.name, st.values[0]])]);
   let heldBase = null;
   seq.forEach((s, i) => {
     if (i === firstNeed) heldBase = { ...vals };
+    if (offFor.has(i)) offFor.get(i).values = { ...vals, ...pick(offFor.get(i).set) };
     Object.assign(vals, pick(s.set));
     s.values = { ...vals };
   });
   if (held) held.values = { ...(heldBase || vals), ...pick(held.set) };
 
-  const stepHtml = (s, tag, whereText) => {
+  const stepHtml = (s, tag, whereText, cls = "", more = "") => {
     const lines = ctx.bodyStartLine != null ? [ctx.bodyStartLine + s.startIdx, ctx.bodyStartLine + s.endIdx] : null;
     const a = registerChildAnchor(reg, `${anchor}:${slugify(s.title || "step")}`, "stepper-step", s.title, lines, s.title + " " + s.key + " " + s.narration.join(" "));
-    let out = `<${tag} class="stepper-step" data-pf-anchor="${esc(a)}" id="${esc(a)}" data-parts="${esc(s.parts.join(" "))}" data-counters="${esc(JSON.stringify(s.values))}"${s.needs ? " data-needs" : ""}>`;
+    let out = `<${tag} class="stepper-step${cls}" data-pf-anchor="${esc(a)}" id="${esc(a)}" data-parts="${esc(s.parts.join(" "))}" data-counters="${esc(JSON.stringify(s.values))}"${s.needs ? " data-needs" : ""}${more}>`;
     out += `<p class="stepper-where">${esc(whereText)}</p><h3>${esc(s.title)}</h3>`;
     const narration = s.narration.join("\n").trim();
     if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
@@ -1484,7 +1502,9 @@ function renderStepper(body, attrs, ctx, warnings) {
   out += `</div></div><div class="stepper-rail" aria-live="polite"><ol class="stepper-steps">`;
   out += seq.map((s, i) => stepHtml(s, "li", `Step ${i + 1} of ${seq.length}`)).join("");
   out += `</ol>`;
-  if (held) out += stepHtml(held, "aside", `${switchLabel || "Switch"} off`).replace("<aside class=\"stepper-step\"", "<aside class=\"stepper-step stepper-held\"");
+  const offWhere = `${switchLabel || "Switch"} off`;
+  if (held) out += stepHtml(held, "aside", offWhere, " stepper-held");
+  for (const [t, s] of offFor) out += stepHtml(s, "aside", offWhere, " stepper-off", ` data-off-for="${t}"`);
   return out + `</div></div></figure>`;
 }
 
@@ -1796,6 +1816,9 @@ function neutralizeRemoteRefs(html) {
   html = html.replace(
     /<a\b([^>]*?)\shref\s*=\s*(["'])([^"']*)\2([^>]*)>/gi,
     (m, pre, q, url, post) => {
+      // A sibling page's source (`ch2.md`) is rendered next to it as `ch2.html`.
+      const sib = /^(?:\.\/)?([^/:?#]+)\.md(#.*)?$/i.exec(url.trim());
+      if (sib) return `<a${pre} href=${q}${sib[1]}.html${sib[2] || ""}${q}${post}>`;
       if (!REMOTE.test(url.trim())) return m;
       // Strip the protocol/host so no external-URL token remains; keep the
       // human-readable target for context, escaped, in a non-fetched attr.
@@ -2140,6 +2163,8 @@ export function renderPlan(markdownSource, {
   reg.theme = resolveTheme(themeOpt || frontmatter.theme, warnings);
   reg.baseDir = sourcePath ? dirname(resolve(sourcePath)) : process.cwd();
   reg.gitRoot = findGitRoot(reg.baseDir);
+  // Inside a repo the source path is repo-relative, so a committed page ships no local path.
+  if (sourcePath && reg.gitRoot) reg.sourcePath = relative(reg.gitRoot, resolve(sourcePath));
   reg.repos = [];
   reg.pageLinks = new Map();
   for (const line of frontmatter.repos) {

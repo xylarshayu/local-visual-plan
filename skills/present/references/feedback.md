@@ -12,7 +12,7 @@ to change what Export produces (don't, without bumping the version).
 ```
 <!-- presentation-feedback v2 -->
 doc: <slug> (<docId>)
-source: <absolute plan.md path or "unknown">
+source: <plan.md path, repo-relative or absolute, or "unknown">
 
 ## checklist — <checked>/<total> checked
 - [x] <item text> [<anchor>]
@@ -51,9 +51,12 @@ note: <optional single-line note the user attached to their answer>
   over the exact `plan.md` bytes that were rendered. Two renders of identical
   bytes get the same docId; edit one character and it changes — this is the
   "did the plan move under me" tripwire.
-- **`source:`** — the absolute path to `plan.md` on the machine that rendered
-  the page, or the literal string `unknown` if the page was rendered from
-  stdin or later moved. You need this file to resolve anchors to lines.
+- **`source:`** — the path to `plan.md`: relative to the root of its git repo
+  when it sits in one (so a committed page ships no local path), otherwise
+  absolute on the machine that rendered the page, or the literal string
+  `unknown` if the page was rendered from stdin. You need this file to resolve
+  anchors to lines; resolve a relative path from the repo root
+  (`git rev-parse --show-toplevel`).
 - **`## checklist — <checked>/<total> checked`** — present only when the plan
   has at least one GFM task-list item (`- [ ]` / `- [x]`). One `- [x]`/`- [ ]`
   line per task item, checked items first, each carrying its own `[<anchor>]`
@@ -257,7 +260,7 @@ Pasted export:
 ```
 <!-- presentation-feedback v2 -->
 doc: add-upload-size-guard (pf-3f8a2c1d9e01)
-source: /home/xylar/proj/.visual-plans/add-upload-size-guard/plan.md
+source: .visual-plans/add-upload-size-guard/plan.md
 
 ## note — step "Add a size guard to the upload action" [step:add-a-size-guard-to-the-upload-action]
 > reuse src/lib/client.ts — uploadFile() already handles the PUT

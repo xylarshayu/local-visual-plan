@@ -349,6 +349,25 @@ await check('a data-lift layer rises only while current, the layers over it are 
   await ctx.close()
 })
 
+await check('switch off shows an off: step in place of the one step it names, with its own state', async () => {
+  const { p, ctx, errors } = await open({}, composite)
+  const fig = p.locator('figure[data-block=stepper]').first()
+  const look = () => fig.evaluate((f) => ({
+    visible: [...f.querySelectorAll('.stepper-step')].filter((s) => s.offsetParent).map((s) => s.querySelector('h3').textContent),
+    on: [...f.querySelectorAll('[data-show][data-on]')].map((g) => g.dataset.show),
+    parts: Object.fromEntries(['api', 'workers', 'store'].map((n) => [n, f.querySelector(`[data-part="${n}"]`).dataset.state])),
+  }))
+  await fig.locator('.stepper-switch').click()
+  assert.deepEqual((await look()).visible, ['A request becomes a job'], 'other steps are unchanged')
+  await fig.locator('.stepper-bar button[data-step="3"]').click()
+  assert.deepEqual(await look(), { visible: ['The job goes back'], on: ['queue=one'], parts: { api: 'past', workers: 'past', store: 'current' } })
+  assert.equal(await fig.locator('.stepper-bar [aria-current=step]').textContent(), '4', 'the bar stays on the step it stands in for')
+  await fig.locator('.stepper-switch').click()
+  assert.deepEqual(await look(), { visible: ['The result is stored'], on: ['queue=empty'], parts: { api: 'past', workers: 'past', store: 'current' } })
+  assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
 await check('a state: shows one data-show group per value, fades between them as steps set it, and mono labels use the mono font', async () => {
   const { p, ctx, errors } = await open({}, composite)
   const fig = p.locator('figure[data-block=stepper]').first()

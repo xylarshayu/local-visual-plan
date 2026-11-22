@@ -22,7 +22,9 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
 
 - Frontmatter is a leading `---` fenced YAML-ish block of simple `key: value`
   lines. Only `title`, `objective`, `status`, `theme`, `repo` are recognized; unknown
-  keys are ignored. `title` is required; the others are optional.
+  keys are ignored. Without a `title`, a `# H1` as the first line of the body
+  is the title (shown once, as the page title), so a page can stay plain
+  Markdown on GitHub.
 - `theme` picks the palette. `mono` (default) is ink on white with one accent:
   colour means either "look here" (accent) or "this changed" (green/red), and
   diagrams render clean. `manual` restores the original warm palette with
@@ -36,7 +38,9 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
   line per repo. The first is the page's own repo; the name is what the
   caption shows, so keep it short.
 - Everything outside a recognized custom block is rendered as GitHub-flavored
-  Markdown via vendored `marked`.
+  Markdown via vendored `marked`. A relative link to a sibling `.md` file
+  (`ch2.md`, `./ch2.md#anchor`) becomes `ch2.html`, for pages rendered next to
+  their sources with `--out`. Links into other folders are left alone.
 
 ## Custom blocks
 
@@ -484,6 +488,13 @@ everything after them is the narration, in Markdown.
 - `held`, alone on a line, marks the held step: it is shown in place of any
   `needs: switch` step while the switch is off. At most one; it is not in the
   step bar.
+- `off: <title>` makes the step an off step: while the switch is off it is
+  shown in place of the step with that title, and its counters and states
+  start from the values before that step, then apply its own `set:`. It is not
+  in the step bar. Use it when one step plays out differently with the switch
+  off; use `held` when every step that needs the switch stops the same way.
+  An off step wins over `held` for its step. Later steps keep the switch-on
+  values.
 
 Part states follow from the steps: a part named by the current step is
 **current** (accent), a part named by an earlier step is **past** (ink), and a
@@ -500,8 +511,9 @@ the figure does not have; a `set:` name that is not a counter or state, or a sta
 have; a `state:` line with fewer than two values, or a name that is also a
 counter; a `data-show` naming a state or value the header does not declare,
 or used in a plain `figure`; a step with no
-`key:`; `needs: switch` or `held` with no switch in the header; a switch with
-no held step, or a held step with no `needs: switch` step; more than three counters, one switch, one held step, or ten
+`key:`; `needs: switch`, `held` or `off:` with no switch in the header; a switch with
+no held or off step, or a held step with no `needs: switch` step; an `off:`
+title that names no step, or two off steps for one step; more than three counters, one switch, one held step, or ten
 steps; a `code:` or `docs:` line without a path, for a part the figure does not have, or
 with an absolute or `..` path (dropped); more than one `repo:` without names;
 and, when the page sits in a git repo, a `code:` or `docs:` path in the first repo that
@@ -530,7 +542,9 @@ in the step bar.
 (hidden until script runs), and an `<ol class="stepper-steps">` of
 `<li data-parts data-counters data-needs>` steps, each with an `<h3>`, the
 narration, a `.stepper-key` and a `ul.stepper-changed`; the held step is an
-`<aside class="stepper-held">` with the same shape. Each step is its own
+`<aside class="stepper-held">` with the same shape, and an off step an
+`<aside class="stepper-off" data-off-for="n">` (n is the 0-based step it
+stands in for). Each step is its own
 feedback anchor.
 
 ### `embed`: a sandboxed interactive page

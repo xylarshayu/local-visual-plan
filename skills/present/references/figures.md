@@ -101,9 +101,10 @@ emphasis, never the only copy of a fact.
   one rise out of the stack as the stepper walks it.
 - Arrowheads are open chevrons drawn as paths, so they follow the stroke
   colour.
-- An edge label is a plain word for what it carries (`sync`, `enqueue`); the
-  exact route belongs in the code caption. When the literal string is the
-  point, give its `<text>` `class="mono"`.
+- An edge label is a plain word for what it carries (`sync`, `enqueue`), or
+  the method and path without the version (`POST /sync`) when the call is the
+  point. The full route belongs in the code caption. A literal string such as
+  a path gets `class="mono"`.
 - A technology mark (the logo of a database, a queue, a framework) is a faint
   watermark tucked inside a box's top-right corner, never above it. Put the
   glyph in `<defs>` as `<symbol id="m-name" class="mark" viewBox="0 0 24 24">`
@@ -161,4 +162,6 @@ dependency graphs. Do not redraw those as figures.
 - Counters count the facts the idea is about (saved, accepted, delivered), not
   activity. If a counter never changes, cut it.
 - Use the switch only when its off state teaches something (the network is
-  down, a feature is disabled), and give the held step its own key idea.
+  down, a feature is disabled). When one step plays out differently, write that
+  version as an `off:` step; when every step that needs the switch stops the
+  same way, write one `held` step. Either gets its own key idea.
