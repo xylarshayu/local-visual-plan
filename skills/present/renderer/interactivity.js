@@ -190,8 +190,12 @@
         });
         shows.forEach(function (g) {
           var kv = g.getAttribute("data-show"), at = kv.indexOf("=");
-          g.toggleAttribute("data-on", vals[kv.slice(0, at)] === kv.slice(at + 1));
+          var was = g.hasAttribute("data-on"), now = vals[kv.slice(0, at)] === kv.slice(at + 1);
+          g.toggleAttribute("data-on", now);
+          // A state value that just came on is marked like a changed counter; the switch itself is not.
+          g.classList.toggle("is-changed", now && !was && kv.slice(0, at) !== "switch");
         });
+        fig.classList.toggle("is-off", !on);
         steps.concat(asides).forEach(function (s) { s.classList.toggle("is-current", s === view); });
         bar.forEach(function (b, n) {
           if (n === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");

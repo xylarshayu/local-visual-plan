@@ -480,11 +480,14 @@ Lines before the first `#` set up the stepper:
   The reader flips it at any step to see the story without that thing (see
   the steps below; `references/figures.md` works one through). The figure can
   follow it like a state: `data-show="switch=on"` and `data-show="switch=off"`.
+  While it is off, a step both stories share says so in the rail ("Network
+  off. This step does not need it."); you write nothing for that.
 - `state: name value value ...` names a figure state and its values; the first
   is the initial one. A step changes it with `set: name=value`, carried
   forward like a counter. In the SVG, a group with `data-show="name=value"` is
   shown only while the state has that value (it fades in and out), so draw
-  each position or look once per value. A state is not shown as a counter.
+  each position or look once per value. A state is not shown as a counter,
+  but text in a value that just came on turns accent, as a changed counter does.
 - `code: part path` points a part at its representative file or directory,
   relative to the repo root. Repeat the line for more paths. Each step lists the
   paths of its own parts under "In the code", in the narration rail (never

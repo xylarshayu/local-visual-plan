@@ -210,8 +210,10 @@ teaches something (the network is down, a cache is disabled).
   step bar does not grow.
 - Use `held` when every step that needs the switch stops the same way (nothing
   syncs offline); use off steps when each plays out differently.
-- A step both stories share holds in both, `set:` included. Set a value that
-  differs between the stories only in the steps that differ.
+- A step both stories share holds in both, `set:` included, and with the switch
+  off its rail says it does not need it. Write an off step only where the text
+  really differs. Set a value that differs between the stories only in the
+  steps that differ.
 - When the off story takes another path, draw that path as its own part inside
   a `data-show="switch=off"` group, and name it in the off steps.
 

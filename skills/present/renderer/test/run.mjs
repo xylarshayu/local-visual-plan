@@ -2089,6 +2089,11 @@ fixture('<figure + stepper lint>', (check) => {
     assert.deepEqual(vals, ['1', '2', '3', '1'])
     assert.equal((r.html.match(/data-step="/g) || []).length, 3, 'not in the step bar')
     assert.match(r.html, /<aside class="stepper-step stepper-off" [^>]*data-parts="browser"[^>]* data-off-for="1"><p class="stepper-where">Net off<\/p><h3>Two, offline<\/h3>/)
+    const shared = [...r.html.matchAll(/<p class="stepper-where">([^<]*)<\/p><p class="stepper-shared">Net off\. This step does not need it\.<\/p>/g)].map((m) => m[1])
+    assert.deepEqual(shared, ['Step 1 of 3', 'Step 3 of 3'], 'only steps both stories share say so; not one with an off step, nor the off step')
+    const needs = stepper('switch: Net', '# One\nkey: k\n# Two\nneeds: switch\nkey: k\n# Down\nheld\nkey: k')
+    assert.deepEqual([...needs.html.matchAll(/<p class="stepper-where">([^<]*)<\/p><p class="stepper-shared">/g)].map((m) => m[1]), ['Step 1 of 2'], 'not a needs step, nor the held step')
+    assert.doesNotMatch(stepper('', '# One\nkey: k').html, /<p class="stepper-shared">/, 'no switch, no line')
     const head = '# One\nkey: k\n'
     has(stepper('switch: Net', head + '# X\noff: Nope\nkey: k'), /"off: Nope" names no step/)
     has(stepper('switch: Net', head + '# X\noff: One\nkey: k\n# Y\noff: One\nkey: k'), /more than one off: step for "One"/)

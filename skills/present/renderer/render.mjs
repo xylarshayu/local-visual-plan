@@ -1474,11 +1474,13 @@ function renderStepper(body, attrs, ctx, warnings) {
     if (off) off.values = s.offValues;
   });
 
-  const stepHtml = (s, tag, whereText, cls = "", more = "") => {
+  const stepHtml = (s, tag, whereText, cls = "", more = "", shared = false) => {
     const lines = ctx.bodyStartLine != null ? [ctx.bodyStartLine + s.startIdx, ctx.bodyStartLine + s.endIdx] : null;
     const a = registerChildAnchor(reg, `${anchor}:${slugify(s.title || "step")}`, "stepper-step", s.title, lines, s.title + " " + s.key + " " + s.narration.join(" "));
     let out = `<${tag} class="stepper-step${cls}" data-pf-anchor="${esc(a)}" id="${esc(a)}" data-parts="${esc(s.parts.join(" "))}" ${s.values ? ` data-counters="${esc(JSON.stringify(s.values))}"` : ""}${switchLabel && s.offValues ? ` data-off-counters="${esc(JSON.stringify(s.offValues))}"` : ""}${s.needs ? " data-needs" : ""}${more}>`;
-    out += `<p class="stepper-where">${esc(whereText)}</p><h3>${esc(s.title)}</h3>`;
+    out += `<p class="stepper-where">${esc(whereText)}</p>`;
+    if (shared) out += `<p class="stepper-shared">${esc(switchLabel)} off. This step does not need it.</p>`;
+    out += `<h3>${esc(s.title)}</h3>`;
     const narration = s.narration.join("\n").trim();
     if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
     if (s.key) out += `<div class="stepper-key"><p class="stepper-label">Key idea</p><p>${inlineMd(s.key)}</p></div>`;
@@ -1504,7 +1506,7 @@ function renderStepper(body, attrs, ctx, warnings) {
   out += `</ol><button type="button" class="stepper-next" aria-label="Next step">&rarr;</button>`;
   if (switchLabel) out += `<button type="button" class="stepper-switch" role="switch" aria-checked="true"><span class="stepper-track" aria-hidden="true"></span>${esc(switchLabel)} <span class="stepper-switch-state">on</span></button>`;
   out += `</div></div><div class="stepper-rail" aria-live="polite"><ol class="stepper-steps">`;
-  out += seq.map((s, i) => stepHtml(s, "li", `Step ${i + 1} of ${seq.length}`)).join("");
+  out += seq.map((s, i) => stepHtml(s, "li", `Step ${i + 1} of ${seq.length}`, "", "", !!switchLabel && !s.needs && !offFor.has(i))).join("");
   out += `</ol>`;
   const offWhere = `${switchLabel || "Switch"} off`;
   if (held) out += stepHtml(held, "aside", offWhere, " stepper-held");

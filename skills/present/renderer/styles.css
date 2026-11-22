@@ -737,6 +737,9 @@ figure[data-block=stepper] {
 .stepper-step > p { margin: 0 0 12px; }
 .stepper-where { font-size: var(--fs-xs); color: var(--fg-faint); }
 .stepper-step > p.stepper-where { margin-bottom: 4px; }
+.stepper-shared { display: none; margin: 0 0 8px; padding-left: 8px; border-left: 2px solid var(--border-strong); font-size: var(--fs-sm); color: var(--fg-muted); }
+figure.is-off .stepper-shared { display: block; }
+.stepper-stage :is([data-show].is-changed text, text[data-show].is-changed) { fill: var(--accent); }
 .stepper-key, .stepper-changed { background: var(--bg-sunken); border-radius: var(--radius); padding: 12px 16px; margin: 0 0 12px; font-size: var(--fs-sm); }
 .stepper-key p, .stepper-changed p, .stepper-changed ul { margin: 0; }
 .stepper-changed ul { padding-left: 16px; list-style: disc; }
