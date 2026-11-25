@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 328">
+  <text class="muted" x="24" y="16">Each layer, what it stops</text>
+  <g data-part="layer-edge"><rect class="box" x="24" y="28" width="672" height="56" rx="4"/><text x="44" y="60" font-weight="600">Network edge</text><text class="muted" x="676" y="60" text-anchor="end">traffic from unknown hosts</text></g>
+  <g data-part="layer-auth"><rect class="box" x="24" y="92" width="672" height="56" rx="4"/><text x="44" y="124" font-weight="600">Authentication</text><text class="muted" x="676" y="124" text-anchor="end">requests without a valid session</text></g>
+  <g data-part="layer-roles"><rect class="box" x="24" y="156" width="672" height="56" rx="4"/><text x="44" y="188" font-weight="600">Authorisation</text><text class="muted" x="676" y="188" text-anchor="end">actions the role does not allow</text></g>
+  <g data-part="layer-input"><rect class="box" x="24" y="220" width="672" height="56" rx="4"/><text x="44" y="252" font-weight="600">Input validation</text><text class="muted" x="676" y="252" text-anchor="end">malformed or out-of-range input</text></g>
+  <g data-part="residual"><rect x="24" y="284" width="672" height="40" rx="4" data-role="hidden"/><text x="44" y="308" font-weight="600">Still gets through</text><text x="676" y="308" text-anchor="end">a valid user misusing an allowed action</text></g>
+</svg>

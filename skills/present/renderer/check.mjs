@@ -1,4 +1,6 @@
-// check.mjs — best-effort mermaid diagram validator.
+// check.mjs — best-effort mermaid diagram validator, plus a layout check of
+// drawn figures (labels that spill out of their box or overlap, text drawn
+// too small), measured in the same browser.
 //
 // render.mjs never executes Mermaid in Node: a `diagram` block is emitted as
 // raw source inside a `<pre class="mermaid">` and only ever parsed client-side,
@@ -27,9 +29,9 @@
 //      happens during best-effort auto-discovery and just skips)
 //   2  usage error (bad flags, missing argument, no such input file)
 
-import { existsSync, readdirSync, accessSync, constants } from "node:fs";
+import { existsSync, readdirSync, accessSync, constants, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, delimiter } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 
 const USAGE = `usage: node check.mjs <rendered.html> [--browser <path>] [--timeout-ms N]
@@ -182,6 +184,71 @@ export function checkDiagrams(dom) {
 }
 
 /* ========================================================================== *
+ *  figure layout
+ * ========================================================================== */
+
+// Runs in the page once it has laid out. A label "spills" when it pokes out of
+// the smallest filled shape in its part that it sits on (or touches its edge,
+// if the shape has an outline); two labels "overlap" when their boxes cross.
+// Sizes are in screen pixels at 1440 wide.
+function measureFigures() {
+  const out = [];
+  const box = (r) => r.width > 0 && r.height > 0;
+  // A label sits on a shape only when its start, middle or end is inside the fill, not just inside the bounding box (an isometric pad's box reaches far below it).
+  const on = (el, r, cy) => {
+    const m = el.getScreenCTM?.(), inv = m?.inverse();
+    if (!inv || !el.isPointInFill) return true;
+    return [r.left + 1, (r.left + r.right) / 2, r.right - 1].some((cx) => el.isPointInFill(new DOMPoint(cx, cy).matrixTransform(inv)));
+  };
+  document.querySelectorAll('figure[data-block="figure"], figure[data-block="stepper"]').forEach((fig, i) => {
+    const svg = fig.querySelector("svg");
+    if (!svg) return;
+    const name = (fig.querySelector("figcaption")?.textContent || `figure ${i + 1}`).trim();
+    const vb = svg.viewBox.baseVal;
+    const scale = vb && vb.width ? svg.getBoundingClientRect().width / vb.width : 1;
+    const texts = [...svg.querySelectorAll("text")]
+      .map((t) => ({ t, s: t.textContent.trim().replace(/\s+/g, " "), r: t.getBoundingClientRect() }))
+      .filter((x) => x.s && box(x.r) && !x.t.closest("defs, symbol") && getComputedStyle(x.t).visibility !== "hidden");
+    const px = Math.min(...texts.map((x) => parseFloat(getComputedStyle(x.t).fontSize) * scale));
+    if (px < 11) out.push(`${name}: text shows at ${px.toFixed(1)}px; draw the figure narrower (720 units) at 12-unit text`);
+    const shapes = [...svg.querySelectorAll("rect, ellipse, circle, polygon, path")]
+      .filter((el) => !el.closest("defs, symbol, marker") && getComputedStyle(el).fill !== "none" && getComputedStyle(el).visibility !== "hidden" && box(el.getBoundingClientRect()));
+    for (const x of texts) {
+      const part = x.t.closest("[data-part]") || svg;
+      const cy = x.r.top + x.r.height / 2;
+      let best = null;
+      for (const el of shapes) {
+        if (!part.contains(el)) continue;
+        const r = el.getBoundingClientRect();
+        if (cy < r.top || cy > r.bottom || r.right <= x.r.left || r.left >= x.r.right) continue;
+        if (!on(el, x.r, cy)) continue;
+        if (!best || r.width * r.height < best.r.width * best.r.height) best = { r, pad: getComputedStyle(el).stroke === "none" ? -1 : 2 };
+      }
+      if (best && (x.r.left < best.r.left + best.pad || x.r.right > best.r.right - best.pad)) out.push(`${name}: label "${x.s}" touches or spills out of its box`);
+    }
+    for (let a = 0; a < texts.length; a++) for (let b = a + 1; b < texts.length; b++) {
+      const p = texts[a].r, q = texts[b].r;
+      const w = Math.min(p.right, q.right) - Math.max(p.left, q.left), h = Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top);
+      if (w > 2 && h > 2) out.push(`${name}: labels "${texts[a].s}" and "${texts[b].s}" overlap`);
+    }
+  });
+  return out;
+}
+
+const MEASURE_SCRIPT = `<script>addEventListener("load", () => setTimeout(() => {
+  const pre = document.createElement("pre"); pre.id = "present-check-layout";
+  pre.textContent = JSON.stringify((${measureFigures.toString()})());
+  document.body.append(pre);
+}, 300));</script>`;
+
+export function layoutIssues(dom) {
+  const m = /<pre id="present-check-layout">([\s\S]*?)<\/pre>/.exec(dom);
+  if (!m) return null;
+  const json = m[1].replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  return JSON.parse(json);
+}
+
+/* ========================================================================== *
  *  CLI
  * ========================================================================== */
 
@@ -210,6 +277,10 @@ function main() {
     process.exit(0);
   }
 
+  // A copy of the page with the layout probe appended, so the user's file stays untouched.
+  const dir = mkdtempSync(join(tmpdir(), "present-check-"));
+  const probe = join(dir, "page.html");
+  writeFileSync(probe, readFileSync(htmlPath, "utf8").replace(/<\/body>(?![\s\S]*<\/body>)/, MEASURE_SCRIPT + "</body>"));
   let dom;
   try {
     dom = execFileSync(
@@ -218,23 +289,28 @@ function main() {
         "--headless",
         "--disable-gpu",
         "--no-sandbox",
+        "--window-size=1440,900",
         `--virtual-time-budget=${args.timeoutMs}`,
         "--dump-dom",
-        `file://${htmlPath}`,
+        `file://${probe}`,
       ],
       { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, timeout: args.timeoutMs + 30000 },
     );
   } catch (e) {
     const msg = (e && e.stderr) ? String(e.stderr).trim() : (e && e.message) || String(e);
+    rmSync(dir, { recursive: true, force: true });
     console.error(`error: browser failed to render the page (${found.source}: ${found.path}): ${msg}`);
     process.exit(1);
   }
+  rmSync(dir, { recursive: true, force: true });
 
   if (!dom || !dom.trim()) {
     console.error(`error: --dump-dom produced no output (${found.source}: ${found.path})`);
     process.exit(1);
   }
 
+  const layout = layoutIssues(dom) || [];
+  for (const w of layout) console.error(`warning: ${w}`);
   const { total, skipped, failures } = checkDiagrams(dom);
   const skippedNote = skipped ? ` (+${skipped} lean, skipped)` : "";
   if (failures.length) {
@@ -242,7 +318,7 @@ function main() {
     console.log(`checked ${total} diagram(s)${skippedNote}: ${failures.length} failed`);
     process.exit(1);
   }
-  console.log(`checked ${total} diagram(s)${skippedNote}: all rendered`);
+  console.log(`checked ${total} diagram(s)${skippedNote}: all rendered${layout.length ? `; ${layout.length} figure layout warning(s)` : ""}`);
   process.exit(0);
 }
 

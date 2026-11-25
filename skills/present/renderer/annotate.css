@@ -17,14 +17,13 @@
   gap: 0;
   background: var(--bg-elev);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 1px 0 var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 .pf-pill-btn {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--fg-muted);
   background: transparent;
   border: 0;
@@ -35,6 +34,10 @@
   transition: color 0.12s, background 0.12s;
 }
 .pf-pill-btn:last-child { border-right: 0; }
+/* In the top bar (wide screens) it is quiet; presenting, it returns to the corner, clear of the rail. */
+body:not(.pf-present) .topbar-inner .pf-pill { position: static; }
+.topbar-inner .pf-pill { border-color: var(--border); }
+.topbar-inner .pf-pill-btn { font-weight: 400; padding: 4px 10px; }
 .pf-pill-btn:hover { color: var(--fg); background: var(--bg-sunken); }
 .pf-pill-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .pf-pill-btn[aria-pressed="true"] { color: var(--accent-fg); background: var(--accent); }
@@ -116,9 +119,7 @@
 .pf-pop-anchor {
   font-family: var(--mono);
   font-size: 0.68rem;
-  letter-spacing: 0.03em;
   color: var(--fg-muted);
-  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -154,8 +155,6 @@
   font-family: var(--mono);
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--fg);
   background: var(--bg-elev);
   border: 1px solid var(--border-strong);
@@ -205,8 +204,7 @@
   width: min(390px, 92vw);
   z-index: 60;
   background: var(--bg-elev);
-  border-left: 1px solid var(--border-strong);
-  box-shadow: -2px 0 0 var(--border-strong);
+  border-left: 1px solid var(--border);
   transform: translateX(100%);
   transition: transform 0.18s ease-out;
   display: flex;
@@ -228,15 +226,11 @@
   font-family: var(--mono);
   font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 .pf-panel-badge {
   font-family: var(--mono);
   font-size: 0.66rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--accent);
   border: 1px solid var(--accent);
   padding: 2px 7px;
@@ -260,8 +254,6 @@
   font-family: var(--mono);
   font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--fg-muted);
   margin: 0 0 8px;
   padding-bottom: 5px;
@@ -271,8 +263,6 @@
   font-family: var(--mono);
   font-size: 0.66rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--fg-faint);
   margin: 14px 0 6px;
 }
@@ -292,8 +282,6 @@
   font-family: var(--mono);
   font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--fg-muted);
   border: 1px solid var(--border-strong);
   padding: 1px 5px;
@@ -315,8 +303,6 @@
   font-family: var(--mono);
   font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   padding: 1px 5px;
   border: 1px solid currentColor;
 }
@@ -338,8 +324,6 @@
   font-family: var(--mono);
   font-size: 0.6rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   padding: 1px 6px;
   border: 1px solid currentColor;
   flex-shrink: 0;
@@ -414,8 +398,6 @@ td[data-pf-changed] { padding-left: 8px; }
   font-family: var(--mono);
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--tag-edit);
   padding: 9px 13px;
   border-right: 1px solid var(--border);
@@ -456,7 +438,6 @@ td[data-pf-changed] { padding-left: 8px; }
   font-family: var(--mono);
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
   color: var(--accent-fg);
   background: var(--accent);
   border: 1px solid var(--border-strong);
@@ -492,8 +473,6 @@ td[data-pf-changed] { padding-left: 8px; }
   font-family: var(--mono);
   font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--tag-reuse);
   margin-bottom: 5px;
 }
@@ -564,7 +543,7 @@ body.pf-present .pf-chapter.pf-present-cur { display: block; }
 body.pf-present .pf-sidenav { display: none; }
 
 /* ----- Review-progress meter --------------------------------------------- */
-.pf-pill-btn.pf-pill-progress { color: var(--tag-new); }
+.pf-pill-btn.pf-pill-progress { color: var(--fg-muted); }
 .pf-prog-row {
   display: flex;
   align-items: center;
@@ -619,7 +598,6 @@ body.pf-present .pf-sidenav { display: none; }
   z-index: 80;
   font-family: var(--mono);
   font-size: 0.74rem;
-  letter-spacing: 0.03em;
   color: var(--accent-fg);
   background: var(--accent);
   padding: 8px 14px;

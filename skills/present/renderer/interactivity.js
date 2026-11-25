@@ -6,34 +6,36 @@
   "use strict";
 
   var root = document.documentElement;
-  var STORE_KEY = "visual-plan-theme";
+  // Renamed from "visual-plan-theme": v1 wrote the system theme on every load, so old values aren't choices.
+  var STORE_KEY = "pf-theme";
+  var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
 
-  /* ----- Theme ---------------------------------------------------------- */
-  function preferredTheme() {
+  /* ----- Theme: the system's until the reader clicks; only a click is stored ----- */
+  function savedTheme() {
     try {
       var saved = localStorage.getItem(STORE_KEY);
       if (saved === "light" || saved === "dark") return saved;
     } catch (e) { /* private mode / file:// restrictions */ }
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      return "dark";
-    }
-    return root.getAttribute("data-theme") || "light";
+    return null;
   }
+  function systemTheme() { return dark && dark.matches ? "dark" : "light"; }
 
-  function applyTheme(theme) {
+  // Set the theme before first paint; the first diagram render waits for boot().
+  root.setAttribute("data-theme", savedTheme() || systemTheme());
+
+  function setTheme(theme) {
     root.setAttribute("data-theme", theme);
-    try { localStorage.setItem(STORE_KEY, theme); } catch (e) { /* ignore */ }
     renderMermaid(theme);
   }
-
-  applyTheme(preferredTheme());
-
   document.addEventListener("click", function (ev) {
-    var toggle = ev.target.closest("[data-theme-toggle]");
-    if (!toggle) return;
+    if (!ev.target.closest("[data-theme-toggle]")) return;
     var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    applyTheme(next);
+    try { localStorage.setItem(STORE_KEY, next); } catch (e) { /* ignore */ }
+    setTheme(next);
   });
+  if (dark && dark.addEventListener) {
+    dark.addEventListener("change", function () { if (!savedTheme()) setTheme(systemTheme()); });
+  }
 
   /* ----- Tabs ----------------------------------------------------------- */
   function initTabs() {
@@ -123,8 +125,156 @@
     });
   }
 
+  /* ----- Topbar title --------------------------------------------------- */
+  // Hide the topbar's copy of the title while the masthead (which shows it) is on screen.
+  function initTopbarTitle() {
+    var bar = document.querySelector(".plan-topbar");
+    var mast = document.querySelector(".plan-masthead");
+    if (!bar || !mast || typeof IntersectionObserver === "undefined") return;
+    new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) bar.setAttribute("data-title-hidden", "");
+      else bar.removeAttribute("data-title-hidden");
+    }, { rootMargin: "-48px 0px 0px 0px" }).observe(mast);
+  }
+
+  /* ----- Stepper ------------------------------------------------------- */
+  // Steps carry the facts (data-parts, data-counters, data-needs); this only
+  // maps the current step onto the figure's [data-part] groups.
+  function initSteppers() {
+    document.querySelectorAll("figure[data-block=stepper]").forEach(function (fig) {
+      var steps = Array.prototype.slice.call(fig.querySelectorAll(".stepper-steps > li"));
+      if (!steps.length) return;
+      var held = fig.querySelector(".stepper-held");
+      var asides = Array.prototype.slice.call(fig.querySelectorAll(".stepper-held, .stepper-off"));
+      var offs = {};
+      asides.forEach(function (a) { if (a.hasAttribute("data-off-for")) offs[a.getAttribute("data-off-for")] = a; });
+      var stage = fig.querySelector(".stepper-stage");
+      var parts = Array.prototype.slice.call(fig.querySelectorAll(".stepper-stage [data-part]"));
+      var bar = Array.prototype.slice.call(fig.querySelectorAll(".stepper-bar button"));
+      var counters = Array.prototype.slice.call(fig.querySelectorAll("[data-counter]"));
+      var shows = Array.prototype.slice.call(fig.querySelectorAll(".stepper-stage [data-show]"));
+      var sw = fig.querySelector(".stepper-switch");
+      stage.querySelectorAll("path[data-flow]").forEach(function (line) {
+        var pulse = line.cloneNode(false);
+        ["data-flow", "id"].forEach(function (a) { pulse.removeAttribute(a); });
+        pulse.setAttribute("class", "flow-pulse");
+        pulse.style.setProperty("--len", line.getTotalLength());
+        pulse.setAttribute("aria-hidden", "true");
+        line.after(pulse);
+      });
+      var words = function (el) { return (el.getAttribute("data-parts") || "").split(" ").filter(Boolean); };
+      var named = {};
+      steps.concat(asides).forEach(function (s) { words(s).forEach(function (w) { named[w] = 1; }); });
+      var i = 0, on = true;
+
+      function render() {
+        var alt = on ? null : offs[i] || (held && steps[i].hasAttribute("data-needs") ? held : null);
+        var view = alt || steps[i];
+        var seen = {}, cur = {};
+        // With the switch off the story leaves out needs-switch steps and swaps in off: steps.
+        steps.slice(0, i).forEach(function (s, k) {
+          var told = on ? s : offs[k] || (s.hasAttribute("data-needs") ? null : s);
+          if (told) words(told).forEach(function (w) { seen[w] = 1; });
+        });
+        words(view).forEach(function (w) { cur[w] = 1; });
+        parts.forEach(function (p) {
+          var n = p.getAttribute("data-part");
+          p.setAttribute("data-state", cur[n] ? "current" : (seen[n] || !named[n]) ? "past" : "future");
+        });
+        var vals = JSON.parse(steps[i].getAttribute(on ? "data-counters" : "data-off-counters") || "{}");
+        if (sw) vals["switch"] = on ? "on" : "off";
+        counters.forEach(function (c) {
+          var b = c.querySelector("b"), v = vals[c.getAttribute("data-counter")];
+          c.classList.toggle("is-changed", b.textContent !== v);
+          b.textContent = v;
+        });
+        shows.forEach(function (g) {
+          var kv = g.getAttribute("data-show"), at = kv.indexOf("=");
+          var was = g.hasAttribute("data-on"), now = vals[kv.slice(0, at)] === kv.slice(at + 1);
+          g.toggleAttribute("data-on", now);
+          // A count drawn in the figure (a number value) that just came on is marked like a changed counter.
+          g.classList.toggle("is-changed", now && !was && /^-?\d+(\.\d+)?$/.test(kv.slice(at + 1)));
+        });
+        fig.classList.toggle("is-off", !on);
+        steps.concat(asides).forEach(function (s) { s.classList.toggle("is-current", s === view); });
+        bar.forEach(function (b, n) {
+          if (n === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+          b.classList.toggle("is-past", n < i);
+          b.classList.toggle("is-waiting", !on && steps[n].hasAttribute("data-needs"));
+        });
+        var hadFocus = fig.contains(document.activeElement);
+        fig.querySelector(".stepper-prev").disabled = i === 0;
+        fig.querySelector(".stepper-next").disabled = i === steps.length - 1;
+        // Disabling the focused button drops focus out of the stepper; keep it inside.
+        if (hadFocus && (!fig.contains(document.activeElement) || document.activeElement.disabled)) bar[i].focus();
+        if (sw) {
+          sw.setAttribute("aria-checked", on ? "true" : "false");
+          sw.querySelector(".stepper-switch-state").textContent = on ? "on" : "off";
+        }
+        // A narrow stage scrolls. From the figure's start, pan only as far as the current parts need;
+        // if they cannot all fit, keep the first one named whole, then as many others as fit. Empty parts are skipped.
+        if (stage && stage.scrollWidth > stage.clientWidth) {
+          var spans = words(view).map(function (w) {
+            var b = null;
+            parts.forEach(function (p) {
+              if (p.getAttribute("data-part") !== w) return;
+              var r = p.getBoundingClientRect();
+              if (!r.width && !r.height) return;
+              b = b ? { l: Math.min(b.l, r.left), r: Math.max(b.r, r.right) } : { l: r.left, r: r.right };
+            });
+            return b;
+          }).filter(Boolean);
+          if (spans.length) {
+            var x0 = stage.getBoundingClientRect().left + stage.clientLeft - stage.scrollLeft, m = 12;
+            var W = stage.clientWidth, end = stage.scrollWidth - W;
+            spans = spans.map(function (b) { return { l: b.l - x0, r: b.r - x0 }; });
+            var left = Math.min.apply(null, spans.map(function (b) { return b.l; }));
+            var right = Math.max.apply(null, spans.map(function (b) { return b.r; }));
+            if (right - left <= W) stage.scrollLeft = Math.min(right + m - W, left);
+            else {
+              // No margin here: it would cut a part that only just fits. Candidate views line a part up
+              // with either edge; ties go to the one nearest the start.
+              m = 0;
+              var f = spans[0], lo = Math.min(f.r + m - W, f.l - m), hi = f.l - m, best = null;
+              spans.forEach(function (s) {
+                [s.l - m, s.r + m - W].forEach(function (o) {
+                  o = Math.max(0, Math.min(end, Math.min(hi, Math.max(lo, o))));
+                  var n = spans.filter(function (t) { return t.l >= o && t.r <= o + W; }).length;
+                  if (!best || n > best.n || (n === best.n && o < best.o)) best = { n: n, o: o };
+                });
+              });
+              stage.scrollLeft = best.o;
+            }
+          }
+        }
+      }
+      function go(n) { i = Math.max(0, Math.min(steps.length - 1, n)); render(); }
+      // Clicking a part goes to the first step that names it, unless the current step does.
+      parts.forEach(function (p) {
+        var name = p.getAttribute("data-part");
+        var n = steps.findIndex(function (s) { return words(s).indexOf(name) >= 0; });
+        if (n < 0) return;
+        p.setAttribute("data-goto", "");
+        p.addEventListener("click", function (ev) {
+          if (!ev.target.closest("a") && words(steps[i]).indexOf(name) < 0) go(n);
+        });
+      });
+
+      fig.querySelector(".stepper-prev").addEventListener("click", function () { go(i - 1); });
+      fig.querySelector(".stepper-next").addEventListener("click", function () { go(i + 1); });
+      bar.forEach(function (b, n) { b.addEventListener("click", function () { go(n); }); });
+      if (sw) sw.addEventListener("click", function () { on = !on; render(); });
+      fig.addEventListener("keydown", function (ev) {
+        if (ev.target.closest("input, textarea, select")) return;
+        if (ev.key === "ArrowRight") { ev.preventDefault(); go(i + 1); }
+        else if (ev.key === "ArrowLeft") { ev.preventDefault(); go(i - 1); }
+      });
+      fig.classList.add("is-live");
+      render();
+    });
+  }
+
   /* ----- Mermaid -------------------------------------------------------- */
-  var mermaidReady = false;
   var mermaidBusy = false;
 
   // Kill mermaid's own DOMContentLoaded auto-start SYNCHRONOUSLY, before it can
@@ -142,10 +292,7 @@
     if (typeof window.mermaid === "undefined") return; // --lean output
     var nodes = document.querySelectorAll("pre.mermaid");
     if (!nodes.length) return;
-    // SERIALIZE: the page calls this both on initial theme apply AND on boot, so
-    // two passes can otherwise run concurrently — re-initializing mermaid mid-run
-    // and non-deterministically dropping the per-run config (diagrams came out
-    // classic instead of hand-drawn). One render at a time; skip overlaps.
+    // One render at a time: re-initializing mermaid mid-run drops the run's config.
     if (mermaidBusy) return;
     mermaidBusy = true;
 
@@ -161,39 +308,110 @@
         }
       });
 
-      // Load the hand-drawn font BEFORE mermaid measures text. If the font is not
-      // ready at measure time, node boxes are sized for the fallback metrics and
-      // the wider Virgil glyphs overflow/clip. Each diagram's look (handDrawn or
-      // clean) is declared in its own source frontmatter, so it is deterministic.
-      if (document.fonts && document.fonts.load) {
+      // Hand-drawn diagrams need Virgil loaded BEFORE mermaid measures text, or
+      // node boxes are sized for fallback metrics and the wider glyphs clip.
+      // Mermaid measures with the GLOBAL font, so one hand-drawn diagram makes
+      // Virgil the page-wide diagram font.
+      var handDrawn = !!document.querySelector('pre.mermaid[data-look="handDrawn"]');
+      if (handDrawn && document.fonts && document.fonts.load) {
         try {
           await document.fonts.load('16px "Virgil"');
           await document.fonts.ready;
         } catch (e) { /* fall back to default metrics */ }
       }
 
-      window.mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: "strict",
-        look: "handDrawn",
-        theme: theme === "dark" ? "dark" : "neutral",
-        themeVariables: { fontFamily: '"Virgil", "Segoe Print", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }
-      });
+      var css = getComputedStyle(root);
+      var tok = function (name) { return css.getPropertyValue(name).trim(); };
+      var font = handDrawn
+        ? '"Virgil", "Segoe Print", ' + tok("--sans")
+        : tok("--sans");
+      var config = { startOnLoad: false, securityLevel: "strict" };
+      if (root.getAttribute("data-pf-theme") === "manual") {
+        config.theme = theme === "dark" ? "dark" : "neutral";
+        config.themeVariables = { fontFamily: font };
+      } else {
+        // Mermaid's base theme derives its palette from these, so diagrams follow the page tokens.
+        config.theme = "base";
+        config.themeVariables = {
+          darkMode: theme === "dark",
+          fontFamily: font,
+          fontSize: "14px",
+          background: tok("--bg"),
+          primaryColor: tok("--bg"),
+          primaryTextColor: tok("--fg"),
+          primaryBorderColor: tok("--fg"),
+          secondaryColor: tok("--bg-sunken"),
+          tertiaryColor: tok("--bg-sunken"),
+          lineColor: tok("--fg-muted"),
+          textColor: tok("--fg"),
+          edgeLabelBackground: tok("--bg"),
+          clusterBkg: tok("--bg-sunken"),
+          clusterBorder: tok("--border"),
+          noteBkgColor: tok("--bg-sunken"),
+          noteTextColor: tok("--fg"),
+          noteBorderColor: tok("--border")
+        };
+      }
+      window.mermaid.initialize(config);
       await window.mermaid.run({ querySelector: "pre.mermaid" });
+      // Don't let a wide diagram shrink below 60% of its natural size; scroll it instead.
+      document.querySelectorAll("pre.mermaid svg").forEach(function (svg) {
+        var vb = svg.viewBox && svg.viewBox.baseVal;
+        if (vb && vb.width) svg.style.minWidth = Math.round(vb.width * 0.6) + "px";
+      });
     } catch (e) {
       // Leave the raw source visible rather than blanking the diagram.
       if (window.console && console.warn) console.warn("mermaid render failed:", e);
     } finally {
-      mermaidReady = true;
       mermaidBusy = false;
     }
   }
 
   /* ----- Boot ----------------------------------------------------------- */
+  /* ----- Embeds: poster first, a sandboxed iframe on Run -------------- */
+  var EMBED_TOKENS = ["--bg", "--bg-sunken", "--fg", "--fg-muted", "--fg-faint", "--border",
+    "--accent", "--accent-fg", "--accent-soft", "--pos", "--neg", "--sans", "--mono"];
+
+  function embedTokens() {
+    var cs = getComputedStyle(root);
+    var decl = EMBED_TOKENS.map(function (t) { return t + ":" + cs.getPropertyValue(t).trim(); });
+    decl.push("color-scheme:" + (root.getAttribute("data-theme") === "dark" ? "dark" : "light"));
+    return "<style>:root{" + decl.join(";") + "}</style>";
+  }
+
+  function runEmbed(stage) {
+    var old = stage.querySelector("iframe");
+    if (old) old.remove();
+    var f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-scripts");
+    var cap = stage.parentNode.querySelector("figcaption");
+    f.title = cap ? cap.textContent : "Embed";
+    var tokens = embedTokens();
+    f.srcdoc = stage.dataset.srcdoc.replace("<!--pf-tokens-->", function () { return tokens; });
+    stage.append(f);
+    stage.classList.add("is-running");
+  }
+
+  function initEmbeds() {
+    var stages = document.querySelectorAll(".embed-stage[data-srcdoc]");
+    stages.forEach(function (stage) {
+      var run = stage.querySelector(".embed-run");
+      run.hidden = false;
+      run.addEventListener("click", function () { runEmbed(stage); });
+    });
+    if (!stages.length) return;
+    new MutationObserver(function () {
+      document.querySelectorAll(".embed-stage.is-running").forEach(runEmbed);
+    }).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
   function boot() {
     initTabs();
     initScrollspy();
-    if (!mermaidReady) renderMermaid(root.getAttribute("data-theme") || "light");
+    initTopbarTitle();
+    initSteppers();
+    initEmbeds();
+    renderMermaid(root.getAttribute("data-theme") || "light");
   }
 
   if (document.readyState === "loading") {

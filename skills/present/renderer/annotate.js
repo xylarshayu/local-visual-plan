@@ -1368,7 +1368,11 @@
     '<button type="button" class="pf-pill-btn pf-pill-progress" data-pf-progress aria-label="Review progress — open panel" title="Review progress">0%</button>' +
     '<button type="button" class="pf-pill-btn" data-pf-present aria-label="Presenter mode" hidden>Present</button>' +
     '<button type="button" class="pf-pill-btn" data-pf-export aria-label="Open export">Export</button>';
-  document.body.appendChild(pill);
+  // On a wide screen the bar sits in the top bar, where it covers nothing.
+  var wideMq = window.matchMedia("(min-width: 900px)"), topbar = document.querySelector(".topbar-inner");
+  function placePill() { (wideMq.matches && topbar ? topbar : document.body).appendChild(pill); }
+  placePill();
+  wideMq.addEventListener("change", placePill);
   var addBtn = pill.querySelector("[data-pf-add]");
   var countEl = pill.querySelector("[data-pf-count]");
 
@@ -1571,14 +1575,13 @@
   }
 
   /* ----- Initial hash reveal ------------------------------------------- */
+  // A plain "#chapters" from another page lands on the heading "h:chapters".
   function handleInitialHash() {
     var h = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+    if (h && !elForAnchor(h) && elForAnchor("h:" + h)) h = "h:" + h;
     if (h && elForAnchor(h)) jumpTo(h);
   }
-  window.addEventListener("hashchange", function () {
-    var h = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
-    if (h && elForAnchor(h)) jumpTo(h);
-  });
+  window.addEventListener("hashchange", handleInitialHash);
 
   /* ----- Boot ----------------------------------------------------------- */
   function boot() {

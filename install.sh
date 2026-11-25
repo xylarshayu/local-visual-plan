@@ -5,7 +5,7 @@
 # Architecture: ONE engine (skills/present/renderer, which holds render.mjs,
 # recap.mjs, annotate.js, check.mjs) owned by the base `present` skill, with
 # `present-plan` and `present-recap` as thin workflow adapters on top. Each
-# installed skill gets its own self-sufficient copy of the engine + references,
+# installed skill gets its own self-sufficient copy of the engine, references and figures,
 # so no install ever depends on another skill (or this repo's path) being
 # present.
 #
@@ -60,6 +60,7 @@ for base in $BASES; do
     cp "$SCRIPT_DIR/skills/$s/SKILL.md" "$dest/SKILL.md"
     cp -R "$BASE/renderer" "$dest/renderer"
     cp -R "$BASE/references" "$dest/references"
+    cp -R "$BASE/figures" "$dest/figures"
     echo "  installed -> $dest  (shares the present engine)"
   done
   echo

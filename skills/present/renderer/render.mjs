@@ -12,8 +12,8 @@
 // CLI:
 //   node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open]
 
-import { readFileSync, writeFileSync, mkdirSync, accessSync, constants } from "node:fs";
-import { dirname, resolve, join } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, accessSync, constants, existsSync } from "node:fs";
+import { dirname, resolve, join, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { marked } from "./vendor/marked.esm.js";
@@ -41,7 +41,7 @@ const esc = escapeHtml;
  * ========================================================================== */
 
 function parseFrontmatter(src) {
-  const fm = { title: "", objective: "", status: "" };
+  const fm = { title: "", objective: "", status: "", theme: "", repos: [] };
   let body = src;
   // bodyOffset: 0-based index, in the ORIGINAL source's line array, of the first
   // line of `body`. Custom-block / chapter line ranges are computed relative to
@@ -61,10 +61,18 @@ function parseFrontmatter(src) {
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
         val = val.slice(1, -1);
       }
-      if (key === "title" || key === "objective" || key === "status") fm[key] = val;
+      if (key === "repo") fm.repos.push(val);
+      else if (typeof fm[key] === "string") fm[key] = val;
     }
     body = src.slice(m[0].length);
     bodyOffset = (m[0].match(/\n/g) || []).length;
+  }
+  // With no title, a leading `# H1` is the title. Its line is blanked, not removed, so line numbers hold.
+  if (!fm.title) {
+    const lines = body.split("\n");
+    const i = lines.findIndex((l) => l.trim());
+    const h = i >= 0 && /^#[ \t]+(.+?)(?:[ \t]+#+)?\s*$/.exec(lines[i]);
+    if (h) { fm.title = h[1]; lines[i] = ""; body = lines.join("\n"); }
   }
   return { frontmatter: fm, body, bodyOffset };
 }
@@ -291,7 +299,7 @@ function sanitizeReplies(raw, warnings) {
 
 const KNOWN_BLOCKS = new Set([
   "steps", "filetree", "diff", "code", "diagram", "wireframe", "questions", "callout",
-  "data-model", "api-endpoint",
+  "data-model", "api-endpoint", "figure", "stepper", "embed",
 ]);
 
 // Parse `type key=value key="quoted value"` into { type, attrs }.
@@ -702,7 +710,8 @@ function withDiagramFrontmatter(src, look) {
 
 function renderDiagram(body, attrs, lean, ctx) {
   const reg = ctx.reg;
-  const look = attrs.look === "clean" ? "clean" : "handDrawn";
+  const look = attrs.look === "clean" || attrs.look === "handDrawn" ? attrs.look
+    : reg.theme === "manual" ? "handDrawn" : "clean";
   const idx = nextTypeIndex(reg, "diagram");
   const slugSrc = attrs.title || `diagram-${idx}`;
   const label = attrs.title || `diagram ${idx}`;
@@ -1142,12 +1151,367 @@ function renderApiEndpoint(body, attrs, ctx) {
   for (const s of sections) {
     const codeAttr = s.kind === "response" ? ` data-code="${esc(s.code)}"` : "";
     out += `<div class="api-section" data-section="${s.kind}"${codeAttr} data-pf-anchor="${esc(s.anchor)}" id="${esc(s.anchor)}">`;
-    out += `<span class="api-code">${s.kind === "request" ? "REQUEST" : esc(s.code)}</span>`;
+    out += `<span class="api-code">${s.kind === "request" ? "Request" : esc(s.code)}</span>`;
     out += renderJsonBody(s.bodyLines.join("\n"));
     out += "</div>";
   }
   out += "</figure>";
   return out;
+}
+
+/* ========================================================================== *
+ *  figure + stepper — an authored SVG, inlined and linted (format.md)
+ * ========================================================================== */
+
+const PAINT_PROPS = "fill|stroke|stop-color|color|flood-color|lighting-color";
+const PAINT_ATTR_RE = new RegExp(`\\s(${PAINT_PROPS})\\s*=\\s*["']([^"']*)["']`, "gi");
+const PAINT_PROP_RE = new RegExp(`^(${PAINT_PROPS})$`, "i");
+const SAFE_PAINT = /^(none|currentcolor|transparent|inherit|var\(--[\w-]+\)|url\(#[\w.-]+\))$/i;
+
+// Read, lint and inline one figure SVG. `prefix` namespaces its ids so two
+// figures on a page can share `id="arrow"`. Returns null when it can't be used.
+function loadFigure(src, prefix, title, desc, reg, warnings) {
+  const where = `figure ${src || "(no src)"}`;
+  if (!src) { warnings.push(`${where}: missing src`); return null; }
+  let text;
+  try { text = readFileSync(resolve(reg.baseDir, src), "utf8"); }
+  catch { warnings.push(`${where}: cannot read file`); return null; }
+  text = text.replace(/<\?xml[\s\S]*?\?>|<!DOCTYPE[^>]*>|<!--[\s\S]*?-->/gi, "");
+  const start = text.search(/<svg\b/i), end = text.lastIndexOf("</svg>");
+  if (start < 0 || end < start) { warnings.push(`${where}: no <svg> root`); return null; }
+  text = text.slice(start, end + 6);
+
+  if (/<script\b/i.test(text)) {
+    warnings.push(`${where}: <script> removed`);
+    text = text.replace(/<script\b[^>]*\/>|<script\b[\s\S]*?<\/script\s*>/gi, "");
+  }
+  if (/\son[a-z]+\s*=/i.test(text)) {
+    warnings.push(`${where}: event handler attributes removed`);
+    text = text.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, "");
+  }
+  for (const tag of ["foreignObject", "style"]) {
+    const re = new RegExp(`<${tag}\\b[^>]*\\/>|<${tag}\\b[\\s\\S]*?<\\/${tag}\\s*>`, "gi");
+    if (re.test(text)) {
+      warnings.push(`${where}: <${tag}> removed`);
+      text = text.replace(re, "");
+    }
+  }
+  text = text.replace(/\s(?:xlink:)?href\s*=\s*["']([^"']*)["']/gi, (m, url) => {
+    if (url.startsWith("#")) return m;
+    warnings.push(`${where}: href "${url}" removed (only #id)`);
+    return "";
+  });
+  const paint = (prop, value) => {
+    if (!SAFE_PAINT.test(value.trim())) warnings.push(`${where}: ${prop}="${value.trim()}" is not a token colour`);
+  };
+  for (const m of text.matchAll(PAINT_ATTR_RE)) paint(m[1], m[2]);
+  for (const m of text.matchAll(/\sstyle\s*=\s*["']([^"']*)["']/gi)) {
+    for (const decl of m[1].split(";")) {
+      const i = decl.indexOf(":");
+      if (i > 0 && PAINT_PROP_RE.test(decl.slice(0, i).trim())) paint(decl.slice(0, i).trim(), decl.slice(i + 1));
+    }
+  }
+
+  const parts = [...text.matchAll(/\sdata-part\s*=\s*["']([^"']*)["']/g)].map((m) => m[1]);
+  const seen = new Set();
+  for (const p of parts) {
+    if (seen.has(p)) warnings.push(`${where}: data-part "${p}" is used more than once`);
+    seen.add(p);
+  }
+  const accents = (text.match(/\sdata-accent\b/g) || []).length;
+
+  const ids = new Set([...text.matchAll(/\sid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]));
+  const links = [...text.matchAll(/\s(?:xlink:)?href\s*=\s*["']#([^"']+)/g)].map((m) => m[1]).filter((id) => !ids.has(id));
+  for (const id of links) reg.pageLinks.set(`${where}: link "#${id}"`, id);
+  text = text
+    .replace(/(\sid\s*=\s*["'])([^"']+)/g, (m, a, id) => a + prefix + id)
+    .replace(/url\(#([\w.-]+)\)/g, (m, id) => (ids.has(id) ? `url(#${prefix}${id})` : m))
+    .replace(/(\s(?:xlink:)?href\s*=\s*["']#)([^"']+)/g, (m, a, id) => (ids.has(id) ? a + prefix + id : m));
+
+  const rootM = /^<svg\b([^>]*)>/i.exec(text);
+  let attrs = rootM[1];
+  const vb = /\sviewBox\s*=\s*["']([^"']+)["']/i.exec(attrs);
+  if (!vb) warnings.push(`${where}: the root <svg> has no viewBox`);
+  const [, , width = 0, height = 0] = vb ? vb[1].trim().split(/[\s,]+/).map((n) => parseFloat(n) || 0) : [];
+  attrs = attrs.replace(/\s(width|height|style|role|aria-[\w-]+)\s*=\s*("[^"]*"|'[^']*')/gi, "");
+  // A page link inside role="img" would be hidden from screen readers.
+  const open = `<svg${attrs} role="${links.length ? "group" : "img"}" aria-labelledby="${prefix}title" aria-describedby="${prefix}desc">`
+    + `<title id="${prefix}title">${esc(title || "Figure")}</title><desc id="${prefix}desc">${esc(desc)}</desc>`;
+  return { svg: open + text.slice(rootM[0].length), parts: seen, accents, size: width ? ` style="--fig-w:${Math.round(width)}px${height ? `;--fig-ar:${+(width / height).toFixed(4)}` : ""}"` : "" };
+}
+
+function renderFigure(body, attrs, ctx, warnings) {
+  const reg = ctx.reg;
+  const idx = nextTypeIndex(reg, "figure");
+  const label = attrs.title || `figure ${idx}`;
+  const anchor = registerAnchor(reg, "figure", attrs.title || attrs.src || `figure-${idx}`, label, ctx.blockLines, body);
+  const desc = body.trim().replace(/\s+/g, " ");
+  if (!desc) warnings.push(`figure ${attrs.src || "(no src)"}: the body (what the figure shows) is empty`);
+  const fig = loadFigure(attrs.src, `fig${idx}-`, attrs.title, desc, reg, warnings);
+  if (fig && fig.accents > 2) warnings.push(`figure ${attrs.src}: ${fig.accents} data-accent elements (at most 2)`);
+  if (fig && /\sdata-show\s*=/.test(fig.svg)) warnings.push(`figure ${attrs.src}: data-show works only in a stepper with state: or switch:`);
+  let out = `<figure data-block="figure" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}"${fig ? fig.size : ""}>`;
+  if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
+  out += fig ? `<div class="figure-stage">${fig.svg}</div>` : `<p class="figure-fallback">${esc(desc)}</p>`;
+  return out + "</figure>";
+}
+
+// The embed runs in an opaque-origin sandbox; this CSP also denies it every fetch.
+export const EMBED_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+  "img-src data: blob:; font-src data:; media-src data: blob:; base-uri 'none'; form-action 'none'";
+const EMBED_MAX_BYTES = 2 * 1024 * 1024;
+const POSTER_TYPES = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+
+function renderEmbed(body, attrs, ctx, warnings) {
+  const reg = ctx.reg;
+  const idx = nextTypeIndex(reg, "embed");
+  const where = `embed ${attrs.src || "(no src)"}`;
+  const anchor = registerAnchor(reg, "embed", attrs.title || attrs.src || `embed-${idx}`, attrs.title || `embed ${idx}`, ctx.blockLines, body);
+  const note = body.trim();
+  if (!note) warnings.push(`${where}: the body (what to try and what it shows) is empty`);
+  if (idx === 3) warnings.push("more than 2 embeds on the page (at most 2)");
+
+  let poster = null;
+  if (!attrs.poster) warnings.push(`${where}: missing poster; only the body is shown`);
+  else {
+    const type = POSTER_TYPES[attrs.poster.split(".").pop().toLowerCase()];
+    if (!type) warnings.push(`${where}: poster must be .svg, .png, .jpg or .webp`);
+    else {
+      try { poster = `data:${type};base64,${readFileSync(resolve(reg.baseDir, attrs.poster)).toString("base64")}`; }
+      catch { warnings.push(`${where}: cannot read poster ${attrs.poster}`); }
+    }
+  }
+
+  let doc = null;
+  if (!attrs.src) warnings.push(`${where}: missing src`);
+  else if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(attrs.src)) warnings.push(`${where}: src must be a local file, not a URL`);
+  else {
+    let file = null;
+    try { file = readFileSync(resolve(reg.baseDir, attrs.src)); }
+    catch { warnings.push(`${where}: cannot read file`); }
+    if (file && file.length > EMBED_MAX_BYTES) warnings.push(`${where}: file is over 2 MB`);
+    else if (file) {
+      const text = file.toString("utf8");
+      const remote = /(?:https?:)?\/\/[\w-]+(?:\.[\w-]+)+/i.exec(text);
+      if (remote) warnings.push(`${where}: remote reference "${remote[0]}" will be blocked (an embed has no network)`);
+      doc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="${EMBED_CSP}"><!--pf-tokens-->${text}`;
+    }
+  }
+
+  const height = Math.min(1200, Math.max(120, parseInt(attrs.height, 10) || 420));
+  let out = `<figure data-block="embed" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}">`;
+  if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
+  if (poster) {
+    out += `<div class="embed-stage" style="--embed-h:${height}px"${doc ? ` data-srcdoc="${esc(doc)}"` : ""}>`;
+    out += `<img class="embed-poster" src="${poster}" alt="${esc(note.replace(/\s+/g, " "))}">`;
+    if (doc) out += `<button type="button" class="embed-run" aria-label="Run ${esc(attrs.title || "the embed")}" hidden>Run</button>`;
+    out += "</div>";
+  }
+  if (note) out += `<div class="embed-note">${neutralizeRemoteRefs(marked.parse(note))}</div>`;
+  return out + "</figure>";
+}
+
+const inlineMd = (s) => neutralizeRemoteRefs(marked.parseInline(s));
+
+const STEPPER_LIMITS = { counters: 3, steps: 10 };
+
+// Parse the stepper body: header lines (counter:, switch:), then `# title` steps
+// whose setting lines come first and whose remaining lines are narration.
+function findGitRoot(dir) {
+  for (let d = dir; ; d = dirname(d)) {
+    if (existsSync(join(d, ".git"))) return d;
+    if (dirname(d) === d) return null;
+  }
+}
+
+function parseStepper(body, where, warnings) {
+  const counters = [];
+  const states = [];
+  const code = [];
+  let switchLabel = null;
+  const steps = [];
+  let cur = null;
+  body.split(/\r?\n/).forEach((raw, idx) => {
+    const line = raw.trim();
+    const h = /^#\s+(.*)$/.exec(line);
+    if (h) {
+      cur = { title: h[1].trim(), parts: [], key: "", changed: [], set: {}, needs: false, held: false, off: "",
+        narration: [], inBody: false, startIdx: idx, endIdx: idx };
+      steps.push(cur);
+      return;
+    }
+    let m;
+    if (!cur) {
+      if ((m = /^counter:\s*([\w-]+)\s*\|\s*(.+)$/.exec(line))) counters.push({ name: m[1], label: m[2].trim() });
+      else if ((m = /^state:\s*(.*)$/.exec(line))) {
+        const [name, ...values] = m[1].split(/\s+/).filter(Boolean);
+        if (values.length < 2) warnings.push(`${where}: "${line}" needs a name and at least two values`);
+        else states.push({ name, values });
+      }
+      else if ((m = /^(code|docs):\s*(\S+)\s+(.+)$/.exec(line))) code.push({ kind: m[1], part: m[2], path: m[3].trim() });
+      else if (/^(code|docs):/.test(line)) warnings.push(`${where}: "${line}" needs a part and a path`);
+      else if ((m = /^switch:\s*(.+)$/.exec(line))) {
+        if (switchLabel) warnings.push(`${where}: more than one switch (at most 1)`);
+        else switchLabel = m[1].trim();
+      } else if (line) warnings.push(`${where}: unrecognised line before the first step: "${line}"`);
+      return;
+    }
+    if (line) cur.endIdx = idx;
+    if (!cur.inBody) {
+      if (!line) return;
+      if ((m = /^parts:\s*(.*)$/.exec(line))) { cur.parts.push(...m[1].split(/\s+/).filter(Boolean)); return; }
+      if ((m = /^key:\s*(.*)$/.exec(line))) { cur.key = m[1]; return; }
+      if ((m = /^changed:\s*(.*)$/.exec(line))) { cur.changed.push(m[1]); return; }
+      if ((m = /^set:\s*(.*)$/.exec(line))) {
+        for (const kv of m[1].split(/,|\s+(?=[\w-]+=)/)) {
+          const i = kv.indexOf("=");
+          if (i > 0) cur.set[kv.slice(0, i).trim()] = kv.slice(i + 1).trim();
+          else if (kv.trim()) warnings.push(`${where}: "set: ${kv.trim()}" needs name=value`);
+        }
+        return;
+      }
+      if (line === "needs: switch") { cur.needs = true; return; }
+      if (line === "held") { cur.held = true; return; }
+      if ((m = /^off:\s*(.+)$/.exec(line))) { cur.off = m[1].trim(); return; }
+      cur.inBody = true;
+    }
+    cur.narration.push(raw);
+  });
+  return { counters, states, switchLabel, steps, code };
+}
+
+function renderStepper(body, attrs, ctx, warnings) {
+  const reg = ctx.reg;
+  const idx = nextTypeIndex(reg, "stepper");
+  const where = `stepper ${attrs.title || attrs.figure || idx}`;
+  const label = attrs.title || `stepper ${idx}`;
+  const anchor = registerAnchor(reg, "stepper", attrs.title || `stepper-${idx}`, label, ctx.blockLines, body);
+  const { counters: allCounters, states, switchLabel, steps, code: allCode } = parseStepper(body, where, warnings);
+
+  if (allCounters.length > STEPPER_LIMITS.counters) warnings.push(`${where}: ${allCounters.length} counters (at most ${STEPPER_LIMITS.counters})`);
+  const counters = allCounters.slice(0, STEPPER_LIMITS.counters);
+  const helds = steps.filter((s) => s.held);
+  if (helds.length > 1) warnings.push(`${where}: more than one held step (at most 1)`);
+  const held = helds[0] || null;
+  const seq = steps.filter((s) => s !== held && !s.off);
+  if (!seq.length) warnings.push(`${where}: no steps`);
+  if (seq.length > STEPPER_LIMITS.steps) warnings.push(`${where}: ${seq.length} steps (at most ${STEPPER_LIMITS.steps})`);
+  const firstNeed = seq.findIndex((s) => s.needs);
+  if (!switchLabel && (held || firstNeed >= 0)) warnings.push(`${where}: "needs: switch" or "held" without a switch in the header`);
+  // An off: step stands in for the step it names while the switch is off.
+  const offFor = new Map();
+  for (const s of steps.filter((x) => x.off && x !== held)) {
+    const t = seq.findIndex((x) => x.title === s.off);
+    if (!switchLabel) warnings.push(`${where}: "off: ${s.off}" without a switch in the header`);
+    if (t < 0) warnings.push(`${where}: "off: ${s.off}" names no step`);
+    else if (offFor.has(t)) warnings.push(`${where}: more than one off: step for "${s.off}"`);
+    else offFor.set(t, s);
+  }
+  if (switchLabel && !held && !offFor.size) warnings.push(`${where}: a switch with no held or off: step`);
+  if (held && firstNeed < 0) warnings.push(`${where}: a held step but no step has "needs: switch"`);
+
+  const desc = seq.map((s, i) => `${i + 1}. ${s.title}`).join(" ");
+  const fig = loadFigure(attrs.figure, `stp${idx}-`, attrs.title, desc, reg, warnings);
+  const stateOf = Object.fromEntries(states.map((st) => [st.name, st.values]));
+  for (const c of counters) if (stateOf[c.name]) warnings.push(`${where}: "${c.name}" is both a counter and a state`);
+  const names = new Set([...counters.map((c) => c.name), ...states.map((st) => st.name)]);
+  for (const s of steps) {
+    if (!s.key) warnings.push(`${where}: step "${s.title}" has no key:`);
+    for (const [n, v] of Object.entries(s.set)) {
+      if (!names.has(n)) warnings.push(`${where}: step "${s.title}" sets unknown counter or state "${n}"`);
+      else if (stateOf[n] && !stateOf[n].includes(v)) warnings.push(`${where}: step "${s.title}" sets ${n} to "${v}", which is not one of: ${stateOf[n].join(" ")}`);
+    }
+    if (fig) for (const p of s.parts) if (!fig.parts.has(p)) warnings.push(`${where}: step "${s.title}" names part "${p}", which the figure does not have`);
+  }
+  // A data-show group is drawn at the state's first value (data-init, kept for print); script moves data-on.
+  // With a switch, `switch=on` and `switch=off` are shown too.
+  if (fig) {
+    const bad = new Set();
+    const showOf = switchLabel && !stateOf.switch ? { ...stateOf, switch: ["on", "off"] } : stateOf;
+    fig.svg = fig.svg.replace(/(\sdata-show\s*=\s*(["']))(.*?)\2/g, (m, a, q, kv) => {
+      const [n, v] = kv.split("=");
+      if (v === undefined) bad.add(`data-show "${kv}" needs name=value`);
+      else if (!showOf[n]) bad.add(`data-show "${kv}" names no state`);
+      else if (!showOf[n].includes(v)) bad.add(`data-show "${kv}": ${n} is one of: ${showOf[n].join(" ")}`);
+      return showOf[n] && showOf[n][0] === v ? m + " data-init data-on" : m;
+    });
+    for (const b of bad) warnings.push(`${where}: ${b}`);
+  }
+  // The first repo: is the page's own; only its paths can be checked on disk.
+  const home = reg.repos[0];
+  const code = [];
+  for (const c of allCode) {
+    if (fig && !fig.parts.has(c.part)) { warnings.push(`${where}: ${c.kind}: unknown part "${c.part}"`); continue; }
+    const bar = c.path.search(/\s\|\s/);
+    const ref = bar < 0 ? c.path : c.path.slice(0, bar).trim(), note = bar < 0 ? "" : c.path.slice(bar + 3).trim();
+    const named = /^(\S+)\s+(\S.*)$/.exec(ref);
+    const hit = named && reg.repos.find((r) => r.name && r.name === named[1]);
+    const repo = hit || home, path = hit ? named[2] : ref;
+    if (isAbsolute(path) || path.split("/").includes("..")) { warnings.push(`${where}: ${c.kind} path "${path}" must be relative to the repo root`); continue; }
+    if (repo === home && reg.gitRoot && !existsSync(join(reg.gitRoot, path))) warnings.push(`${where}: ${c.kind} path "${path}" is not in the repo (${reg.gitRoot})`);
+    code.push({ kind: c.kind, part: c.part, repo, path, note });
+  }
+  const codeItem = ({ repo, path, note }) => {
+    const word = repo && repo.name ? `<span class="stepper-repo" title="${esc(repo.url)}">${esc(repo.name)}</span> ` : "";
+    const [, dir = "", leaf] = /^(.*\/)?([^/]+\/?)$/.exec(path) || [, "", path];
+    const shown = `<code>${dir ? `<span class="stepper-dir">${esc(dir)}</span>` : ""}${esc(leaf)}</code>`;
+    const link = repo ? `<a href="${esc(repo.url + "/" + path.split("/").map(encodeURIComponent).join("/"))}" target="_blank" rel="noopener">${shown}</a>` : shown;
+    return `<li>${word}${link}${note ? ` <span class="stepper-note">${esc(note)}</span>` : ""}</li>`;
+  };
+
+  // Counter values per step, carried forward. With the switch off the story is the steps
+  // without "needs: switch", off: steps swapped in; a held step shows that story so far plus its own set:.
+  const pick = (set) => Object.fromEntries(Object.entries(set).filter(([k, v]) => names.has(k) && (!stateOf[k] || stateOf[k].includes(v))));
+  const vals = Object.fromEntries([...counters.map((c) => [c.name, "0"]), ...states.map((st) => [st.name, st.values[0]])]);
+  const offVals = { ...vals };
+  seq.forEach((s, i) => {
+    Object.assign(vals, pick(s.set));
+    s.values = { ...vals };
+    const off = offFor.get(i);
+    if (off) Object.assign(offVals, pick(off.set));
+    else if (!s.needs) Object.assign(offVals, pick(s.set));
+    s.offValues = { ...offVals, ...(off || !s.needs ? {} : pick((held || s).set)) };
+    if (off) off.values = s.offValues;
+  });
+
+  const stepHtml = (s, tag, whereText, cls = "", more = "", shared = false) => {
+    const lines = ctx.bodyStartLine != null ? [ctx.bodyStartLine + s.startIdx, ctx.bodyStartLine + s.endIdx] : null;
+    const a = registerChildAnchor(reg, `${anchor}:${slugify(s.title || "step")}`, "stepper-step", s.title, lines, s.title + " " + s.key + " " + s.narration.join(" "));
+    let out = `<${tag} class="stepper-step${cls}" data-pf-anchor="${esc(a)}" id="${esc(a)}" data-parts="${esc(s.parts.join(" "))}" ${s.values ? ` data-counters="${esc(JSON.stringify(s.values))}"` : ""}${switchLabel && s.offValues ? ` data-off-counters="${esc(JSON.stringify(s.offValues))}"` : ""}${s.needs ? " data-needs" : ""}${more}>`;
+    out += `<p class="stepper-where">${esc(whereText)}</p>`;
+    if (shared) out += `<p class="stepper-shared">${esc(switchLabel)} off. This step does not need it.</p>`;
+    out += `<h3>${esc(s.title)}</h3>`;
+    const narration = s.narration.join("\n").trim();
+    if (narration) out += neutralizeRemoteRefs(marked.parse(narration));
+    if (s.key) out += `<div class="stepper-key"><p class="stepper-label">Key idea</p><p>${inlineMd(s.key)}</p></div>`;
+    if (s.changed.length) out += `<div class="stepper-changed"><p class="stepper-label">What changed</p><ul>${s.changed.map((c) => `<li>${inlineMd(c)}</li>`).join("")}</ul></div>`;
+    for (const [kind, label] of [["code", "In the code"], ["docs", "In the docs"]]) {
+      const items = [...new Set(code.filter((c) => c.kind === kind && s.parts.includes(c.part)).map(codeItem))];
+      if (items.length) out += `<div class="stepper-code" data-kind="${kind}"><p class="stepper-label">${label}</p><ul>${items.join("")}</ul></div>`;
+    }
+    return out + `</${tag}>`;
+  };
+
+  let out = `<figure data-block="stepper" data-pf-anchor="${esc(anchor)}" id="${esc(anchor)}"${fig ? fig.size : ""}>`;
+  if (attrs.title) out += `<figcaption>${esc(attrs.title)}</figcaption>`;
+  out += `<div class="stepper-grid"><div class="stepper-main">`;
+  out += fig ? `<div class="stepper-stage">${fig.svg}</div>` : "";
+  if (counters.length) {
+    const first = seq[0] ? seq[0].values : vals;
+    out += `<div class="stepper-counters">${counters.map((c) => `<p class="stepper-counter" data-counter="${esc(c.name)}"><b>${esc(first[c.name])}</b> ${esc(c.label)}</p>`).join("")}</div>`;
+  }
+  out += `<div class="stepper-controls">`;
+  out += `<button type="button" class="stepper-prev" aria-label="Previous step">&larr;</button><ol class="stepper-bar">`;
+  out += seq.map((s, i) => `<li><button type="button" data-step="${i}" aria-label="Step ${i + 1}: ${esc(s.title)}" title="${esc(s.title)}">${i + 1}</button></li>`).join("");
+  out += `</ol><button type="button" class="stepper-next" aria-label="Next step">&rarr;</button>`;
+  if (switchLabel) out += `<button type="button" class="stepper-switch" role="switch" aria-checked="true"><span class="stepper-track" aria-hidden="true"></span>${esc(switchLabel)} <span class="stepper-switch-state">on</span></button>`;
+  out += `</div></div><div class="stepper-rail" aria-live="polite"><ol class="stepper-steps">`;
+  out += seq.map((s, i) => stepHtml(s, "li", `Step ${i + 1} of ${seq.length}`, "", "", !!switchLabel && !s.needs && !offFor.has(i))).join("");
+  out += `</ol>`;
+  const offWhere = `${switchLabel || "Switch"} off`;
+  if (held) out += stepHtml(held, "aside", offWhere, " stepper-held");
+  for (const [t, s] of offFor) out += stepHtml(s, "aside", offWhere, " stepper-off", ` data-off-for="${t}"`);
+  return out + `</div></div></figure>`;
 }
 
 function renderUnknown(type, body) {
@@ -1166,6 +1530,9 @@ function renderBlock(type, attrs, body, lean, warnings, ctx) {
     case "callout": return renderCallout(body, attrs, ctx);
     case "data-model": return renderDataModel(body, attrs, ctx);
     case "api-endpoint": return renderApiEndpoint(body, attrs, ctx);
+    case "figure": return renderFigure(body, attrs, ctx, warnings);
+    case "stepper": return renderStepper(body, attrs, ctx, warnings);
+    case "embed": return renderEmbed(body, attrs, ctx, warnings);
     default:
       warnings.push(`unknown block type: ${type}`);
       return renderUnknown(type, body);
@@ -1442,24 +1809,21 @@ function configureMarked() {
   marked.setOptions({ gfm: true, breaks: false });
 }
 
-// Offline purity: the output is a self-contained file:// document that must not
-// load (or be able to load) any external resource at view time. Prose authored
-// in standard Markdown may legitimately contain links/images to remote URLs;
-// `marked` renders those as <a href="https://…"> / <img src="https://…">.
-// We keep the link *visible* (text + a title showing the original URL) but make
-// it inert so nothing is ever fetched and no external-URL token survives in an
-// attribute. Remote <img> become a labeled placeholder rather than a fetch.
+// Offline purity: the page must not load anything remote at view time. A remote
+// <img> becomes a labeled placeholder. A link to another site stays a real link
+// (a click is the reader's choice, not a load) and opens in a new tab.
 function neutralizeRemoteRefs(html) {
   const REMOTE = /^(?:https?:)?\/\//i;
-  // Anchors: drop a remote href, surface it as a (non-fetching) data attribute.
   html = html.replace(
     /<a\b([^>]*?)\shref\s*=\s*(["'])([^"']*)\2([^>]*)>/gi,
     (m, pre, q, url, post) => {
+      // A sibling page's source (`ch2.md`) is rendered next to it as `ch2.html`.
+      const sib = /^(?:\.\/)?([^/:?#]+)\.md(#.*)?$/i.exec(url.trim());
+      if (sib) return `<a${pre} href=${q}${sib[1]}.html${sib[2] || ""}${q}${post}>`;
       if (!REMOTE.test(url.trim())) return m;
-      // Strip the protocol/host so no external-URL token remains; keep the
-      // human-readable target for context, escaped, in a non-fetched attr.
-      const shown = url.replace(/^(?:https?:)?\/\//i, "");
-      return `<a${pre}${post} data-external-href="${esc(shown)}" title="external link (disabled offline): ${esc(shown)}">`;
+      const href = url.trim().replace(/^\/\//, "https://");
+      const extra = /\starget\s*=/i.test(pre + post) ? "" : ` target="_blank" rel="noopener"`;
+      return `<a${pre} href=${q}${href}${q}${post}${extra}>`;
     },
   );
   // Images with a remote src: replace with an inert labeled placeholder span.
@@ -1560,7 +1924,9 @@ function tagProseAnchors(html, reg) {
 function tagTableAnchors(html, reg) {
   const holdsToken = (s) => /[\x01\x02]|VPSEG/.test(s);
   const cellText = (s) => decodeEntitiesLite(stripTags(s)).replace(/\s+/g, " ").trim();
-  return html.replace(/<table>[\s\S]*?<\/table>/g, (tbl) => {
+  // Each prose table gets its own box, which scrolls sideways on a phone instead of the page.
+  return html.replace(/<table>[\s\S]*?<\/table>/g, (tbl) => `<div class="table-scroll">${tagTable(tbl)}</div>`);
+  function tagTable(tbl) {
     if (holdsToken(tbl)) return tbl;
     const headers = [];
     const headM = /<thead>([\s\S]*?)<\/thead>/.exec(tbl);
@@ -1597,7 +1963,7 @@ function tagTableAnchors(html, reg) {
       return `<tr data-pf-anchor="${esc(rowAnchor)}" id="${esc(rowAnchor)}">${newInner}</tr>`;
     });
     return out.slice(0, ti) + bodyPart;
-  });
+  }
 }
 
 // Plain fenced code blocks (```js and friends — NOT the custom `code` block,
@@ -1770,6 +2136,14 @@ function changesScript(changes) {
   });
 }
 
+const THEMES = new Set(["mono", "manual"]);
+function resolveTheme(value, warnings) {
+  const t = String(value || "mono").trim().toLowerCase();
+  if (THEMES.has(t)) return t;
+  warnings.push(`unknown theme "${value}"; using mono (known: mono, manual)`);
+  return "mono";
+}
+
 export function renderPlan(markdownSource, {
   lean = false,
   sourcePath = null,
@@ -1777,6 +2151,7 @@ export function renderPlan(markdownSource, {
   prevRenderedAt = null,   // the previous page's own render timestamp (for its history entry)
   prevHistory = null,      // the previous page's pf-history entries, carried forward
   replies = null,          // agent replies to reviewer notes: [{anchor, reply, note?}]
+  theme: themeOpt = null,  // "mono" | "manual"; overrides frontmatter `theme:`
 } = {}) {
   configureMarked();
   const source = String(markdownSource ?? "");
@@ -1787,6 +2162,21 @@ export function renderPlan(markdownSource, {
 
   // Shared anchor registry + doc identity (the feedback plumbing).
   const reg = createRegistry(source, sourcePath, title);
+  reg.theme = resolveTheme(themeOpt || frontmatter.theme, warnings);
+  reg.baseDir = sourcePath ? dirname(resolve(sourcePath)) : process.cwd();
+  reg.gitRoot = findGitRoot(reg.baseDir);
+  // Inside a repo the source path is repo-relative, so a committed page ships no local path.
+  if (sourcePath && reg.gitRoot) reg.sourcePath = relative(reg.gitRoot, resolve(sourcePath));
+  reg.repos = [];
+  reg.pageLinks = new Map();
+  for (const line of frontmatter.repos) {
+    const m = /^(?:(\S+)\s+)?(https?:\/\/\S+)$/i.exec(line);
+    if (m) reg.repos.push({ name: m[1] || "", url: m[2].replace(/\/+$/, "") });
+    else warnings.push(`repo: must be an http(s) URL, optionally after a short name, not "${line}"`);
+  }
+  if (reg.repos.length > 1 && reg.repos.some((r) => !r.name)) warnings.push("repo: with more than one repo, give each a short name (repo: Name URL)");
+  const names = reg.repos.map((r) => r.name).filter(Boolean);
+  for (const n of new Set(names.filter((n, i) => names.indexOf(n) !== i))) warnings.push(`repo: the name "${n}" is used more than once`);
   const docId = computeDocId(source);
 
   // Chapters are a top-level directive resolved BEFORE block extraction, so each
@@ -1795,6 +2185,7 @@ export function renderPlan(markdownSource, {
 
   const rendered = [];
   let bodyHtml = renderMarkdownSegment(chapters.html, lean, warnings, rendered, reg, bodyOffset);
+  for (const [msg, id] of reg.pageLinks) if (!bodyHtml.includes(` id="${esc(id)}"`)) warnings.push(`${msg} has no target on this page`);
 
   // Changed-since-previous-version marking: stamp `data-pf-changed` onto each
   // edited/new element (the attribute pair we emit is unique per anchor, so a
@@ -1862,9 +2253,14 @@ export function renderPlan(markdownSource, {
   // whole document body. Function replacements treat the value as a literal.
   const bodyValue = sketchyDefs + "\n" + bodyHtml;
   const bodyAttr = chapters.hasChapters ? ' data-has-chapters="true"' : "";
+  // A page that opens with a stepper (after at most one paragraph) lines its title up with it (styles.css).
+  const leads = /^(?:\s|<!--[\s\S]*?-->)*(?:<p\b[^>]*>(?:(?!<\/?p\b)[\s\S])*<\/p>(?:\s|<!--[\s\S]*?-->)*)?<figure data-block="stepper"[^>]*? style="([^"]*)"/.exec(bodyHtml);
+  const mainAttr = leads ? ` data-leads="stepper" style="${leads[1]}"` : "";
   let html = template
     .replace("<!-- TITLE -->", () => escapeHtml(title))
+    .replace("<!-- THEME -->", () => reg.theme)
     .replace("<!-- BODYATTR -->", () => bodyAttr)
+    .replace("<!-- MAINATTR -->", () => mainAttr)
     .replace("<!-- STATUS -->", () => statusHtml)
     .replaceAll("<!-- HEADING -->", () => escapeHtml(title))
     .replace("<!-- OBJECTIVE -->", () => objectiveHtml)
@@ -1948,6 +2344,8 @@ function parseArgs(argv) {
     else if (a === "--prev") { args.prev = argv[++i]; }
     else if (a.startsWith("--prev=")) { args.prev = a.slice("--prev=".length); }
     else if (a === "--replies") { args.replies = argv[++i]; }
+    else if (a === "--theme") { args.theme = argv[++i]; }
+    else if (a.startsWith("--theme=")) { args.theme = a.slice("--theme=".length); }
     else if (a.startsWith("--replies=")) { args.replies = a.slice("--replies=".length); }
     else if (a === "-h" || a === "--help") { args.help = true; }
     else if (!a.startsWith("-") && !args.input) { args.input = a; }
@@ -1956,7 +2354,7 @@ function parseArgs(argv) {
   return args;
 }
 
-const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open] [--github] [--prev <path>] [--fresh]
+const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open] [--github] [--prev <path>] [--fresh] [--theme mono|manual]
 
   <plan.md>     path to a plan written in the visual-plan format
   --out <path>  output HTML path (default: ./.visual-plans/<slug>/index.html)
@@ -1970,6 +2368,8 @@ const USAGE = `usage: node render.mjs <plan.md> [--out <path>] [--lean] [--open]
                 is used). Default: the page being overwritten at the output
                 path, when one exists.
   --fresh       no change highlights (skip the previous-version diff)
+  --theme <t>   mono (default) or manual (the original warm palette and
+                hand-drawn diagrams); overrides the frontmatter \`theme:\` key
   --replies <path>
                 JSON file of agent replies to reviewer notes, shown inline in
                 the page: {"replies":[{"anchor":"…","reply":"…","note":"…"?}]}
@@ -2036,6 +2436,7 @@ async function main() {
     prevRenderedAt: prev ? prev.renderedAt : null,
     prevHistory: prev ? prev.history : [],
     replies,
+    theme: args.theme,
   });
 
   let result;

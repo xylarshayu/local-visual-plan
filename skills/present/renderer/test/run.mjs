@@ -10,11 +10,12 @@
 // Run:  node skills/visual-plan/renderer/test/run.mjs
 
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { renderPlan, extractIsland, extractPrevVersion } from '../render.mjs'
+import { renderPlan, extractIsland, extractPrevVersion, EMBED_CSP } from '../render.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = join(__dirname, 'fixtures')
@@ -85,9 +86,10 @@ function fixture(name, body) {
 //      to a URL. Holds even when mermaid is inlined.
 // ---------------------------------------------------------------------------
 
-/** Strict: literally no external URL token anywhere in the supplied string. */
+/** Strict: no external URL token anywhere, except where a reader clicks: an <a href>. */
 function assertNoExternalUrl(html, where) {
   const offenders = []
+  html = html.replace(/<a\b[^>]*>/gi, (tag) => tag.replace(/\shref\s*=\s*(["'])[^"']*\1/i, ''))
   // http:// or https:// anywhere.
   for (const m of html.matchAll(/https?:\/\/[^\s"'`)<>]+/gi)) {
     offenders.push(m[0])
@@ -113,8 +115,9 @@ function assertNoNetworkFetch(html, where) {
   const offenders = []
 
   // <script src="http..."> or <link href="http..."> / <link href="//..."> etc.
-  const remoteAttr = /\b(?:src|href)\s*=\s*["'](?:https?:)?\/\/[^"']+["']/gi
-  for (const m of html.matchAll(remoteAttr)) offenders.push('remote attr: ' + m[0])
+  // A link the reader clicks (<a href>) is not a load; every other remote src/href is.
+  const remoteAttr = /<([a-z][\w-]*)\b[^>]*?\b(?:src|href)\s*=\s*["'](?:https?:)?\/\/[^"']+["']/gi
+  for (const m of html.matchAll(remoteAttr)) if (m[1].toLowerCase() !== 'a') offenders.push('remote attr: ' + m[0])
 
   // <img src="http...">, <iframe src="http...">, <source src="http..."> covered
   // by remoteAttr above. Also catch url(...) pointing at a remote in inline CSS.
@@ -397,6 +400,48 @@ fixture('all-blocks.md', (check) => {
   check('anchor map "source" carries the absolute path when provided', () => {
     const { html: h2 } = renderPlan(src, { sourcePath: '/abs/path/plan.md' })
     assert.equal(anchorMap(h2).source, '/abs/path/plan.md')
+  })
+
+  check('inside a git repo, "source" is repo-relative and no local path ships in the page', () => {
+    const { html: h2 } = renderPlan(src, { sourcePath: join(FIXTURES, 'all-blocks.md') })
+    assert.equal(anchorMap(h2).source, 'skills/present/renderer/test/fixtures/all-blocks.md')
+    assert.ok(!h2.includes(FIXTURES), 'the absolute fixtures path is nowhere in the page')
+  })
+
+  check('with no frontmatter title, a leading # H1 is the title, printed once, line numbers kept', () => {
+    const md = '\n# Sync, end to end\n\nIntro.\n\n```callout\nBody.\n```\n'
+    const { html: h2, slug } = renderPlan(md)
+    assert.equal(slug, 'sync-end-to-end')
+    assert.equal(anchorMap(h2).title, 'Sync, end to end')
+    assert.deepEqual(h2.match(/<h1\b[^>]*>[^<]*/g), ['<h1 class="plan-title">Sync, end to end'], 'one h1: the page title, not the body H1 again')
+    assert.deepEqual(anchorMap(h2).anchors['callout:info-1'].lines, [6, 8], 'a block after the H1 keeps its source lines')
+    const kept = renderPlan('---\ntitle: Front\n---\n# Body H1\n')
+    assert.equal(anchorMap(kept.html).title, 'Front')
+    assert.match(kept.html, /<h1[^>]*>Body H1<\/h1>/, 'with a frontmatter title the H1 stays in the body')
+    assert.equal(anchorMap(renderPlan('Intro.\n\n# Later H1\n').html).title, 'Untitled plan', 'only a leading H1 is the title')
+  })
+
+  check('a relative link to a sibling .md becomes .html; other links are left alone', () => {
+    const { html: h2 } = renderPlan('---\ntitle: T\n---\n[a](ch2.md) [b](./ch3.md#sync) [c](../other/ch4.md) [d](docs/x.md) [e](https://x.org/r.md) [f](notes.mdx)\n')
+    const hrefs = [...h2.matchAll(/<a\b[^>]*?href="([^"]*)"/g)].map((m) => m[1]).filter((h) => !h.startsWith('#'))
+    assert.deepEqual(hrefs, ['ch2.html', 'ch3.html#sync', '../other/ch4.md', 'docs/x.md', 'https://x.org/r.md', 'notes.mdx'])
+  })
+
+  check('a link to another site stays a real link that opens in a new tab; a remote image still never loads', () => {
+    const { html: h2 } = renderPlan('---\ntitle: T\n---\nSee [the docs](https://www.example.org/docs/api?x=1&y=2), [cdn](//cdn.example.org/a), [here](#top) and ![logo](https://img.example.org/l.png).\n\n```callout\nAlso [in a callout](https://example.org/c).\n```\n')
+    const prose = h2.slice(h2.indexOf('See '))
+    assert.match(prose, /<a href="https:\/\/www\.example\.org\/docs\/api\?x=1&y=2" target="_blank" rel="noopener">the docs<\/a>/)
+    assert.match(prose, /<a href="https:\/\/cdn\.example\.org\/a" target="_blank" rel="noopener">cdn<\/a>/, 'a protocol-relative link gets https, not file:')
+    assert.match(prose, /<a href="#top">here<\/a>/, 'an in-page link is untouched')
+    assert.match(h2, /<a href="https:\/\/example\.org\/c" target="_blank" rel="noopener">in a callout<\/a>/)
+    assert.doesNotMatch(h2, /data-external-href|disabled offline/)
+    assert.doesNotMatch(h2, /<img[^>]*img\.example\.org/)
+    assert.match(h2, /<span class="ext-img-placeholder" data-external-src="img\.example\.org\/l\.png">logo<\/span>/)
+    assertNoNetworkFetch(h2, 'remote links')
+    assert.throws(() => assertNoNetworkFetch(h2.replace('<span class="ext-img-placeholder"', '<img src="https://img.example.org/l.png"><span'), 'planted'), /remote attr/, 'a remote img is still caught')
+    assert.throws(() => assertNoNetworkFetch('<link rel="stylesheet" href="https://x.org/s.css">', 'planted'), /remote attr/, 'a remote stylesheet is still caught')
+    const raw = renderPlan('---\ntitle: T\n---\n<a href="https://example.org/r" target="_self">raw</a>\n').html
+    assert.match(raw, /<a href="https:\/\/example\.org\/r" target="_self">raw<\/a>/, 'an author\'s own target is kept')
   })
 
   check('a top-level block\'s line range is exact (steps block, counted by hand)', () => {
@@ -897,7 +942,7 @@ fixture('api-endpoint.md', (check) => {
     assert.match(html, /class="api-section" data-section="request"[^>]*id="api-endpoint:post-v2-uploads:request"/)
     assert.match(html, /class="api-section" data-section="response" data-code="201"[^>]*id="api-endpoint:post-v2-uploads:resp-201"/)
     assert.match(html, /class="api-section" data-section="response" data-code="413"/)
-    assert.match(html, /class="api-code">REQUEST</, 'request badge')
+    assert.match(html, /class="api-code">Request</, 'request badge')
     assert.match(html, /class="api-code">201</, 'response code badge')
   })
 
@@ -1140,7 +1185,7 @@ fixture('<coverage>', (check) => {
   const onDisk = readdirSync(FIXTURES)
     .filter((f) => f.endsWith('.md'))
     .sort()
-  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'task-list.md', 'unknown-block.md'].sort()
+  const exercised = ['all-blocks.md', 'api-endpoint.md', 'callout.md', 'chapters.md', 'data-model.md', 'embed.md', 'empty.md', 'full-plan.md', 'grouping.md', 'list-items.md', 'stepper.md', 'composite.md', 'task-list.md', 'unknown-block.md'].sort()
   check('every fixture file on disk is covered by a test block', () => {
     assert.deepEqual(
       onDisk,
@@ -1595,6 +1640,500 @@ fixture('replies island & extractPrevVersion', (check) => {
     const prev = extractPrevVersion(page1.html)
     assert.equal(prev.source, v1)
     assert.deepEqual(prev.history, [], 'no pf-history island -> empty array')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Theme: mono by default, `theme: manual` restores the original look.
+// ---------------------------------------------------------------------------
+fixture('theme (inline)', (check) => {
+  const diagram = '```diagram\nflowchart LR\n  A --> B\n```\n'
+  const looks = (html) => [...html.matchAll(/<pre class="mermaid" data-look="(\w+)"/g)].map((m) => m[1])
+  const pfTheme = (html) => /<html[^>]*data-pf-theme="(\w+)"/.exec(html)?.[1]
+
+  check('default is mono with clean diagrams and no Virgil font', () => {
+    const r = renderPlan('# T\n\n' + diagram)
+    assert.equal(pfTheme(r.html), 'mono')
+    assert.deepEqual(looks(r.html), ['clean'])
+    assert.doesNotMatch(r.html, /font-family:"Virgil"/)
+  })
+
+  check('frontmatter theme: manual restores hand-drawn diagrams and Virgil', () => {
+    const r = renderPlan('---\ntitle: T\ntheme: manual\n---\n' + diagram)
+    assert.equal(pfTheme(r.html), 'manual')
+    assert.deepEqual(looks(r.html), ['handDrawn'])
+    assert.match(r.html, /font-family:"Virgil"/)
+  })
+
+  check('the theme option overrides frontmatter', () => {
+    const r = renderPlan('---\ntitle: T\ntheme: manual\n---\n' + diagram, { theme: 'mono' })
+    assert.equal(pfTheme(r.html), 'mono')
+    assert.deepEqual(looks(r.html), ['clean'])
+  })
+
+  check('an explicit look wins over the theme default', () => {
+    const src = '```diagram look=handDrawn\nflowchart LR\n  A --> B\n```\n```diagram look=clean\nflowchart LR\n  C --> D\n```\n'
+    assert.deepEqual(looks(renderPlan(src).html), ['handDrawn', 'clean'])
+    assert.deepEqual(looks(renderPlan(src, { theme: 'manual' }).html), ['handDrawn', 'clean'])
+  })
+
+  check('an unknown theme warns and falls back to mono', () => {
+    const r = renderPlan('---\ntitle: T\ntheme: neon\n---\nbody\n')
+    assert.equal(pfTheme(r.html), 'mono')
+    assert.ok(r.warnings.some((w) => /unknown theme "neon"/.test(w)), r.warnings.join('; '))
+  })
+})
+
+fixture('stepper.md', (check) => {
+  const sourcePath = join(FIXTURES, 'stepper.md')
+  const r = renderPlan(read('stepper.md'), { sourcePath })
+  const html = r.html
+  const block = (type) => new RegExp(`<figure data-block="${type}"[\\s\\S]*?</figure>`).exec(html)?.[0] ?? ''
+  const fig = block('figure')
+  const stp = block('stepper')
+  const steps = [...stp.matchAll(/<(li|aside) class="stepper-step[^"]*"[^>]*>/g)].map((m) => m[0])
+  const attr = (tag, name) => {
+    const m = new RegExp(`\\s${name}="([^"]*)"`).exec(tag)
+    return m ? m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&') : null
+  }
+
+  check('a clean figure and stepper render with no warnings', () => {
+    assert.deepEqual(r.warnings, [])
+  })
+
+  check('figure inlines the SVG with title, description and size bounds from the viewBox', () => {
+    assert.match(fig, /<div class="figure-stage"><svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 720 200" role="img" aria-labelledby="fig1-title" aria-describedby="fig1-desc">/)
+    assert.match(fig, /^<figure data-block="figure"[^>]* style="--fig-w:720px;--fig-ar:3.6">/)
+    assert.match(stp, /^<figure data-block="stepper"[^>]* style="--fig-w:\d+px;--fig-ar:[\d.]+">/)
+    assert.match(fig, /<title id="fig1-title">Request path<\/title><desc id="fig1-desc">A browser request crosses the gateway/)
+    assert.doesNotMatch(fig, /width="720"|<\?xml/, 'root width/height and the XML prolog are dropped')
+    assert.equal((fig.match(/data-part="/g) || []).length, 7)
+  })
+
+  check('stepper reuses the figure under its own id prefix', () => {
+    assert.match(stp, /<div class="stepper-stage"><svg [^>]*aria-labelledby="stp1-title"/)
+    assert.match(stp, /<desc id="stp1-desc">1\. The user fills the form 2\. The browser sends the request 3\. The service writes the row<\/desc>/)
+  })
+
+  check('steps carry their parts, needs flag and carried-forward counter values', () => {
+    assert.equal(steps.length, 4)
+    assert.deepEqual(steps.map((s) => attr(s, 'data-parts')), [
+      'browser', 'browser e-gateway gateway', 'e-service service e-db db', 'browser',
+    ])
+    assert.deepEqual(steps.slice(0, 3).map((s) => JSON.parse(attr(s, 'data-counters'))), [
+      { sent: '0', stored: '0' }, { sent: '1', stored: '0' }, { sent: '1', stored: '1' },
+    ])
+    assert.deepEqual(steps.slice(0, 3).map((s) => JSON.parse(attr(s, 'data-off-counters'))), [
+      { sent: '0', stored: '0' }, { sent: '0', stored: '0' }, { sent: '0', stored: '0' },
+    ], 'with the network off nothing is sent or stored')
+    assert.equal(attr(steps[3], 'data-counters'), null, 'a held step shows the values of the step it stands in for')
+    assert.deepEqual(steps.map((s) => /\sdata-needs[\s>]/.test(s)), [false, true, true, false])
+    assert.match(steps[3], /^<aside class="stepper-step stepper-held"/)
+  })
+
+  check('each step has a where line, title, narration, key idea and what changed', () => {
+    assert.match(stp, /<p class="stepper-where">Step 2 of 3<\/p><h3>The browser sends the request<\/h3><p>The browser serialises the form/)
+    assert.match(stp, /<div class="stepper-key"><p class="stepper-label">Key idea<\/p><p>The database write is the commit point\.<\/p><\/div>/)
+    assert.match(stp, /<ul><li>One row exists\.<\/li><li>The request is answered\.<\/li><\/ul>/)
+    assert.match(stp, /<p class="stepper-where">Network off<\/p><h3>The network is down<\/h3>/)
+  })
+
+  check('controls: one bar button per sequence step, a switch, counters starting at step 1', () => {
+    assert.equal((stp.match(/<button type="button" data-step="/g) || []).length, 3)
+    assert.match(stp, /class="stepper-switch" role="switch" aria-checked="true">[^]*?Network <span class="stepper-switch-state">on<\/span>/)
+    assert.match(stp, /<p class="stepper-counter" data-counter="sent"><b>0<\/b> Requests sent<\/p>/)
+  })
+
+  check('the stepper and each step are feedback anchors', () => {
+    const map = extractIsland(html, 'pf-anchor-map')
+    const keys = Object.keys(map.anchors)
+    assert.equal(map.anchors['stepper:one-request-end-to-end:the-network-is-down'].kind, 'stepper-step')
+    assert.ok(keys.includes('stepper:one-request-end-to-end'), keys.join(', '))
+    assert.ok(keys.includes('stepper:one-request-end-to-end:the-network-is-down'), keys.join(', '))
+    assert.ok(keys.includes('figure:request-path'), keys.join(', '))
+  })
+})
+
+fixture('embed.md', (check) => {
+  const sourcePath = join(FIXTURES, 'embed.md')
+  const r = renderPlan(read('embed.md'), { sourcePath })
+  const fig = /<figure data-block="embed"[\s\S]*?<\/figure>/.exec(r.html)?.[0] ?? ''
+  const unesc = (v) => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+  const srcdoc = unesc(/data-srcdoc="([^"]*)"/.exec(fig)?.[1] ?? '')
+
+  check('renders with no warnings', () => assert.deepEqual(r.warnings, []))
+
+  check('the page forbids frames from loading URLs (an embed cannot navigate)', () => {
+    assert.match(r.html, /<meta http-equiv="Content-Security-Policy" content="frame-src 'none'" \/>/)
+  })
+
+  check('the poster is inlined and alt-texted by the body; Run starts hidden for no-script', () => {
+    assert.match(fig, /<img class="embed-poster" src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" alt="Drag the \*\*length\*\* slider: a longer pendulum swings more slowly\.">/)
+    assert.match(fig, /<button type="button" class="embed-run" aria-label="Run Pendulum" hidden>Run<\/button>/)
+    assert.match(fig, /--embed-h:300px/)
+  })
+
+  check('the file rides escaped in data-srcdoc, behind a no-network CSP', () => {
+    assert.ok(srcdoc.startsWith(`<!doctype html><meta http-equiv="Content-Security-Policy" content="${EMBED_CSP}"><!--pf-tokens--><!doctype html>`))
+    assert.ok(srcdoc.includes(read('embeds/pendulum.html')))
+    assert.match(EMBED_CSP, /default-src 'none'/)
+    assert.doesNotMatch(EMBED_CSP, /connect-src|https?:|\*/)
+    assert.doesNotMatch(fig.replace(/data-srcdoc="[^"]*"/, ''), /<script|<canvas/, 'nothing from the file is live in the page')
+  })
+
+  check('the body renders as markdown under the stage, and is a pf anchor', () => {
+    assert.match(fig, /<div class="embed-note"><p>Drag the <strong>length<\/strong> slider/)
+    assert.match(fig, /data-pf-anchor="embed:pendulum"/)
+  })
+})
+
+fixture('composite.md', (check) => {
+  const r = renderPlan(read('composite.md'), { sourcePath: join(FIXTURES, 'composite.md') })
+  const first = /<figure data-block="stepper"[\s\S]*?<\/figure>/.exec(r.html)[0]
+  const steps = [...first.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
+  const paths = (st) => [...st.matchAll(/<code>(.*?)<\/code><\/a>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''))
+
+  check('inside this git worktree, every cited path is checked and reported missing, nothing else warns', () => {
+    assert.equal(r.warnings.length, 7, r.warnings.join(' | '))
+    assert.ok(r.warnings.every((w) => /code path "src\/[^"]+" is not in the repo/.test(w)), r.warnings.join(' | '))
+  })
+
+  check('the workers part is a three-layer card the size of its neighbours, stacked toward the bottom right', () => {
+    const workers = /<g data-part="workers">[\s\S]*?<\/g>/.exec(first)[0]
+    const rects = [...workers.matchAll(/<rect class="box" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/g)].map((m) => m.slice(1).map(Number))
+    assert.deepEqual(rects, [[352, 160, 112, 56], [348, 156, 112, 56], [344, 152, 112, 56]], 'back copy first, each 4 down and right of the next')
+    assert.match(first, /<g data-part="queue">\s*<rect class="box" x="\d+" y="152" width="112" height="56"/)
+  })
+
+  check('each step lists the code of its own parts, linked under repo:', () => {
+    assert.deepEqual(steps.map(paths), [['src/api/jobs.ts', 'src/queue/'], ['src/workers/'], ['src/store/']])
+    assert.match(steps[0], /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts" target="_blank" rel="noopener">/)
+  })
+
+  check('the workers card links to the exploded figure, which is on the page', () => {
+    const workers = /<g data-part="workers">[\s\S]*?<\/g>/.exec(r.html)[0]
+    assert.match(workers, /<a href="#stepper:inside-the-workers"><text[^>]*>See inside ↓<\/text><\/a>/)
+    assert.match(r.html, /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers" id="stepper:inside-the-workers"/)
+  })
+
+  check('inside the workers is an axonometric plan: the pools side by side, a gate on the email lane, each building a rise part, marks painted on roofs', () => {
+    const inside = /<figure data-block="stepper" data-pf-anchor="stepper:inside-the-workers"[\s\S]*?<\/figure>/.exec(r.html)[0]
+    assert.deepEqual([...inside.matchAll(/<g data-part="([^"]+)" data-rise="">/g)].map((m) => m[1]), ['queue', 'w-images', 'limit', 'w-email', 'w-search', 'store'])
+    const marks = [...inside.matchAll(/<use href="#([^"]+)" class="mark"[^>]* transform="matrix\(1 0\.5 -1 0\.5 /g)].map((m) => m[1].replace(/^.*m-/, ''))
+    assert.deepEqual(marks, ['redis', 'elasticsearch', 'postgresql'], 'each mark is skewed onto a roof')
+    assert.deepEqual([...inside.matchAll(/<g data-part="(e-[^"]+)">/g)].map((m) => m[1]), ['e-images', 'e-email', 'e-search', 'e-store'])
+    assert.equal((/<g data-part="e-store">[\s\S]*?<\/g>/.exec(inside)[0].match(/data-flow/g) || []).length, 3, 'three lanes merge on the store')
+    const stack = /<figure data-block="stepper" data-pf-anchor="stepper:four-layers"[\s\S]*?<\/figure>/.exec(r.html)[0]
+    assert.deepEqual([...stack.matchAll(/<g data-part="([^"]+)" data-lift="">/g)].map((m) => m[1]), ['storage', 'services', 'api', 'interface'], 'a layer stack keeps data-lift')
+  })
+})
+
+fixture('<figure + stepper lint>', (check) => {
+  const sourcePath = join(FIXTURES, 'x.md')
+  const one = (md) => renderPlan(md, { sourcePath })
+  const has = (r, re) => assert.ok(r.warnings.some((w) => re.test(w)), `no warning ${re} in: ${r.warnings.join(' | ')}`)
+
+  check('forbidden SVG content is removed and reported', () => {
+    const r = one('```figure src=figures/bad.svg title=Bad\nA bad figure.\n```\n')
+    const fig = /<figure data-block="figure"[\s\S]*?<\/figure>/.exec(r.html)[0]
+    for (const re of [/<script> removed/, /event handler attributes removed/, /<style> removed/, /href "https:\/\/example.com\/x.png" removed/]) has(r, re)
+    assert.doesNotMatch(fig, /<script|onclick|<style|example\.com/)
+  })
+
+  check('non-token colours, duplicate parts, missing viewBox and extra accents are reported', () => {
+    const r = one('```figure src=figures/bad.svg\nA bad figure.\n```\n')
+    has(r, /fill="#ff0000" is not a token colour/)
+    has(r, /stroke="rgb\(0,0,0\)" is not a token colour/)
+    has(r, /data-part "a" is used more than once/)
+    has(r, /no viewBox/)
+    has(r, /3 data-accent elements \(at most 2\)/)
+  })
+
+  check('token colours pass the lint', () => {
+    const r = one('```figure src=figures/request-path.svg\nok\n```\n')
+    assert.deepEqual(r.warnings, [])
+  })
+
+  check('every house figure renders clean, and a stepper can walk all its parts', () => {
+    const dir = join(__dirname, '..', '..', 'figures')
+    const files = readdirSync(dir).filter((f) => f.endsWith('.svg'))
+    assert.deepEqual(files.sort(), ['architecture.svg', 'click-path.svg', 'erd.svg', 'exploded.svg', 'layer-stack.svg', 'plan.svg', 'swimlane.svg'])
+    // click-path.svg needs a switch; the worked-switch test walks it
+    for (const f of files.filter((f) => f !== 'click-path.svg')) {
+      const svg = readFileSync(join(dir, f), 'utf8')
+      const parts = [...svg.matchAll(/data-part="([^"]+)"/g)].map((m) => m[1])
+      assert.ok(parts.length >= 4, `${f}: ${parts.length} parts`)
+      const md = `\`\`\`figure src=${f}\nx\n\`\`\`\n\`\`\`stepper figure=${f}\n# All\nparts: ${parts.join(' ')}\nkey: k\n\`\`\`\n`
+      const r = renderPlan(md, { sourcePath: join(dir, 'p.md') })
+      assert.deepEqual(r.warnings, [], f)
+      for (const p of parts) assert.match(r.html, new RegExp(`data-part="${p}"`), `${f}: ${p}`)
+    }
+  })
+
+  check('stepper code: captions per step, linked under repo:, checked against the git root', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-code-'))
+    for (const d of ['.git', 'docs', 'src/api', 'src/queue']) mkdirSync(join(dir, d), { recursive: true })
+    writeFileSync(join(dir, 'src/api/jobs.ts'), '')
+    writeFileSync(join(dir, 'src/api/a b&c.ts'), '')
+    writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"><rect class="box" x="0" y="0" width="20" height="20"/></g><g data-part="b"><rect class="box" x="40" y="0" width="20" height="20"/></g><g data-part="c"><rect class="box" x="80" y="0" width="20" height="20"/></g></svg>')
+    writeFileSync(join(dir, 'docs', 'f.svg'), readFileSync(join(dir, 'f.svg'), 'utf8'))
+    const md = (fm, code) => `---\ntitle: T\n${fm}---\n\n\`\`\`stepper figure=f.svg\n${code}\n# One\nparts: a\nkey: k\n\n# Two\nparts: b c\nkey: k\n\`\`\`\n`
+    const steps = (r) => [...r.html.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
+    const code = 'code: a src/api/jobs.ts\ncode: a src/api/a b&c.ts\ncode: b src/queue/'
+
+    const r = renderPlan(md('repo: https://git.example.com/shop/blob/main/\n', code), { sourcePath: join(dir, 'docs', 'p.md') })
+    assert.deepEqual(r.warnings, [])
+    const [one, two] = steps(r)
+    assert.match(one, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/a%20b%26c\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/api\/<\/span>a b&amp;c\.ts<\/code><\/a><\/li><\/ul><\/div>/)
+    assert.doesNotMatch(one, /src\/queue/)
+    assert.match(two, /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/queue\/" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/<\/span>queue\/<\/code><\/a>/)
+    assert.doesNotMatch(two, /jobs\.ts/)
+
+    const plain = renderPlan(md('', code), { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(plain.warnings, [])
+    assert.match(steps(plain)[0], /<li><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/li>/)
+    assert.doesNotMatch(plain.html, /<a href="[^"#]*src\/api/)
+
+    const bad = renderPlan(md('repo: javascript:alert(1)\n', code + '\ncode: a src/api/gone.ts\ncode: zz src/x.ts\ncode: c ../outside.ts\ncode: c /etc/passwd\ncode: c'), { sourcePath: join(dir, 'p.md') })
+    has(bad, /repo: must be an http\(s\) URL/)
+    has(bad, /code path "src\/api\/gone\.ts" is not in the repo/)
+    has(bad, /code: unknown part "zz"/)
+    has(bad, /code path "\.\.\/outside\.ts" must be relative to the repo root/)
+    has(bad, /code path "\/etc\/passwd" must be relative to the repo root/)
+    has(bad, /"code: c" needs a part and a path/)
+    assert.doesNotMatch(bad.html, /javascript:|outside\.ts<|passwd/)
+
+    const loose = mkdtempSync(join(tmpdir(), 'pf-code-'))
+    writeFileSync(join(loose, 'f.svg'), readFileSync(join(dir, 'f.svg'), 'utf8'))
+    assert.deepEqual(renderPlan(md('', 'code: a src/not-here.ts'), { sourcePath: join(loose, 'p.md') }).warnings, [], 'outside a git repo, paths are not checked')
+  })
+
+  check('stepper code: named repos show their word and link base; only the home repo is checked on disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-code-'))
+    for (const d of ['.git', 'src/api']) mkdirSync(join(dir, d), { recursive: true })
+    writeFileSync(join(dir, 'src/api/jobs.ts'), '')
+    writeFileSync(join(dir, 'f.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"><rect class="box" x="0" y="0" width="20" height="20"/></g><g data-part="b"><rect class="box" x="40" y="0" width="20" height="20"/></g></svg>')
+    const page = (fm, code) => `---\ntitle: T\n${fm}---\n\n\`\`\`stepper figure=f.svg\n${code}\n# One\nparts: a\nkey: k\n\n# Two\nparts: b\nkey: k\n\`\`\`\n`
+    const steps = (r) => [...r.html.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
+    const fm = 'repo: App https://git.example.com/app/blob/main\nrepo: Libs https://git.example.com/libs/blob/main/\n'
+
+    const r = renderPlan(page(fm, 'code: a src/api/jobs.ts\ncode: a App src/api/jobs.ts\ncode: b Libs ledger/only-there.ts'), { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(r.warnings, [], 'a Libs path is not checked against this checkout')
+    const [one, two] = steps(r)
+    assert.match(one, /<ul><li><span class="stepper-repo" title="https:\/\/git\.example\.com\/app\/blob\/main">App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/jobs\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><\/ul>/, 'the bare path and the App path are one item')
+    assert.match(two, /<li><span class="stepper-repo" title="https:\/\/git\.example\.com\/libs\/blob\/main">Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/ledger\/only-there\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">ledger\/<\/span>only-there\.ts<\/code><\/a><\/li>/)
+
+    const bad = renderPlan(page(fm, 'code: a App src/gone.ts\ncode: b Libs ../x.ts\ncode: b Lib ledger/x.ts'), { sourcePath: join(dir, 'p.md') })
+    has(bad, /code path "src\/gone\.ts" is not in the repo/)
+    has(bad, /code path "\.\.\/x\.ts" must be relative to the repo root/)
+    has(bad, /code path "Lib ledger\/x\.ts" is not in the repo/)
+    has(renderPlan(page('repo: https://a.example.com\nrepo: Libs https://b.example.com\n', 'code: a src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') }), /with more than one repo, give each a short name/)
+    has(renderPlan(page('repo: App git@example.com:app\n', 'code: a src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') }), /repo: must be an http\(s\) URL/)
+    has(renderPlan(page(fm + 'repo: Libs https://other.example.com\n', 'code: a src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') }), /repo: the name "Libs" is used more than once/)
+
+    writeFileSync(join(dir, 'src/api/my file.ts'), '')
+    const spaced = renderPlan(page(fm, 'code: a src/api/my file.ts'), { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(spaced.warnings, [], 'a home path with a space is still a path when its first word is not a repo name')
+    assert.match(spaced.html, /<span class="stepper-repo"[^>]*>App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/my%20file\.ts" target="_blank" rel="noopener">/)
+
+    const docs = renderPlan(page(fm, 'code: a src/api/jobs.ts\ncode: b src/api/jobs.ts\ndocs: a Libs guide/jobs.md | Retries, Dead letters\ndocs: b README.md\ndocs: b ../x.md\ndocs: zz y.md\ndocs: b'), { sourcePath: join(dir, 'p.md') })
+    has(docs, /docs path "README\.md" is not in the repo/)
+    has(docs, /docs path "\.\.\/x\.md" must be relative to the repo root/)
+    has(docs, /docs: unknown part "zz"/)
+    has(docs, /"docs: b" needs a part and a path/)
+    const [d1, d2] = steps(docs)
+    assert.match(d1, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li>[^]*?jobs\.ts[^]*?<\/ul><\/div><div class="stepper-code" data-kind="docs"><p class="stepper-label">In the docs<\/p><ul><li><span class="stepper-repo"[^>]*>Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/guide\/jobs\.md" target="_blank" rel="noopener"><code><span class="stepper-dir">guide\/<\/span>jobs\.md<\/code><\/a> <span class="stepper-note">Retries, Dead letters<\/span><\/li><\/ul><\/div>/)
+    assert.match(d2, /data-kind="docs"[^]*?<code>README\.md<\/code><\/a><\/li><\/ul>/, 'a doc with no note and no folder')
+    assert.doesNotMatch(d2, /guide\/jobs\.md|stepper-note/)
+
+    const odd = renderPlan(page('repo: <b>"x https://git.example.com/a"onmouseover="y\n', 'code: a <b>"x src/api/jobs.ts'), { sourcePath: join(dir, 'p.md') })
+    assert.doesNotMatch(odd.html, /<b>"x|"onmouseover=/, 'repo names and URLs are escaped')
+    assert.match(odd.html, /<span class="stepper-repo" title="https:\/\/git\.example\.com\/a&quot;onmouseover=&quot;y">&lt;b&gt;&quot;x<\/span>/)
+  })
+
+  check('embed lint: URL src, missing poster, remote refs, size and count', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-embed-'))
+    writeFileSync(join(dir, 'e.html'), '<script src="https://cdn.example.com/x.js"></script>')
+    writeFileSync(join(dir, 'big.html'), 'x'.repeat(2 * 1024 * 1024 + 1))
+    writeFileSync(join(dir, 'p.png'), 'png')
+    const at = (md) => renderPlan(md, { sourcePath: join(dir, 'p.md') })
+    const e = (a, body = 'x') => '```embed ' + a + '\n' + body + '\n```\n'
+    has(at(e('src=https://example.com/a.html poster=p.png')), /src must be a local file, not a URL/)
+    const noPoster = at(e('src=e.html'))
+    has(noPoster, /missing poster; only the body is shown/)
+    assert.doesNotMatch(/<figure data-block="embed"[\s\S]*?<\/figure>/.exec(noPoster.html)[0], /embed-stage|data-srcdoc/)
+    has(at(e('src=e.html poster=p.png')), /remote reference "https:\/\/cdn.example.com" will be blocked/)
+    const big = at(e('src=big.html poster=p.png'))
+    has(big, /file is over 2 MB/)
+    assert.doesNotMatch(big.html, /data-srcdoc=/)
+    has(at(e('src=e.html poster=p.gif')), /poster must be/)
+    has(at(e('src=e.html poster=p.png', '')), /body \(what to try and what it shows\) is empty/)
+    has(at(e('src=e.html poster=p.png').repeat(3)), /more than 2 embeds/)
+  })
+
+  check('a link in a figure must land on this page: an in-figure id, a heading or a block', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-link-'))
+    const svg = (href) => `<svg viewBox="0 0 100 40"><defs><path id="p" d="M0 0H10"/></defs><g data-part="a"><a href="${href}"><text x="0" y="20">go</text></a></g></svg>`
+    writeFileSync(join(dir, 'own.svg'), svg('#p'))
+    writeFileSync(join(dir, 'head.svg'), svg('#h:pools'))
+    writeFileSync(join(dir, 'none.svg'), svg('#h:nowhere'))
+    const at = (f) => renderPlan(`# T\n\n## Pools\n\n\`\`\`figure src=${f}\nx\n\`\`\`\n`, { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(at('own.svg').warnings, [])
+    assert.deepEqual(at('head.svg').warnings, [])
+    assert.match(at('head.svg').html, /<a href="#h:pools">/)
+    has(at('none.svg'), /figure none\.svg: link "#h:nowhere" has no target on this page/)
+    const twice = renderPlan(`# T\n\n<span data-id="h:nowhere"></span>\n\n\`\`\`figure src=none.svg\nx\n\`\`\`\n\n\`\`\`figure src=none.svg\ny\n\`\`\`\n`, { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(twice.warnings, ['figure none.svg: link "#h:nowhere" has no target on this page'], 'one warning per figure file, and data-id is not an id')
+    assert.match(at('head.svg').html, /<svg[^>]* role="group"/, 'a figure with a link is not role=img, so the link is announced')
+    assert.match(at('own.svg').html, /<svg[^>]* role="img"/)
+  })
+
+  check('state: is a named figure state; set: changes it, carried forward; data-show groups follow it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-state-'))
+    writeFileSync(join(dir, 's.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"><rect class="box" x="0" y="0" width="10" height="10"/></g><g data-show="door=open"><text x="0" y="30">open</text></g><g data-show="door=shut"><text x="0" y="30">shut</text></g><g data-show="light=on"><text x="40" y="30">on</text></g></svg>')
+    const at = (head, steps) => renderPlan(`# T\n\n\`\`\`stepper figure=s.svg\n${head}\n${steps}\`\`\`\n`, { sourcePath: join(dir, 'p.md') })
+    const r = at('state: door open shut\nstate: light off on\ncounter: n | Things', '# One\nparts: a\nkey: k\n\n# Two\nparts: a\nset: door=shut, n=1\nkey: k\n\n# Three\nparts: a\nset: light=on\nkey: k\n')
+    assert.deepEqual(r.warnings, [])
+    const vals = [...r.html.matchAll(/data-counters="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')))
+    assert.deepEqual(vals, [{ n: '0', door: 'open', light: 'off' }, { n: '1', door: 'shut', light: 'off' }, { n: '1', door: 'shut', light: 'on' }])
+    assert.match(r.html, /<g data-show="door=open" data-init data-on>/, 'the first value is the initial state, shown without script and in print')
+    assert.match(r.html, /<g data-show="door=shut">/)
+    assert.match(r.html, /<g data-show="light=on">/)
+    assert.equal((r.html.match(/stepper-counter"/g) || []).length, 1, 'a state is not drawn as a counter')
+
+    const spaced = at('state: door open shut\nstate: light off on\ncounter: n | Things\ncounter: t | Time', '# One\nparts: a\nset: door=shut n=2 t=3 ms\nkey: k\n')
+    assert.deepEqual(spaced.warnings, [])
+    assert.deepEqual(JSON.parse(/data-counters="([^"]*)"/.exec(spaced.html)[1].replace(/&quot;/g, '"')), { n: '2', t: '3 ms', door: 'shut', light: 'off' }, 'set: splits on spaces before a name=, as parts: does, and keeps spaces inside a value')
+
+    const bad = at('state: door open shut\nstate: lone x\ncounter: door | Doors', '# One\nparts: a\nset: door=ajar, nope=1\nkey: k\n')
+    has(bad, /state: lone x" needs a name and at least two values/)
+    has(bad, /"door" is both a counter and a state/)
+    has(bad, /step "One" sets door to "ajar", which is not one of: open shut/)
+    has(bad, /step "One" sets unknown counter or state "nope"/)
+    assert.equal(JSON.parse(/data-counters="([^"]*)"/.exec(bad.html)[1].replace(/&quot;/g, '"')).door, 'open', 'a value the state does not have is dropped, not carried')
+    has(bad, /data-show "light=on" names no state/)
+    writeFileSync(join(dir, 'v.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"/><g data-show="door=ajar"/><g data-show="door"/></svg>')
+    const v = renderPlan('# T\n\n```stepper figure=v.svg\nstate: door open shut\n# One\nparts: a\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    has(v, /data-show "door=ajar": door is one of: open shut/)
+    has(v, /data-show "door" needs name=value/)
+    const plain = renderPlan('# T\n\n```figure src=s.svg\nx\n```\n', { sourcePath: join(dir, 'p.md') })
+    has(plain, /figure s\.svg: data-show works only in a stepper with state:/)
+  })
+
+  check('a missing file warns and keeps the description as text', () => {
+    const r = one('```figure src=figures/nope.svg\nThe description survives.\n```\n')
+    has(r, /figure figures\/nope.svg: cannot read file/)
+    assert.match(r.html, /<p class="figure-fallback">The description survives\.<\/p>/)
+  })
+
+  check('an empty body warns', () => {
+    has(one('```figure src=figures/request-path.svg\n```\n'), /body \(what the figure shows\) is empty/)
+  })
+
+  check('ids and references are prefixed per figure', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-fig-'))
+    writeFileSync(join(dir, 'a.svg'), '<svg viewBox="0 0 10 10"><defs><linearGradient id="g"/></defs><rect fill="url(#g)"/><use href="#g"/></svg>')
+    const md = '```figure src=a.svg\nx\n```\n```figure src=a.svg\ny\n```\n'
+    const r = renderPlan(md, { sourcePath: join(dir, 'p.md') })
+    assert.match(r.html, /id="fig1-g"\/><\/defs><rect fill="url\(#fig1-g\)"\/><use href="#fig1-g"\/>/)
+    assert.match(r.html, /id="fig2-g"\/><\/defs><rect fill="url\(#fig2-g\)"\/><use href="#fig2-g"\/>/)
+    assert.deepEqual(r.warnings, [])
+  })
+
+  const stepper = (head, steps) => one('```stepper figure=figures/request-path.svg\n' + head + '\n' + steps + '\n```\n')
+
+  check('unknown parts, unknown counters and missing key ideas are reported', () => {
+    const r = stepper('counter: a | A', '# One\nparts: browser nope\nset: a=1, b=2\n\nText.')
+    has(r, /step "One" names part "nope", which the figure does not have/)
+    has(r, /step "One" sets unknown counter or state "b"/)
+    has(r, /step "One" has no key:/)
+  })
+
+  check('switch lints: no held step, held without switch, held without needs', () => {
+    has(stepper('switch: Net', '# One\nkey: k\nneeds: switch'), /a switch with no held or off: step/)
+    has(stepper('', '# One\nkey: k\n# Off\nheld\nkey: k'), /"needs: switch" or "held" without a switch/)
+    has(stepper('switch: Net', '# One\nkey: k\n# Off\nheld\nkey: k'), /a held step but no step has "needs: switch"/)
+  })
+
+  check('budgets: more than three counters, one switch, ten steps', () => {
+    const r = stepper('counter: a | A\ncounter: b | B\ncounter: c | C\ncounter: d | D\nswitch: X\nswitch: Y',
+      Array.from({ length: 11 }, (_, i) => `# S${i}\nkey: k`).join('\n'))
+    has(r, /4 counters \(at most 3\)/)
+    has(r, /more than one switch/)
+    has(r, /11 steps \(at most 10\)/)
+    assert.equal((r.html.match(/data-counter="/g) || []).length, 3, 'extra counters are dropped')
+  })
+
+  check('switch off: the story leaves out needs: switch steps and swaps in off: steps; a held step keeps that story so far', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-off-'))
+    writeFileSync(join(dir, 's.svg'), '<svg viewBox="0 0 100 40"><g data-part="a"/><g data-show="slip=lifted"/><g data-show="switch=off"/><g data-show="switch=on"/></svg>')
+    const r = renderPlan('# T\n\n```stepper figure=s.svg\ncounter: n | Acknowledged\nstate: slip flat lifted\nstate: pen up down\nswitch: Net\n'
+      + '# One\nparts: a\nset: n=1\nkey: k\n# Two\nneeds: switch\nset: n=5\nkey: k\n# End\nset: n=9, slip=lifted\nkey: k\n'
+      + '# End offline\noff: End\nset: slip=lifted\nkey: k\n# After\nneeds: switch\nset: n=7\nkey: k\n# Held\nheld\nset: pen=down\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    assert.deepEqual(r.warnings, [])
+    const read = (a) => [...r.html.matchAll(new RegExp(`<li class="stepper-step"[^>]* ${a}="([^"]*)"`, 'g'))].map((m) => Object.values(JSON.parse(m[1].replace(/&quot;/g, '"'))).join(' '))
+    assert.deepEqual(read('data-counters'), ['1 flat up', '5 flat up', '9 lifted up', '7 lifted up'])
+    assert.deepEqual(read('data-off-counters'), ['1 flat up', '1 flat down', '1 lifted up', '1 lifted down'],
+      'Two and After are held (pen down); End offline starts from the off story (n=1) and After keeps its lifted slip')
+    assert.match(r.html, /<aside class="stepper-step stepper-off"[^>]* data-counters="[^"]*lifted[^"]*"/, "the off step carries its own off-story values")
+    assert.match(r.html, /<g data-show="switch=on" data-init data-on\/>/, 'the switch is a figure state, on at first')
+    assert.match(r.html, /<g data-show="switch=off"\/>/)
+    const none = renderPlan('# T\n\n```stepper figure=s.svg\nstate: slip flat lifted\n# One\nparts: a\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    has(none, /data-show "switch=off" names no state/)
+    const own = renderPlan('# T\n\n```stepper figure=s.svg\nstate: slip flat lifted\nstate: switch on off\nswitch: Net\n# One\nparts: a\nkey: k\n# Off\nheld\nkey: k\n```\n', { sourcePath: join(dir, 'p.md') })
+    assert.ok(!own.warnings.some((w) => /switch/.test(w) && /data-show/.test(w)), own.warnings.join(' | '))
+  })
+
+  check("figures.md's worked switch example renders clean and counts as it says", () => {
+    const doc = readFileSync(join(__dirname, '..', '..', 'references', 'figures.md'), 'utf8')
+    const block = /\n(```stepper figure=figures\/click-path\.svg[\s\S]*?\n```)\n/.exec(doc.slice(doc.indexOf('## A switch, worked through')))[1]
+    const svg = /\n(<g data-show="switch=off">[\s\S]*?\n<\/g>)\n/.exec(doc)[1]
+    const house = readFileSync(join(__dirname, '..', '..', 'figures', 'click-path.svg'), 'utf8')
+    const lines = (s) => s.split('\n').map((l) => l.trim()).join('\n')
+    assert.ok(lines(house).includes(lines(svg)), 'the snippet is the house figure\'s own bypass')
+    const r = renderPlan('# T\n\n' + block + '\n', { sourcePath: join(__dirname, '..', '..', 'p.md') })
+    assert.deepEqual(r.warnings, [])
+    const named = new Set(block.split('\n').filter((l) => l.startsWith('parts:')).flatMap((l) => l.slice(6).trim().split(/\s+/)))
+    assert.deepEqual([...house.matchAll(/data-part="([^"]+)"/g)].map((m) => m[1]).filter((p) => !named.has(p)), [], 'the example lights every part of click-path.svg')
+    const last = (a) => JSON.parse([...r.html.matchAll(new RegExp(`<li class="stepper-step"[^>]* ${a}="([^"]*)"`, 'g'))].at(-1)[1].replace(/&quot;/g, '"'))
+    assert.deepEqual(last('data-counters'), { cache: '1', db: '1' }, 'cache on: 1 and 1')
+    assert.deepEqual(last('data-off-counters'), { cache: '0', db: '2' }, 'cache off: 0 and 2')
+  })
+
+  check('an off: step stands in for one step: from the values before it, out of the bar, linted', () => {
+    const r = stepper('counter: a | A\nswitch: Net',
+      '# One\nkey: k\nset: a=1\n# Two\nkey: k\nset: a=2\n# Three\nkey: k\nset: a=3\n# Two, offline\noff: Two\nparts: browser\nkey: k')
+    assert.deepEqual(r.warnings, [])
+    const vals = [...r.html.matchAll(/data-counters="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')).a)
+    assert.deepEqual(vals, ['1', '2', '3', '1'])
+    assert.equal((r.html.match(/data-step="/g) || []).length, 3, 'not in the step bar')
+    assert.match(r.html, /<aside class="stepper-step stepper-off" [^>]*data-parts="browser"[^>]* data-off-for="1"><p class="stepper-where">Net off<\/p><h3>Two, offline<\/h3>/)
+    const shared = [...r.html.matchAll(/<p class="stepper-where">([^<]*)<\/p><p class="stepper-shared">Net off\. This step does not need it\.<\/p>/g)].map((m) => m[1])
+    assert.deepEqual(shared, ['Step 1 of 3', 'Step 3 of 3'], 'only steps both stories share say so; not one with an off step, nor the off step')
+    const needs = stepper('switch: Net', '# One\nkey: k\n# Two\nneeds: switch\nkey: k\n# Down\nheld\nkey: k')
+    assert.deepEqual([...needs.html.matchAll(/<p class="stepper-where">([^<]*)<\/p><p class="stepper-shared">/g)].map((m) => m[1]), ['Step 1 of 2'], 'not a needs step, nor the held step')
+    assert.doesNotMatch(stepper('', '# One\nkey: k').html, /<p class="stepper-shared">/, 'no switch, no line')
+    const head = '# One\nkey: k\n'
+    has(stepper('switch: Net', head + '# X\noff: Nope\nkey: k'), /"off: Nope" names no step/)
+    has(stepper('switch: Net', head + '# X\noff: One\nkey: k\n# Y\noff: One\nkey: k'), /more than one off: step for "One"/)
+    has(stepper('', head + '# X\noff: One\nkey: k'), /"off: One" without a switch in the header/)
+    has(stepper('switch: Net', head + '# X\noff: One\nkey: k\nset: a=1'), /step "X" sets unknown counter or state "a"/)
+  })
+
+  check('a page that opens with a stepper, after at most one paragraph, marks its main with the figure size', () => {
+    const stp = '```stepper figure=figures/request-path.svg\n# One\nkey: k\n```\n'
+    const main = (md) => /<main [^>]*>/.exec(one(md).html)[0]
+    assert.equal(main('# T\n\n<!-- a note -->\n\nLead **text**.\n\n' + stp), '<main id="plan-main" class="plan-main" data-leads="stepper" style="--fig-w:720px;--fig-ar:3.6">')
+    assert.equal(main('# T\n\n' + stp), '<main id="plan-main" class="plan-main" data-leads="stepper" style="--fig-w:720px;--fig-ar:3.6">')
+    assert.equal(main('# T\n\nOne.\n\nTwo.\n\n' + stp), '<main id="plan-main" class="plan-main">', 'two paragraphs first')
+    assert.equal(main('# T\n\n## Part\n\n' + stp), '<main id="plan-main" class="plan-main">', 'a heading first')
+    assert.equal(main('# T\n\nLead.\n\n```figure src=figures/request-path.svg title=F\nA figure.\n```\n\n' + stp), '<main id="plan-main" class="plan-main">', 'a plain figure first')
+  })
+
+  check('a missing stepper figure warns and still lays out the steps', () => {
+    const r = one('```stepper figure=figures/nope.svg\n# One\nkey: k\n\nNarration survives.\n```\n')
+    has(r, /cannot read file/)
+    assert.match(r.html, /<h3>One<\/h3><p>Narration survives\.<\/p>/)
   })
 })
 

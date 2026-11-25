@@ -8,12 +8,13 @@ A `diagram` block holds raw **Mermaid** source (see `format.md` for the block
 contract). The vendored bundle is **Mermaid 11.15.0** — every type below renders
 **fully offline**, in the browser, from the inlined bundle.
 
-**Look.** Diagrams render **hand-drawn by default** (sketchy shapes + the vendored
-Virgil font) — that is the house style. Add `look=clean` on the info string for a
-diagram that reads better as crisp/technical (dense flows, big ER models):
+**Look.** Diagrams render **clean by default**, in the page's ink and accent,
+following light and dark. Add `look=handDrawn` (sketchy shapes plus the vendored
+Virgil font) only for a deliberately rough, conceptual sketch; it is the least
+legible look at phone width. Under `theme: manual` the default is hand-drawn.
 
 ````
-```diagram title="…" look=clean
+```diagram title="…" look=handDrawn
 ```
 ````
 

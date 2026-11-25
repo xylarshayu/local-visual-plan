@@ -23,7 +23,31 @@ The Excalidraw hand-drawn font, embedded as a data URI in pages that use
 hand-drawn diagrams. SIL Open Font License 1.1 — Copyright (c) 2020,
 Excalidraw. <https://github.com/excalidraw/virgil>
 
+## Simple Icons glyphs (test fixtures)
+
+The Redis, Elasticsearch and PostgreSQL marks in
+`skills/present/renderer/test/fixtures/figures/` are path data from
+[Simple Icons](https://simpleicons.org) (v13), released under CC0 1.0. The
+names and logos are trademarks of their owners; they appear only as faint
+one-ink marks identifying a technology in a sample figure.
+
 ## Design lineage (no code vendored)
+
+The SVG line roles in `skills/present/renderer/styles.css` (`svg [data-role]`:
+one ink, hierarchy by opacity, meaning by dash pattern) adapt the opacity and
+dash values of Plotter's standard roles
+(`skills/plotter/assets/foundation/standard.json` in
+[`pasqualevitiello/plotter`](https://github.com/pasqualevitiello/plotter)).
+MIT License: Copyright (c) 2025 coss.com and Origin UI; Copyright (c) 2026
+Pasquale Vitiello. Only those values are adapted; no Plotter drawings, fonts or
+scripts are included.
+
+The semantic-pattern routing table and per-pattern guidance in
+`skills/present/references/figures.md` are condensed and reworded from
+diagram-design's `semantic-patterns.md`
+([`cathrynlavery/diagram-design`](https://github.com/cathrynlavery/diagram-design)).
+MIT License: Copyright (c) 2025 Cathryn Lavery. No diagram-design templates,
+scripts or assets are included.
 
 The planning discipline documented in the skills is adapted from BuilderIO's
 MIT-licensed [`BuilderIO/skills`](https://github.com/BuilderIO/skills)

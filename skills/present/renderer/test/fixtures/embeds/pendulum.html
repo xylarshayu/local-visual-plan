@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<style>
+  body { margin: 0; font-family: var(--sans); color: var(--fg); background: var(--bg); }
+  label { display: block; padding: 12px 16px; font-size: 14px; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<label>Length <input id="len" type="range" min="60" max="180" value="120"> <output id="out">120</output></label>
+<canvas id="c" width="480" height="240"></canvas>
+<script>
+  const c = document.getElementById('c'), g = c.getContext('2d'), len = document.getElementById('len')
+  const ink = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+  let t = 0
+  len.oninput = () => { document.getElementById('out').textContent = len.value }
+  function frame() {
+    const L = +len.value, a = 0.6 * Math.cos(t * Math.sqrt(9.8 / (L / 100)))
+    const x = 240 + L * Math.sin(a), y = 16 + L * Math.cos(a)
+    g.clearRect(0, 0, 480, 240)
+    g.strokeStyle = ink; g.beginPath(); g.moveTo(240, 16); g.lineTo(x, y); g.stroke()
+    g.fillStyle = accent; g.beginPath(); g.arc(x, y, 10, 0, 7); g.fill()
+    t += 1 / 60; requestAnimationFrame(frame)
+  }
+  frame()
+</script>
+</body>
+</html>

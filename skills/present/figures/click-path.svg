@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 144">
+  <g data-part="browser"><rect class="box" x="24" y="72" width="96" height="48" rx="4"/><text x="72" y="100" text-anchor="middle" font-weight="600">Browser</text></g>
+  <g data-part="e-req"><path data-flow d="M120 88H200"/><path d="M193 84L200 88L193 92"/></g>
+  <g data-part="e-hit"><path data-flow d="M200 104H120"/><path d="M127 100L120 104L127 108"/></g>
+  <g data-part="cache"><rect class="box" x="200" y="72" width="128" height="48" rx="4"/><text x="264" y="100" text-anchor="middle" font-weight="600">Edge cache</text></g>
+  <g data-part="e-miss"><path data-flow d="M328 96H392"/><path d="M385 92L392 96L385 100"/></g>
+  <g data-part="app"><rect class="box" x="392" y="72" width="128" height="48" rx="4"/><text x="456" y="100" text-anchor="middle" font-weight="600">App</text></g>
+  <g data-part="e-read"><path data-flow d="M520 96H584"/><path d="M577 92L584 96L577 100"/></g>
+  <g data-part="db"><path class="box" d="M584 76a48 8 0 0 1 96 0v40a48 8 0 0 1-96 0z"/><path d="M584 76a48 8 0 0 0 96 0"/><text x="632" y="106" text-anchor="middle" font-weight="600">Database</text></g>
+  <g data-show="switch=off">
+    <g data-part="e-bypass"><path data-flow d="M72 72V40H456V72" fill="none"/><path d="M452 65L456 72L460 65"/><text class="muted" x="264" y="32" text-anchor="middle">no cache: straight to the app</text></g>
+  </g>
+</svg>

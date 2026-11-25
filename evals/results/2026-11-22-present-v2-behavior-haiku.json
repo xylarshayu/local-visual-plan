@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-22",
+  "model": "haiku",
+  "suite": "behavior",
+  "cases": [
+    {
+      "id": "authoring-plan-express-rate-limiting",
+      "kind": "behavior",
+      "passed": true,
+      "runs": 1,
+      "cost_usd": 0.016447,
+      "notes": "all assertions passed"
+    },
+    {
+      "id": "authoring-plan-express-rate-limiting-baseline",
+      "kind": "behavior",
+      "baseline": true,
+      "informational": true,
+      "assertions_passed_without_skill": false,
+      "runs": 1,
+      "cost_usd": 0.021179,
+      "notes": "plan.md does not exist"
+    },
+    {
+      "id": "authoring-recap-seeded-secret",
+      "kind": "behavior",
+      "passed": false,
+      "runs": 1,
+      "cost_usd": 0.005273,
+      "notes": ".visual-plans/recap-working-tree-on-main/recap.md absent (text trivially absent); .visual-plans/recap-working-tree-on-main/index.html absent (text trivially absent); .visual-plans/recap-working-tree-on-main/recap.md does not exist; .visual-plans/recap-working-tree-on-main/index.html does not exist"
+    }
+  ],
+  "totals": {
+    "passed": 1,
+    "failed": 1,
+    "warned": 0,
+    "informational": 1,
+    "cost_usd": 0.042899
+  }
+}

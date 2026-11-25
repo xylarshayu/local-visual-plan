@@ -5,6 +5,22 @@ writing a plan) and the **renderer** (`render.mjs`). Every block lists its
 authoring syntax AND the output HTML contract (a stable `data-block` attribute +
 key classes) so the renderer, the stylesheet, and the tests all agree.
 
+This file is long. Read the list below, then only the sections your page
+uses (each is a `## ` or `### ` heading; `grep -n '^##' format.md` gives
+their lines). A walk-through over a drawing needs `figure` and `stepper`, and
+`references/figures.md` for how to draw and pace one.
+
+- File shape: frontmatter (`title`, `objective`, `repo`, ...)
+- Custom blocks: `steps`, `filetree`, `diff`, `code`, `diagram`, `wireframe`
+- Grouping directives (tabs, collapsible), rendering pipeline, escaping
+- `questions`, `callout`, `data-model`, `api-endpoint`
+- `figure`, `stepper`, `embed`
+- Chapters (side-nav sections)
+- Anchors and feedback plumbing (the output contract)
+
+Wherever a line takes a trailing ` — note` or ` — caption`, ` -- ` works the
+same, for writing without em-dashes.
+
 ## File shape
 
 ```
@@ -12,6 +28,8 @@ key classes) so the renderer, the stylesheet, and the tests all agree.
 title: Short plan title (≤ ~70 chars)
 objective: One or two sentences on the outcome.
 status: draft | proposed | approved
+theme: mono | manual
+repo: https://github.com/org/repo/blob/main
 ---
 
 Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
@@ -19,10 +37,26 @@ Standard Markdown prose here (headings, lists, tables, links, **bold**, inline
 ```
 
 - Frontmatter is a leading `---` fenced YAML-ish block of simple `key: value`
-  lines. Only `title`, `objective`, `status` are recognized; unknown keys are
-  ignored. `title` is required; the others are optional.
+  lines. Only `title`, `objective`, `status`, `theme`, `repo` are recognized; unknown
+  keys are ignored. Without a `title`, a `# H1` as the first line of the body
+  is the title (shown once, as the page title), so a page can stay plain
+  Markdown on GitHub.
+- `theme` picks the palette. `mono` (default) is ink on white with one accent:
+  colour means either "look here" (accent) or "this changed" (green/red), and
+  diagrams render clean. `manual` restores the original warm palette with
+  hand-drawn diagrams. The renderer's `--theme mono|manual` flag overrides the
+  key. An unknown value warns and falls back to `mono`. The output `<html>`
+  carries `data-pf-theme="mono|manual"`.
+- `repo` is the URL that a stepper's `code:` and `docs:` paths are appended to, to make
+  them links (a file URL base such as `.../blob/main`). It must be http(s), or
+  it warns and the paths stay plain text. A page that cites more than one repo
+  repeats the key with a short name first, `repo: Backend https://...`, one
+  line per repo. The first is the page's own repo; the name is what the
+  caption shows, so keep it short.
 - Everything outside a recognized custom block is rendered as GitHub-flavored
-  Markdown via vendored `marked`.
+  Markdown via vendored `marked`. A relative link to a sibling `.md` file
+  (`ch2.md`, `./ch2.md#anchor`) becomes `ch2.html`, for pages rendered next to
+  their sources with `--out`. Links into other folders are left alone.
 
 ## Custom blocks
 
@@ -111,10 +145,10 @@ export function isTooLarge(n: number) { return n > MAX_BYTES }
 carry `data-hl="1"`, and `.code-note` callouts.
 
 ### `diagram` — Mermaid
-Info attrs: `title=<text>` (optional), `look=handDrawn|clean` (default
-`handDrawn`). Body is raw Mermaid source. **Diagrams render hand-drawn by default**
-(sketchy shapes + the vendored Virgil font); set `look=clean` for a crisp/classic
-diagram where the sketch look hurts readability. For *which diagram type to use*
+Info attrs: `title=<text>` (optional), `look=handDrawn|clean` (default `clean`,
+or `handDrawn` under `theme: manual`). Body is raw Mermaid source. Diagrams
+render clean by default; set `look=handDrawn` (sketchy shapes plus the vendored
+Virgil font) only for a deliberately rough, conceptual sketch. For *which diagram type to use*
 and per-type syntax, see **`references/diagrams.md`** (loaded on demand).
 
 ```diagram title="Upload flow"
@@ -125,10 +159,12 @@ flowchart LR
 **Output:** a `<figure data-block="diagram">` with optional `<figcaption>` and a
 `<pre class="mermaid" data-look="handDrawn|clean">` holding the raw source
 (rendered client-side by the inlined mermaid bundle; under `--lean`, shown as a
-labeled code block instead). The hand-drawn defaults (`look:handDrawn` + Virgil
-font) are applied globally by `interactivity.js`; a `look=clean` diagram carries a
-small Mermaid frontmatter override prepended to its source. An author's own
-frontmatter / `%%{init}%%` is left untouched.
+labeled code block instead). Each diagram carries a small Mermaid frontmatter
+setting its look. Under `mono`, `interactivity.js` renders with Mermaid's `base`
+theme and `themeVariables` read from the page's CSS tokens, so diagrams follow
+light and dark. When any diagram on the page is hand-drawn, Virgil becomes the
+diagram font for the whole page (Mermaid measures text with one global font).
+An author's own frontmatter / `%%{init}%%` is left untouched.
 
 ### `wireframe` — UI mockup
 Info attrs: `surface=page|panel|popover|sheet|toolbar` (default `page`),
@@ -325,6 +361,287 @@ response 413:
 `.api-section[data-section="request"]` or
 `[data-section="response"][data-code="…"]` per section, each with an `.api-code`
 badge and a `.json-tree` (or the `<pre class="api-raw">` fallback).
+
+### `figure`: a drawn SVG
+
+A figure is geometry drawn once in an SVG file; the facts about it stay in the
+markdown. Use one when Mermaid cannot lay the picture out (see
+`references/figures.md` for when, and for the house figures to start from).
+
+````
+```figure src=figures/request-path.svg title="Request path"
+A request crosses the gateway to the orders service, which writes one database.
+```
+````
+
+- `src` (required): an `.svg` file, relative to `plan.md` (to the working
+  directory when the source has no path). It is inlined, so the page stays one
+  file.
+- `title` (optional): the caption and the figure's accessible name.
+- Body (required): one or two sentences saying what the figure shows. It
+  becomes the SVG's accessible description. Anything the reader must know also
+  goes in prose.
+
+The file contract is linted at render time. Each breach is a render warning.
+
+- The root is `<svg>` with a `viewBox`; its `width`/`height` are dropped and the
+  stage sizes it: up to 1.25x the viewBox width when the column has room
+  (draw at the size it should appear) and never narrower than 0.8 of it.
+  A narrower screen scrolls the stage sideways instead of shrinking the text.
+  The `<figure>` carries the drawn width and shape as
+  `style="--fig-w:720px;--fig-ar:3.6"`.
+- Colour comes from tokens only. A paint value (`fill`, `stroke`, `stop-color`,
+  or the same inside `style`) is `none`, `currentColor`, `transparent`,
+  `inherit`, `var(--...)` or `url(#...)`. The defaults are ink strokes and ink
+  text with no fill. Class `box` fills a shape with the page background so it
+  hides lines behind it, class `solid` fills it with ink, class `muted` uses
+  the muted ink, class `mono` sets text in the mono font. A `<symbol
+  class="mark">` draws filled, and a `<use class="mark">` of it is a faint
+  watermark (0.3 opacity; 0.55 and accent while its part is current). `data-role="guide"` is a faint rule (lane lines),
+  `data-role="hidden"` a faint dashed line (boundaries, what is not seen).
+  Change is `data-change="add|del"` (added in the positive colour, removed in
+  the negative colour, dashed).
+- `data-accent` marks the focal element, at most two per figure. Inside a
+  `stepper` the stepper sets the accent instead.
+- `data-part="name"` names a group that a stepper or the prose refers to.
+  Names are unique within the file. Add `data-future="hidden"` to a part
+  that must not appear before its step (a copy that does not exist yet);
+  other future parts are only faint.
+- `data-flow` on an edge's line `<path>` (not its arrowhead) makes a small
+  accent bead run along the line, in the direction it is drawn, when its
+  part becomes current in a stepper: three runs, then it rests until the
+  step is shown again. Draw each line from source to target. It
+  does nothing in a plain `figure`, under reduced motion, in print, or
+  without script.
+- `data-lift` on a part (a layer of an isometric stack) makes it rise 20
+  units while it is current in a stepper, and ghosts the `data-lift` layers
+  drawn after it (the ones over it), so the stack shows which layer the step
+  is about. Draw the stack bottom layer first. When a layer holds parts of
+  its own (tiles side by side on one level), put `data-lift` on a group around
+  them instead: the group rises while any part in it is current, and its parts
+  never ghost each other. It does nothing in a plain `figure` or in print.
+- `data-rise` on a part (a building on an axonometric plan) makes it rise 12
+  units while it is current in a stepper; nothing is ghosted. It does nothing
+  in a plain `figure` or in print.
+- Not allowed, and removed with a warning: `<script>`, `on*` attributes,
+  `<foreignObject>`, `<style>` (it would restyle the whole page), and any
+  `href` that is not `#id`.
+- `<a href="#anchor">` around a `<text>` is a link to another place on the
+  page (a heading's `h:...` id or a block's anchor, such as
+  `stepper:inside-the-workers`). It is drawn in accent and underlined. A target
+  that is not on the page warns.
+- Text is `<text>` at 12 to 14 user units and inherits the page font.
+
+**Output:** `<figure data-block="figure">` with an optional `<figcaption>` and a
+`.figure-stage` holding the inlined `<svg role="img">`, whose `<title>` and
+`<desc>` carry the title and body. Every `id` in the SVG (and each `#id`
+reference) is prefixed with the block anchor, so two figures may both use
+`id="arrow"`.
+
+### `stepper`: a guided walk through a figure
+
+A stepper walks the reader through one figure a step at a time. It is for ideas
+that are temporal or causal: what happens in order, and what is true after each
+step. The figure is the stage; each step lights the parts it is about and says
+in words what the idea is and what changed.
+
+````
+```stepper figure=figures/request-path.svg title="One request, end to end"
+counter: sent | Requests sent
+counter: stored | Rows written
+switch: Network
+
+# The browser sends the request
+parts: browser e-gateway gateway
+needs: switch
+set: sent=1
+key: Nothing leaves the browser until the user submits.
+changed: One request is in flight.
+
+The browser serialises the form and sends it to the gateway.
+
+# The service writes the row
+parts: gateway e-service service e-db db
+needs: switch
+set: stored=1
+key: The database write is the commit point.
+changed: One row exists.
+changed: The request is answered.
+
+# The network is down
+held
+parts: browser
+key: The form keeps its input and retries; the user loses nothing.
+changed: Requests sent stays at 0.
+```
+````
+
+Lines before the first `#` set up the stepper:
+
+- `counter: name | Label`, at most three. Every counter starts at `0`.
+- `switch: Label`, at most one. It starts on. Only the header declares it.
+  The reader flips it at any step to see the story without that thing (see
+  the steps below; `references/figures.md` works one through). The figure can
+  follow it like a state: `data-show="switch=on"` and `data-show="switch=off"`.
+  While it is off, a step both stories share says so in the rail ("Network
+  off. This step does not need it."); you write nothing for that.
+- `state: name value value ...` names a figure state and its values; the first
+  is the initial one. A step changes it with `set: name=value`, carried
+  forward like a counter. In the SVG, a group with `data-show="name=value"` is
+  shown only while the state has that value (it fades in and out), so draw
+  each position or look once per value. A state is not shown as a counter,
+  but when a number value (a count drawn in the figure) just came on, its text
+  turns accent, as a changed counter does.
+- `code: part path` points a part at its representative file or directory,
+  relative to the repo root. Repeat the line for more paths. Each step lists the
+  paths of its own parts under "In the code", in the narration rail (never
+  inside the figure), linked when the frontmatter sets `repo:`. With named
+  repos, `code: part Name path` cites a path in that repo; a path with no name
+  is in the first repo. Each item then shows its repo name before the path.
+  The directory part is drawn faint and the file name in full ink. A short
+  note may follow the path after ` | `: `code: queue src/queue.ts | enqueue, drain`.
+- `docs: part path` is the same for a document (a design doc, a runbook),
+  listed under "In the docs". Put the section names in the note:
+  `docs: queue Docs guide/jobs.md | Retries, Dead letters`.
+
+Each `# title` starts a step. Its setting lines come first, in any order;
+everything after them is the narration, in Markdown.
+
+- `parts:` the `data-part` names this step is about, separated by spaces. Name
+  first the one a phone must show whole when the step's parts are too wide for it;
+  the rest are fitted around it.
+- `key:` the key idea, one sentence. Required.
+- `changed:` one item of "what changed"; repeat the line for more.
+- `set: name=value, name=value` new counter or state values (commas or spaces between them). Counter values are
+  text, shown as written; a state value must be one of its values. A counter or
+  state not set keeps its value from the step before.
+- `needs: switch` marks a step that only happens with the switch on.
+- `held`, alone on a line, marks the held step: it is shown in place of any
+  `needs: switch` step while the switch is off. At most one; it is not in the
+  step bar.
+- `off: <title>` makes the step an off step: while the switch is off it is
+  shown in place of the step with that title. The off step keeps its own
+  `# title` line; `off:` names the other step. It is not in the step bar. Use
+  it when one step plays out differently with the switch off; use `held` when
+  every step that needs the switch stops the same way. An off step wins over
+  `held` for its step.
+
+Part states follow from the steps: a part named by the current step is
+**current** (accent), a part named by an earlier step is **past** (ink), and a
+part not yet named is **future** (faint: lower opacity, same line style, so
+dash keeps its meaning). A part no step ever names
+is always ink, as context.
+
+While the switch is off, the story is the step list with the `needs: switch`
+steps left out and the off steps swapped in. Past parts, counters and states
+follow that story: an off step starts from the story's values before it, then
+applies its own `set:`; a held step shows the story so far plus its own `set:`,
+wherever it stands in.
+
+Lint warnings: the figure is missing (the steps still render); a `parts:` name
+the figure does not have; a `set:` name that is not a counter or state, or a state value it does not
+have; a `state:` line with fewer than two values, or a name that is also a
+counter; a `data-show` naming a state or value the header does not declare,
+or used in a plain `figure`; a step with no
+`key:`; `needs: switch`, `held` or `off:` with no switch in the header; a switch with
+no held or off step, or a held step with no `needs: switch` step; an `off:`
+title that names no step, or two off steps for one step; more than three counters, one switch, one held step, or ten
+steps; a `code:` or `docs:` line without a path, for a part the figure does not have, or
+with an absolute or `..` path (dropped); more than one `repo:` without names;
+and, when the page sits in a git repo, a `code:` or `docs:` path in the first repo that
+does not exist from the repo root (kept, so a stale page says so on its next
+render). Paths in other repos are not checked.
+
+**Behaviour.** Without script, and in print, every step is laid out in order
+under the figure, which shows all parts in ink and each state at its first
+value. With script, the stepper shows
+one step at a time with a step bar (one button per step, numbered), previous
+and next buttons, the counters under the figure, and the switch. The
+arrow keys move between steps while focus is inside the stepper. The narration
+rail is `aria-live="polite"`. Part changes use the motion tokens; with
+`prefers-reduced-motion` they are instant. On a wide screen a stepper leaves
+the 1000px prose column: it grows as far as its figure at 1.25x plus a rail of
+up to 360px need, within a 1440px page with 24px sides and clear of the side
+nav. The figure column is sticky and its drawing is capped so it and the
+controls fit in the window. A page that opens with a stepper (after at most
+one paragraph) starts its title and lead at the stepper's left edge and fits
+title, lead, caption, figure, counters and controls in the first window (for a
+one-line title and a two-line lead). The figure, and the stepper with it,
+shrinks to no less than 0.8 of its viewBox size; a shorter window runs below
+the fold.
+Print keeps the stepper in the column. On a wide
+stage the rail sits right of the figure; on a narrow one it sits below, and the stage (same minimum
+width as `figure`) scrolls from the figure's start only as far as the current parts need. While the switch is off, steps that need it are dashed
+in the step bar. Every part some step names gets `data-goto`: clicking it
+(outside a link) goes to the first step that names it, unless the current
+step names it too; hovering tints it toward the accent, and a `data-rise`
+part lifts 4 units.
+
+**Output:** `<figure data-block="stepper">` with an optional `<figcaption>`, a
+`.stepper-stage` holding the inlined SVG (same contract as `figure`), a
+`.stepper-counters` row of `[data-counter]` items, a `.stepper-controls` bar
+(hidden until script runs), and an `<ol class="stepper-steps">` of
+`<li data-parts data-counters data-off-counters data-needs>` steps (the
+off counters only with a switch), each with an `<h3>`, the
+narration, a `.stepper-key` and a `ul.stepper-changed`; the held step is an
+`<aside class="stepper-held">` with the same shape, and an off step an
+`<aside class="stepper-off" data-off-for="n">` (n is the 0-based step it
+stands in for). Each step is its own
+feedback anchor.
+
+### `embed`: a sandboxed interactive page
+
+The last resort, for an interaction no figure or stepper can show (a
+simulation, a 3D object you turn). At most two per page.
+
+````
+```embed src=embeds/pendulum.html poster=embeds/pendulum.png title="Pendulum" height=300
+Drag the length slider: a longer pendulum swings more slowly.
+```
+````
+
+- `src` (required): a self-contained local `.html` file, relative to `plan.md`,
+  at most 2 MB. Inline its scripts, styles, images and fonts (`data:` URLs);
+  the embed has no network. A URL is refused.
+- `poster` (required): an image of the embed (`.svg`, `.png`, `.jpg`,
+  `.webp`), inlined. Print, no-script and any reader who never presses Run
+  see only the poster, so capture it in the state that teaches. Without a
+  poster nothing is embedded; only the body renders.
+- `height` (optional): the running frame's height in pixels, default `420`.
+- Body (required): what to try and what it shows, as markdown. It is also the
+  poster's alt text.
+
+No fact lives only inside an embed: tools that keep the page current cannot
+read one. Anything the reader must know is in the body or the prose.
+
+The page's tokens (`--bg`, `--fg`, `--fg-muted`, `--accent`, `--sans`, ...)
+are set on the embed's `:root`, so `var(--fg)` follows the page, and a running
+embed reloads when the theme changes.
+
+**Safety.** Run builds an `<iframe sandbox="allow-scripts">` from the file
+(`srcdoc`), prefixed with a Content Security Policy that allows inline script
+and style and `data:`/`blob:` media, and nothing else. Every page also carries
+`frame-src 'none'`, so no frame can load a URL. So the embed:
+
+- runs in an opaque origin: it cannot read the page, its notes, storage or
+  cookies, open windows, submit forms or navigate the page;
+- cannot load or send anything over HTTP: `fetch`, XHR, WebSocket, beacons,
+  remote scripts, styles, images and fonts are all blocked, and so is
+  navigating its own frame anywhere.
+
+One channel remains, because no CSP closes it: WebRTC (STUN) traffic. It can
+carry what is in the embed file and anything the reader types into the embed,
+and it reveals that Run was pressed and from where. Treat an embed file like
+the rest of the page's source, and do not embed code you have not read. A
+remote reference in the file is a render warning.
+
+Lint warnings: missing or remote `src`, missing or unsupported `poster`, an
+empty body, more than two embeds, a file over 2 MB, a remote reference.
+
+**Output:** `<figure data-block="embed">` with an optional `<figcaption>`, a
+`.embed-stage` holding the poster `<img>`, a `button.embed-run` (hidden until
+script runs) and the file, escaped, in `data-srcdoc`; then the body in
+`.embed-note`.
 
 ## Chapters (side-nav sections)
 
