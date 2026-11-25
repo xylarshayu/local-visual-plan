@@ -10,7 +10,7 @@
 // Run:  node skills/visual-plan/renderer/test/run.mjs
 
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, cpSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -403,9 +403,11 @@ fixture('all-blocks.md', (check) => {
   })
 
   check('inside a git repo, "source" is repo-relative and no local path ships in the page', () => {
-    const { html: h2 } = renderPlan(src, { sourcePath: join(FIXTURES, 'all-blocks.md') })
-    assert.equal(anchorMap(h2).source, 'skills/present/renderer/test/fixtures/all-blocks.md')
-    assert.ok(!h2.includes(FIXTURES), 'the absolute fixtures path is nowhere in the page')
+    const dir = mkdtempSync(join(tmpdir(), 'pf-src-'))
+    mkdirSync(join(dir, '.git')); mkdirSync(join(dir, 'docs'))
+    const { html: h2 } = renderPlan(src, { sourcePath: join(dir, 'docs', 'all-blocks.md') })
+    assert.equal(anchorMap(h2).source, 'docs/all-blocks.md')
+    assert.ok(!h2.includes(dir), 'the absolute repo path is nowhere in the page')
   })
 
   check('with no frontmatter title, a leading # H1 is the title, printed once, line numbers kept', () => {
@@ -1793,9 +1795,12 @@ fixture('composite.md', (check) => {
   const steps = [...first.matchAll(/<li class="stepper-step"[\s\S]*?<\/li>(?=<li class="stepper-step"|<\/ol>)/g)].map((m) => m[0])
   const paths = (st) => [...st.matchAll(/<code>(.*?)<\/code><\/a>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''))
 
-  check('inside this git worktree, every cited path is checked and reported missing, nothing else warns', () => {
-    assert.equal(r.warnings.length, 7, r.warnings.join(' | '))
-    assert.ok(r.warnings.every((w) => /code path "src\/[^"]+" is not in the repo/.test(w)), r.warnings.join(' | '))
+  check('inside a git repo, every cited path is checked and reported missing, nothing else warns', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-comp-'))
+    mkdirSync(join(dir, '.git')); cpSync(join(FIXTURES, 'figures'), join(dir, 'figures'), { recursive: true })
+    const { warnings } = renderPlan(read('composite.md'), { sourcePath: join(dir, 'composite.md') })
+    assert.equal(warnings.length, 7, warnings.join(' | '))
+    assert.ok(warnings.every((w) => /code path "src\/[^"]+" is not in the repo/.test(w)), warnings.join(' | '))
   })
 
   check('the workers part is a three-layer card the size of its neighbours, stacked toward the bottom right', () => {
