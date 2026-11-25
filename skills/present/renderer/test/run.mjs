@@ -86,9 +86,10 @@ function fixture(name, body) {
 //      to a URL. Holds even when mermaid is inlined.
 // ---------------------------------------------------------------------------
 
-/** Strict: literally no external URL token anywhere in the supplied string. */
+/** Strict: no external URL token anywhere, except where a reader clicks: an <a href>. */
 function assertNoExternalUrl(html, where) {
   const offenders = []
+  html = html.replace(/<a\b[^>]*>/gi, (tag) => tag.replace(/\shref\s*=\s*(["'])[^"']*\1/i, ''))
   // http:// or https:// anywhere.
   for (const m of html.matchAll(/https?:\/\/[^\s"'`)<>]+/gi)) {
     offenders.push(m[0])
@@ -114,8 +115,9 @@ function assertNoNetworkFetch(html, where) {
   const offenders = []
 
   // <script src="http..."> or <link href="http..."> / <link href="//..."> etc.
-  const remoteAttr = /\b(?:src|href)\s*=\s*["'](?:https?:)?\/\/[^"']+["']/gi
-  for (const m of html.matchAll(remoteAttr)) offenders.push('remote attr: ' + m[0])
+  // A link the reader clicks (<a href>) is not a load; every other remote src/href is.
+  const remoteAttr = /<([a-z][\w-]*)\b[^>]*?\b(?:src|href)\s*=\s*["'](?:https?:)?\/\/[^"']+["']/gi
+  for (const m of html.matchAll(remoteAttr)) if (m[1].toLowerCase() !== 'a') offenders.push('remote attr: ' + m[0])
 
   // <img src="http...">, <iframe src="http...">, <source src="http..."> covered
   // by remoteAttr above. Also catch url(...) pointing at a remote in inline CSS.
@@ -421,8 +423,25 @@ fixture('all-blocks.md', (check) => {
 
   check('a relative link to a sibling .md becomes .html; other links are left alone', () => {
     const { html: h2 } = renderPlan('---\ntitle: T\n---\n[a](ch2.md) [b](./ch3.md#sync) [c](../other/ch4.md) [d](docs/x.md) [e](https://x.org/r.md) [f](notes.mdx)\n')
-    const hrefs = [...h2.matchAll(/<a\b[^>]*?(?:href|data-external-href)="([^"]*)"/g)].map((m) => m[1]).filter((h) => !h.startsWith('#'))
-    assert.deepEqual(hrefs, ['ch2.html', 'ch3.html#sync', '../other/ch4.md', 'docs/x.md', 'x.org/r.md', 'notes.mdx'])
+    const hrefs = [...h2.matchAll(/<a\b[^>]*?href="([^"]*)"/g)].map((m) => m[1]).filter((h) => !h.startsWith('#'))
+    assert.deepEqual(hrefs, ['ch2.html', 'ch3.html#sync', '../other/ch4.md', 'docs/x.md', 'https://x.org/r.md', 'notes.mdx'])
+  })
+
+  check('a link to another site stays a real link that opens in a new tab; a remote image still never loads', () => {
+    const { html: h2 } = renderPlan('---\ntitle: T\n---\nSee [the docs](https://www.example.org/docs/api?x=1&y=2), [cdn](//cdn.example.org/a), [here](#top) and ![logo](https://img.example.org/l.png).\n\n```callout\nAlso [in a callout](https://example.org/c).\n```\n')
+    const prose = h2.slice(h2.indexOf('See '))
+    assert.match(prose, /<a href="https:\/\/www\.example\.org\/docs\/api\?x=1&y=2" target="_blank" rel="noopener">the docs<\/a>/)
+    assert.match(prose, /<a href="https:\/\/cdn\.example\.org\/a" target="_blank" rel="noopener">cdn<\/a>/, 'a protocol-relative link gets https, not file:')
+    assert.match(prose, /<a href="#top">here<\/a>/, 'an in-page link is untouched')
+    assert.match(h2, /<a href="https:\/\/example\.org\/c" target="_blank" rel="noopener">in a callout<\/a>/)
+    assert.doesNotMatch(h2, /data-external-href|disabled offline/)
+    assert.doesNotMatch(h2, /<img[^>]*img\.example\.org/)
+    assert.match(h2, /<span class="ext-img-placeholder" data-external-src="img\.example\.org\/l\.png">logo<\/span>/)
+    assertNoNetworkFetch(h2, 'remote links')
+    assert.throws(() => assertNoNetworkFetch(h2.replace('<span class="ext-img-placeholder"', '<img src="https://img.example.org/l.png"><span'), 'planted'), /remote attr/, 'a remote img is still caught')
+    assert.throws(() => assertNoNetworkFetch('<link rel="stylesheet" href="https://x.org/s.css">', 'planted'), /remote attr/, 'a remote stylesheet is still caught')
+    const raw = renderPlan('---\ntitle: T\n---\n<a href="https://example.org/r" target="_self">raw</a>\n').html
+    assert.match(raw, /<a href="https:\/\/example\.org\/r" target="_self">raw<\/a>/, 'an author\'s own target is kept')
   })
 
   check('a top-level block\'s line range is exact (steps block, counted by hand)', () => {
@@ -1788,7 +1807,7 @@ fixture('composite.md', (check) => {
 
   check('each step lists the code of its own parts, linked under repo:', () => {
     assert.deepEqual(steps.map(paths), [['src/api/jobs.ts', 'src/queue/'], ['src/workers/'], ['src/store/']])
-    assert.match(steps[0], /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts">/)
+    assert.match(steps[0], /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts" target="_blank" rel="noopener">/)
   })
 
   check('the workers card links to the exploded figure, which is on the page', () => {
@@ -1865,9 +1884,9 @@ fixture('<figure + stepper lint>', (check) => {
     const r = renderPlan(md('repo: https://git.example.com/shop/blob/main/\n', code), { sourcePath: join(dir, 'docs', 'p.md') })
     assert.deepEqual(r.warnings, [])
     const [one, two] = steps(r)
-    assert.match(one, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/a%20b%26c\.ts"><code><span class="stepper-dir">src\/api\/<\/span>a b&amp;c\.ts<\/code><\/a><\/li><\/ul><\/div>/)
+    assert.match(one, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/jobs\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><li><a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/api\/a%20b%26c\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/api\/<\/span>a b&amp;c\.ts<\/code><\/a><\/li><\/ul><\/div>/)
     assert.doesNotMatch(one, /src\/queue/)
-    assert.match(two, /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/queue\/"><code><span class="stepper-dir">src\/<\/span>queue\/<\/code><\/a>/)
+    assert.match(two, /<a href="https:\/\/git\.example\.com\/shop\/blob\/main\/src\/queue\/" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/<\/span>queue\/<\/code><\/a>/)
     assert.doesNotMatch(two, /jobs\.ts/)
 
     const plain = renderPlan(md('', code), { sourcePath: join(dir, 'p.md') })
@@ -1901,8 +1920,8 @@ fixture('<figure + stepper lint>', (check) => {
     const r = renderPlan(page(fm, 'code: a src/api/jobs.ts\ncode: a App src/api/jobs.ts\ncode: b Libs ledger/only-there.ts'), { sourcePath: join(dir, 'p.md') })
     assert.deepEqual(r.warnings, [], 'a Libs path is not checked against this checkout')
     const [one, two] = steps(r)
-    assert.match(one, /<ul><li><span class="stepper-repo" title="https:\/\/git\.example\.com\/app\/blob\/main">App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/jobs\.ts"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><\/ul>/, 'the bare path and the App path are one item')
-    assert.match(two, /<li><span class="stepper-repo" title="https:\/\/git\.example\.com\/libs\/blob\/main">Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/ledger\/only-there\.ts"><code><span class="stepper-dir">ledger\/<\/span>only-there\.ts<\/code><\/a><\/li>/)
+    assert.match(one, /<ul><li><span class="stepper-repo" title="https:\/\/git\.example\.com\/app\/blob\/main">App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/jobs\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">src\/api\/<\/span>jobs\.ts<\/code><\/a><\/li><\/ul>/, 'the bare path and the App path are one item')
+    assert.match(two, /<li><span class="stepper-repo" title="https:\/\/git\.example\.com\/libs\/blob\/main">Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/ledger\/only-there\.ts" target="_blank" rel="noopener"><code><span class="stepper-dir">ledger\/<\/span>only-there\.ts<\/code><\/a><\/li>/)
 
     const bad = renderPlan(page(fm, 'code: a App src/gone.ts\ncode: b Libs ../x.ts\ncode: b Lib ledger/x.ts'), { sourcePath: join(dir, 'p.md') })
     has(bad, /code path "src\/gone\.ts" is not in the repo/)
@@ -1915,7 +1934,7 @@ fixture('<figure + stepper lint>', (check) => {
     writeFileSync(join(dir, 'src/api/my file.ts'), '')
     const spaced = renderPlan(page(fm, 'code: a src/api/my file.ts'), { sourcePath: join(dir, 'p.md') })
     assert.deepEqual(spaced.warnings, [], 'a home path with a space is still a path when its first word is not a repo name')
-    assert.match(spaced.html, /<span class="stepper-repo"[^>]*>App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/my%20file\.ts">/)
+    assert.match(spaced.html, /<span class="stepper-repo"[^>]*>App<\/span> <a href="https:\/\/git\.example\.com\/app\/blob\/main\/src\/api\/my%20file\.ts" target="_blank" rel="noopener">/)
 
     const docs = renderPlan(page(fm, 'code: a src/api/jobs.ts\ncode: b src/api/jobs.ts\ndocs: a Libs guide/jobs.md | Retries, Dead letters\ndocs: b README.md\ndocs: b ../x.md\ndocs: zz y.md\ndocs: b'), { sourcePath: join(dir, 'p.md') })
     has(docs, /docs path "README\.md" is not in the repo/)
@@ -1923,7 +1942,7 @@ fixture('<figure + stepper lint>', (check) => {
     has(docs, /docs: unknown part "zz"/)
     has(docs, /"docs: b" needs a part and a path/)
     const [d1, d2] = steps(docs)
-    assert.match(d1, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li>[^]*?jobs\.ts[^]*?<\/ul><\/div><div class="stepper-code" data-kind="docs"><p class="stepper-label">In the docs<\/p><ul><li><span class="stepper-repo"[^>]*>Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/guide\/jobs\.md"><code><span class="stepper-dir">guide\/<\/span>jobs\.md<\/code><\/a> <span class="stepper-note">Retries, Dead letters<\/span><\/li><\/ul><\/div>/)
+    assert.match(d1, /<div class="stepper-code" data-kind="code"><p class="stepper-label">In the code<\/p><ul><li>[^]*?jobs\.ts[^]*?<\/ul><\/div><div class="stepper-code" data-kind="docs"><p class="stepper-label">In the docs<\/p><ul><li><span class="stepper-repo"[^>]*>Libs<\/span> <a href="https:\/\/git\.example\.com\/libs\/blob\/main\/guide\/jobs\.md" target="_blank" rel="noopener"><code><span class="stepper-dir">guide\/<\/span>jobs\.md<\/code><\/a> <span class="stepper-note">Retries, Dead letters<\/span><\/li><\/ul><\/div>/)
     assert.match(d2, /data-kind="docs"[^]*?<code>README\.md<\/code><\/a><\/li><\/ul>/, 'a doc with no note and no folder')
     assert.doesNotMatch(d2, /guide\/jobs\.md|stepper-note/)
 

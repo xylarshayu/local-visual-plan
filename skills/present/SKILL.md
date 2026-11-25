@@ -222,8 +222,9 @@ The output is a **single self-contained HTML file** — inlined CSS, inlined
 vanilla JS for tabs / collapse / theme / annotation, (unless `--lean`) an
 inlined Mermaid bundle that renders diagrams in the browser, and — when a
 hand-drawn diagram is present (opt in with `look=handDrawn`, or `theme: manual`) — the Virgil font embedded as a base64 data URI.
-No CDN, no web-font fetch, no external URLs: it opens straight from `file://`
-and works with the network off. Any notes or answers the reader pins
+No CDN, no web-font fetch, nothing remote loads: it opens straight from
+`file://` and works with the network off. Links to other sites stay real
+links and open in a new tab; a remote image shows as a labeled placeholder. Any notes or answers the reader pins
 also stay local — they live in the page's `localStorage` (or, where that's
 blocked, in page memory) and only leave the machine when the reader copies the
 Export text themselves. The renderer needs **no `npm install`** — `marked`,

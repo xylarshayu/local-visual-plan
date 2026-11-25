@@ -1455,7 +1455,7 @@ function renderStepper(body, attrs, ctx, warnings) {
     const word = repo && repo.name ? `<span class="stepper-repo" title="${esc(repo.url)}">${esc(repo.name)}</span> ` : "";
     const [, dir = "", leaf] = /^(.*\/)?([^/]+\/?)$/.exec(path) || [, "", path];
     const shown = `<code>${dir ? `<span class="stepper-dir">${esc(dir)}</span>` : ""}${esc(leaf)}</code>`;
-    const link = repo ? `<a href="${esc(repo.url + "/" + path.split("/").map(encodeURIComponent).join("/"))}">${shown}</a>` : shown;
+    const link = repo ? `<a href="${esc(repo.url + "/" + path.split("/").map(encodeURIComponent).join("/"))}" target="_blank" rel="noopener">${shown}</a>` : shown;
     return `<li>${word}${link}${note ? ` <span class="stepper-note">${esc(note)}</span>` : ""}</li>`;
   };
 
@@ -1809,16 +1809,11 @@ function configureMarked() {
   marked.setOptions({ gfm: true, breaks: false });
 }
 
-// Offline purity: the output is a self-contained file:// document that must not
-// load (or be able to load) any external resource at view time. Prose authored
-// in standard Markdown may legitimately contain links/images to remote URLs;
-// `marked` renders those as <a href="https://…"> / <img src="https://…">.
-// We keep the link *visible* (text + a title showing the original URL) but make
-// it inert so nothing is ever fetched and no external-URL token survives in an
-// attribute. Remote <img> become a labeled placeholder rather than a fetch.
+// Offline purity: the page must not load anything remote at view time. A remote
+// <img> becomes a labeled placeholder. A link to another site stays a real link
+// (a click is the reader's choice, not a load) and opens in a new tab.
 function neutralizeRemoteRefs(html) {
   const REMOTE = /^(?:https?:)?\/\//i;
-  // Anchors: drop a remote href, surface it as a (non-fetching) data attribute.
   html = html.replace(
     /<a\b([^>]*?)\shref\s*=\s*(["'])([^"']*)\2([^>]*)>/gi,
     (m, pre, q, url, post) => {
@@ -1826,10 +1821,9 @@ function neutralizeRemoteRefs(html) {
       const sib = /^(?:\.\/)?([^/:?#]+)\.md(#.*)?$/i.exec(url.trim());
       if (sib) return `<a${pre} href=${q}${sib[1]}.html${sib[2] || ""}${q}${post}>`;
       if (!REMOTE.test(url.trim())) return m;
-      // Strip the protocol/host so no external-URL token remains; keep the
-      // human-readable target for context, escaped, in a non-fetched attr.
-      const shown = url.replace(/^(?:https?:)?\/\//i, "");
-      return `<a${pre}${post} data-external-href="${esc(shown)}" title="external link (disabled offline): ${esc(shown)}">`;
+      const href = url.trim().replace(/^\/\//, "https://");
+      const extra = /\starget\s*=/i.test(pre + post) ? "" : ` target="_blank" rel="noopener"`;
+      return `<a${pre} href=${q}${href}${q}${post}${extra}>`;
     },
   );
   // Images with a remote src: replace with an inert labeled placeholder span.
