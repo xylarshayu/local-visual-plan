@@ -493,7 +493,8 @@ await check('a composite card\'s link is accent, underlined, and jumps to its ex
 await check('a plan building rises while current; clicking a part goes to its step; hovering hints at it', async () => {
   const { p, ctx, errors } = await open({}, composite)
   const fig = p.locator('#stepper\\:inside-the-workers')
-  const settle = () => fig.evaluate(async (f) => { await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return Promise.all(f.getAnimations({ subtree: true }).filter((a) => a.transitionProperty).map((a) => a.finished.catch(() => {}))) })
+  // A click on a part smooth-scrolls to its step; a hover during that scroll loses the pointer.
+  const settle = () => fig.evaluate(async (f) => { const frame = () => new Promise((r) => requestAnimationFrame(r)); for (let y = NaN, n = 0; n < 3; y = scrollY) { await frame(); n = scrollY === y ? n + 1 : 0 } return Promise.all(f.getAnimations({ subtree: true }).filter((a) => a.transitionProperty).map((a) => a.finished.catch(() => {}))) })
   const look = (n) => fig.evaluate((f, n) => { const g = f.querySelector(`[data-part="${n}"]`), c = getComputedStyle(g); return [c.transform, c.color, c.cursor] }, n)
   const current = () => fig.locator('.stepper-bar [aria-current=step]').textContent()
   await settle()
