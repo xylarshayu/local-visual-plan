@@ -10,7 +10,8 @@
 // Run:  node skills/visual-plan/renderer/test/run.mjs
 
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, cpSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, existsSync, symlinkSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -2139,6 +2140,22 @@ fixture('<figure + stepper lint>', (check) => {
     const r = one('```stepper figure=figures/nope.svg\n# One\nkey: k\n\nNarration survives.\n```\n')
     has(r, /cannot read file/)
     assert.match(r.html, /<h3>One<\/h3><p>Narration survives\.<\/p>/)
+  })
+})
+
+fixture('<run through a symlinked install>', (check) => {
+  check('the skills CLI links skill folders: through a link the renderer still writes its page and every script runs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-symlink-'))
+    symlinkSync(join(__dirname, '..', '..'), join(dir, 'present'))
+    writeFileSync(join(dir, 's.md'), '# Hello\n\nA page.\n')
+    const run = (script, ...args) => spawnSync(process.execPath, [join(dir, 'present', 'renderer', script), ...args], { cwd: dir, encoding: 'utf8' })
+    const r = run('render.mjs', 's.md', '--out', 'out.html')
+    assert.equal(r.status, 0, r.stderr)
+    assert.ok(existsSync(join(dir, 'out.html')), 'render.mjs exited without writing the page')
+    for (const [script, ...args] of [['check.mjs'], ['github-md.mjs'], ['open.mjs'], ['share.mjs'], ['recap.mjs', '--help']]) {
+      const o = run(script, ...args)
+      assert.ok((o.stdout + o.stderr).trim(), `${script} exited ${o.status} without running`)
+    }
   })
 })
 

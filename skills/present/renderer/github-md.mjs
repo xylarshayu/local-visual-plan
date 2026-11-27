@@ -22,7 +22,8 @@
 // CLI:
 //   node github-md.mjs <plan.md> [--out <path>]
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 /* ========================================================================== *
@@ -533,6 +534,6 @@ function main() {
   console.log(`github: ${outPath}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main();
 }

@@ -12,7 +12,7 @@
 // CLI:
 //   node render.mjs <plan.md> [--out <path>] [--lean] [--open] [--no-open]
 
-import { readFileSync, writeFileSync, mkdirSync, accessSync, constants, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, accessSync, constants, existsSync, realpathSync } from "node:fs";
 import { dirname, resolve, join, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -2513,6 +2513,6 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main();
 }

@@ -16,7 +16,7 @@
 //     <range>   A..B, a single <ref> (compared to the working tree), or omitted
 //               (working tree + index vs HEAD). Use base..head for a PR/branch.
 
-import { readFileSync, writeFileSync, mkdirSync, accessSync, constants } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, accessSync, constants, realpathSync } from "node:fs";
 import { dirname, resolve, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -466,6 +466,6 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main();
 }

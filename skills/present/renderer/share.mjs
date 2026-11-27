@@ -16,7 +16,8 @@
 //   node share.mjs <index.html> [--server URL] [--token-env NAME] [--ttl-days N]
 //                  [--pr N] [--tunnel] [--minutes N] [--open]
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import http from "node:http";
 import { spawn, spawnSync, execFile } from "node:child_process";
@@ -394,6 +395,6 @@ async function main() {
   else await runServerMode(args, html);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main();
 }

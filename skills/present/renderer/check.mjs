@@ -29,7 +29,8 @@
 //      happens during best-effort auto-discovery and just skips)
 //   2  usage error (bad flags, missing argument, no such input file)
 
-import { existsSync, readdirSync, accessSync, constants, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, accessSync, constants, readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join, resolve, delimiter } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -322,6 +323,6 @@ function main() {
   process.exit(0);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main();
 }

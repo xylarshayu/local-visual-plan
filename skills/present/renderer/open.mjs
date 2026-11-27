@@ -7,6 +7,8 @@
 
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 function hasCommand(cmd) {
   // `command -v` via the shell is the most portable existence check.
@@ -134,7 +136,7 @@ export async function openUrl(url) {
 }
 
 // CLI entry
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const target = process.argv[2];
   if (!target) {
     console.error("usage: node open.mjs <file>");
